@@ -1,0 +1,10 @@
+.global-variables-editor { display: grid; gap: 12px; }
+.global-variables-editor > p, .variable-hints p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.global-variables-editor .workflow-variable-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) auto; gap: 8px; align-items: end; }
+.global-variables-editor label { display: grid; gap: 5px; font-size: 12px; min-width: 0; }
+.global-variables-editor input, .global-variables-editor textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--control); color: var(--ink); }
+.variable-hints { font-size: 12px; padding: 8px 0; }
+.variable-hints summary { cursor: pointer; color: var(--muted); }
+.variable-hints ul { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; }
+.variable-hints code { overflow-wrap: anywhere; }
+@media (max-width: 500px) { .global-variables-editor .workflow-variable-row { grid-template-columns: 1fr; } }

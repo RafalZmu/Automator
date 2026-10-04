@@ -1,0 +1,3 @@
+{
+  "kinds": ["launcher", "script-runner", "api", "browser-automation", "workflows", "scheduler", "focus-sessions", "reserved"]
+}

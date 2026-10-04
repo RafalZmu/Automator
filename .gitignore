@@ -1,0 +1,45 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+.dotnet-home/
+.nuget/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# JavaScript dependencies and generated builds
+node_modules/
+artifacts/
+dist-electron/
+dist/
+coverage/
+playwright-report/
+test-results/
+
+# Machine-local agent state and diagnostics
+.superpowers/
+docs/gui-migration/
+*.log
+
+# Local credentials and machine-specific configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+
+# Local databases and user settings
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+settings.json
+
+# OS metadata
+Thumbs.db
+.DS_Store

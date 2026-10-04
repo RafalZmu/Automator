@@ -1,0 +1,39 @@
+{
+  "validRequests": [
+    {"name":"remove-binding","request":{"jsonrpc":"2.0","id":"remove-1","method":"binding/remove","params":{"bindingId":"custom"}}},
+    {"name":"initialize","request":{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":3,"buildId":"fixture-build","hostProcessId":42,"hostExecutablePath":"C:/Automator/Automator.exe","portableExecutablePath":null,"testMode":true,"dataDirectory":"C:/Automator/artifacts/test-data"}}},
+    {"name":"set-mode-settings","request":{"jsonrpc":"2.0","id":"mode-1","method":"launcher/setMode","params":{"mode":"settings"}}},
+    {"name":"window-context","request":{"jsonrpc":"2.0","id":3,"method":"launcher/setWindowContext","params":{"windowHandleHex":"0x000000000001ABCD","visible":true,"rendererFocused":true,"nativeDialogActive":false,"mode":"launcher"}}},
+    {"name":"verify-native-foreground","request":{"jsonrpc":"2.0","id":4,"method":"launcher/verifyForeground","params":{"windowHandleHex":"0x000000000001ABCD"}}},
+    {"name":"automation-keyboard-eligibility","request":{"jsonrpc":"2.0","id":9,"method":"automation/keyboardEligibility","params":{"moduleId":"launcher"}}},
+    {"name":"automation-keyboard-subscribe","request":{"jsonrpc":"2.0","id":10,"method":"automation/keyboardSubscribe","params":{"moduleId":"launcher"}}},
+    {"name":"automation-keyboard-unsubscribe","request":{"jsonrpc":"2.0","id":11,"method":"automation/keyboardUnsubscribe","params":{"moduleId":"launcher"}}},
+    {"name":"automation-http-request-with-control-character","request":{"jsonrpc":"2.0","id":12,"method":"automation/httpRequest","params":{"moduleId":"launcher","requestId":"req-12","request":{"uri":"https://api.example.test/submit","method":"POST","headers":{"content-type":"text/plain"},"body":"line\u0001break"}}}},
+    {"name":"automation-http-cancel","request":{"jsonrpc":"2.0","id":13,"method":"automation/httpCancel","params":{"moduleId":"launcher","requestId":"req-12"}}},
+    {"name":"automation-module-action","request":{"jsonrpc":"2.0","id":14,"method":"automation/moduleAction","params":{"requestId":"fixture-action","contractVersion":1,"moduleId":"fixture-module","actionId":"summarize","actionVersion":1,"input":{"count":3}}}},
+    {"name":"module-settings-update","request":{"jsonrpc":"2.0","id":15,"method":"module/settingsUpdate","params":{"contractVersion":1,"moduleId":"fixture-module","settingsVersion":2,"value":{"layout":"compact"}}}},
+    {"name":"module-settings-get","request":{"jsonrpc":"2.0","id":16,"method":"module/settingsGet","params":{"contractVersion":1,"moduleId":"fixture-module","settingsVersion":2}}}
+  ],
+  "invalidRequests": [
+    {"name":"remove-binding-empty-id","request":{"jsonrpc":"2.0","id":"remove-empty","method":"binding/remove","params":{"bindingId":""}},"expectedCode":-32602,"expectedId":"remove-empty"},
+    {"name":"remove-binding-missing-id","request":{"jsonrpc":"2.0","id":"remove-missing","method":"binding/remove","params":{}},"expectedCode":-32602,"expectedId":"remove-missing"},
+    {"name":"remove-binding-extra-fields","request":{"jsonrpc":"2.0","id":"remove-extra","method":"binding/remove","params":{"bindingId":"custom","deleteFile":true}},"expectedCode":-32602,"expectedId":"remove-extra"},
+    {"name":"unknown-method-preserves-numeric-id","request":{"jsonrpc":"2.0","id":123,"method":"future/method","params":{}},"expectedCode":-32601,"expectedId":123},
+    {"name":"array-params-preserve-numeric-id","request":{"jsonrpc":"2.0","id":124,"method":"getState","params":[]},"expectedCode":-32602,"expectedId":124},
+    {"name":"null-params-preserve-numeric-id","request":{"jsonrpc":"2.0","id":127,"method":"getState","params":null},"expectedCode":-32602,"expectedId":127},
+    {"name":"missing-initialize-fields","request":{"jsonrpc":"2.0","id":125,"method":"initialize","params":{}},"expectedCode":-32602,"expectedId":125},
+    {"name":"null-binding-arguments","request":{"jsonrpc":"2.0","id":126,"method":"settings/update","params":{"hotkey":"RightControl","theme":"Light","startWithWindows":false,"bindings":[{"id":"a","name":"App","targetPath":"C:\\Apps\\app.exe","alias":"app","arguments":null}]}},"expectedCode":-32602,"expectedId":126},
+    {"name":"protocol-version-mismatch","request":{"jsonrpc":"2.0","id":128,"method":"initialize","params":{"protocolVersion":1,"buildId":"fixture-build","hostProcessId":42,"hostExecutablePath":"C:/Automator/Automator.exe","portableExecutablePath":null,"testMode":true,"dataDirectory":"C:/Automator/artifacts/test-data"}},"expectedCode":-32602,"expectedId":128},
+    {"name":"automation-http-missing-request","request":{"jsonrpc":"2.0","id":129,"method":"automation/httpRequest","params":{"moduleId":"launcher","requestId":"missing"}},"expectedCode":-32602,"expectedId":129},
+    {"name":"automation-keyboard-empty-module","request":{"jsonrpc":"2.0","id":130,"method":"automation/keyboardSubscribe","params":{"moduleId":""}},"expectedCode":-32602,"expectedId":130},
+    {"name":"automation-module-action-invalid-version","request":{"jsonrpc":"2.0","id":131,"method":"automation/moduleAction","params":{"contractVersion":1,"moduleId":"fixture-module","actionId":"summarize","actionVersion":0,"input":{}}},"expectedCode":-32602,"expectedId":131},
+    {"name":"module-settings-update-invalid-version","request":{"jsonrpc":"2.0","id":132,"method":"module/settingsUpdate","params":{"contractVersion":1,"moduleId":"fixture-module","settingsVersion":0,"value":{}}},"expectedCode":-32602,"expectedId":132},
+    {"name":"module-settings-get-invalid-version","request":{"jsonrpc":"2.0","id":133,"method":"module/settingsGet","params":{"contractVersion":1,"moduleId":"fixture-module","settingsVersion":0}},"expectedCode":-32602,"expectedId":133}
+  ],
+  "authorizationCases": [
+    {"name":"inactive-module","request":{"jsonrpc":"2.0","id":20,"method":"automation/keyboardSubscribe","params":{"moduleId":"reserved-2"}},"activeModuleId":"launcher","capability":"keyboard.input","declaredCapabilities":[],"authorized":false},
+    {"name":"undeclared-capability","request":{"jsonrpc":"2.0","id":21,"method":"automation/httpRequest","params":{"moduleId":"launcher","requestId":"req-21","request":{"uri":"https://api.example.test/","method":"GET","headers":{},"body":null}}},"activeModuleId":"launcher","capability":"http.request","declaredCapabilities":[],"authorized":false}
+  ],
+  "wireLimits": {"requestBodyBytes":1048576,"responseBodyBytes":4194304,"controlCharacter":"\u0001"},
+  "keyboardAvailabilityNotification": {"jsonrpc":"2.0","method":"automation/keyboardAvailability","params":{"moduleId":"launcher","eligible":true,"revision":1}}
+}

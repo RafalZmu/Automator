@@ -1,0 +1,92 @@
+{
+  "name": "automator-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main/main.cjs",
+  "scripts": {
+    "dev": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\Restart-Automator.ps1 -StopOnly && npm run build:desktop && node scripts/dev.mjs",
+    "dev:browser": "vite --host 127.0.0.1",
+    "build:renderer": "vite build",
+    "build:main": "vite build --config vite.main.config.ts",
+    "build:preload": "vite build --config vite.preload.config.ts",
+    "build:electron": "npm run build:main && npm run build:preload",
+    "build": "npm run build:electron && npm run build:renderer",
+    "build:backend": "dotnet build src/Automator.Backend/Automator.Backend.csproj --no-restore -m:1 -v:minimal",
+    "build:desktop": "npm run build && npm run build:backend",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:contracts": "node --experimental-strip-types --test tests/host-platform.test.mjs tests/rpc-contracts.test.mjs tests/vite-watch-config.test.mjs tests/automation-services.test.mjs tests/api-view.test.mjs tests/browser-automation-contract.test.mjs tests/workflows-contract.test.mjs tests/scheduler-view.test.mjs tests/command-matching.test.mjs tests/activity.test.mjs tests/variables-contract.test.mjs",
+    "test:backend-client-build": "vite build --config vite.backend-process-test.config.ts",
+    "test:electron": "npm run test:backend-client-build && node --experimental-strip-types --test --test-concurrency=1 tests/electron/*.test.cjs",
+    "test:packaged-lifecycle": "node --test tests/electron/packaged-single-instance.package.cjs",
+    "test:dotnet": "dotnet run --project tests/Automator.Core.Specs/Automator.Core.Specs.csproj --no-restore && dotnet run --project tests/Automator.Application.Specs/Automator.Application.Specs.csproj --no-restore && dotnet run --project tests/Automator.Variables.Specs/Automator.Variables.Specs.csproj --no-restore && dotnet run --project tests/Automator.Infrastructure.Specs/Automator.Infrastructure.Specs.csproj --no-restore && dotnet run --project tests/Automator.Infrastructure.Browser.Specs/Automator.Infrastructure.Browser.Specs.csproj --no-restore && dotnet run --project tests/Automator.Protocol.Specs/Automator.Protocol.Specs.csproj --no-restore && dotnet run --project tests/Automator.Windows.Specs/Automator.Windows.Specs.csproj --no-restore && dotnet run --project tests/Automator.Workflows.Specs/Automator.Workflows.Specs.csproj --no-restore && dotnet run --project tests/Automator.Scheduler.Specs/Automator.Scheduler.Specs.csproj --no-restore && dotnet run --project tests/Automator.Focus.Specs/Automator.Focus.Specs.csproj --no-restore",
+    "test": "npm run build:backend && npm run test:contracts && npm run test:electron && npm run test:dotnet",
+    "preview:browser": "vite --host 127.0.0.1",
+    "package:win": "node scripts/package-win.mjs",
+    "verify": "npm run typecheck && npm run build:desktop && npm test"
+  },
+  "build": {
+    "appId": "com.automator.desktop",
+    "productName": "Automator",
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "artifacts/electron-dist"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "artifacts/backend/win-x64",
+        "to": "backend"
+      },
+      {
+        "from": "artifacts/browser-runtime",
+        "to": "browser-runtime"
+      }
+    ],
+    "win": {
+      "icon": "assets/automator.ico",
+      "target": [
+        "dir",
+        "portable"
+      ],
+      "artifactName": "Automator-${version}-${arch}-portable.exe"
+    },
+    "portable": {
+      "artifactName": "Automator-${version}-${arch}-portable.exe"
+    }
+  },
+  "devDependencies": {
+    "@radix-ui/react-dialog": "1.1.23",
+    "@radix-ui/react-scroll-area": "1.2.18",
+    "@radix-ui/react-select": "2.3.7",
+    "@radix-ui/react-switch": "1.3.7",
+    "@radix-ui/react-tabs": "1.1.21",
+    "@radix-ui/react-tooltip": "1.2.16",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "26.6.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3",
+    "lucide-react": "1.49.0",
+    "motion": "13.5.0",
+    "playwright": "1.63.0",
+    "tailwind-merge": "3.7.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "vite": "8.3.2",
+    "zod": "4.6.5"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  }
+}

@@ -1,0 +1,120 @@
+.work-time-view { gap: 11px; overflow-y: auto; padding-right: 2px; scrollbar-color: rgba(90,126,135,.25) transparent; scrollbar-width: thin; }
+.work-time-heading, .work-time-heading-title, .work-time-current-card, .work-time-current-copy,
+.work-time-entry-card header, .work-time-entry-card header > div, .work-time-history-card header,
+.work-time-history-card header > div, .work-time-history-row { display: flex; align-items: center; }
+.work-time-heading { flex: none; justify-content: space-between; gap: 10px; min-height: 38px; }
+.work-time-heading-title { min-width: 0; gap: 9px; }
+.work-time-module-icon { flex: none; width: 31px; height: 31px; display: grid; place-items: center; border: 1px solid rgba(26,131,151,.16); border-radius: 10px; color: var(--accent-strong); background: var(--accent-soft); }
+.work-time-heading h1 { margin: 0; color: var(--ink); font-size: 13px; font-weight: 680; }
+.work-time-heading p { margin: 3px 0 0; color: var(--muted); font-size: 9px; }
+.work-time-state { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted-strong); background: var(--control); font-size: 8px; font-weight: 620; }
+.work-time-state-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(117,133,139,.5); }
+.work-time-state.is-running { color: var(--accent-strong); border-color: rgba(20,123,142,.18); background: var(--accent-soft); }
+.work-time-state.is-running .work-time-state-dot, .work-time-live-dot { background: #43a881; box-shadow: 0 0 0 3px rgba(67,168,129,.1); }
+.work-time-state.is-pending { color: #95661e; border-color: rgba(191,143,60,.19); background: rgba(245,221,162,.2); }
+.work-time-state.is-pending .work-time-state-dot { background: #c79535; }
+.window-shell[data-theme="dark"] .work-time-state.is-pending { color: #eac479; background: rgba(194,145,62,.11); }
+.work-time-notice { flex: none; margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted-strong); background: rgba(255,255,255,.33); font-size: 9px; line-height: 1.4; }
+.window-shell[data-theme="dark"] .work-time-notice { background: rgba(255,255,255,.045); }
+.work-time-loading { flex: 1; min-height: 140px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); }
+.work-time-loading p { margin: 0; font-size: 9px; }
+.work-time-current-card { flex: none; align-items: stretch; gap: 15px; min-height: 132px; padding: 15px; border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(135deg, rgba(255,255,255,.5), rgba(255,255,255,.23)); box-shadow: 0 6px 18px rgba(30,75,88,.035); }
+.window-shell[data-theme="dark"] .work-time-current-card { background: linear-gradient(135deg, rgba(255,255,255,.07), rgba(16,25,29,.35)); }
+.work-time-clock-block { flex: none; width: 138px; display: flex; flex-direction: column; justify-content: center; gap: 5px; padding-right: 14px; border-right: 1px solid var(--line); }
+.work-time-clock-block.is-pending .work-time-eyebrow { color: #a2752d; }
+.work-time-clock-block.is-ready .work-time-clock { color: var(--muted); font-size: 24px; }
+.work-time-eyebrow { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-strong); font-size: 8px; font-weight: 680; letter-spacing: .075em; }
+.work-time-live-dot { width: 6px; height: 6px; border-radius: 50%; }
+.work-time-clock { overflow: hidden; color: var(--ink); font-size: 31px; font-weight: 660; letter-spacing: -.055em; line-height: 1.12; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.work-time-started { color: var(--muted); font-size: 8px; line-height: 1.45; }
+.work-time-current-copy { min-width: 0; flex: 1; align-items: flex-start; flex-direction: column; justify-content: center; }
+.work-time-current-copy h2 { margin: 0; color: var(--ink); font-size: 11px; font-weight: 670; }
+.work-time-current-copy p { max-width: 410px; margin: 5px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.work-time-current-copy .primary-button { min-height: 30px; margin-top: 10px; gap: 6px; padding: 0 11px; font-size: 9px; }
+.work-time-current-copy .primary-button:disabled, .work-time-entry-actions button:disabled { opacity: .52; cursor: not-allowed; }
+.work-time-entry-card, .work-time-history-card { flex: none; padding: 11px 12px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.31); }
+.window-shell[data-theme="dark"] .work-time-entry-card, .window-shell[data-theme="dark"] .work-time-history-card { background: rgba(20,31,35,.32); }
+.work-time-entry-card header, .work-time-history-card header { justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+.work-time-entry-card header > div, .work-time-history-card header > div { gap: 6px; color: var(--accent); }
+.work-time-entry-card header h2, .work-time-history-card header h2 { margin: 0; color: var(--ink); font-size: 10px; font-weight: 670; }
+.work-time-entry-card header > span, .work-time-history-card header > span { color: var(--muted); font-size: 8px; }
+.work-time-entry-card form { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.work-time-field { display: flex; flex-direction: column; gap: 4px; color: var(--muted-strong); font-size: 8px; font-weight: 620; }
+.work-time-field > span { display: flex; align-items: center; gap: 6px; }
+.work-time-field b { color: var(--muted); font-size: 7px; font-weight: 500; }
+.work-time-field textarea, .work-time-tags-input { width: 100%; min-height: 32px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; outline: none; color: var(--ink); background: var(--control); font: inherit; font-size: 9px; resize: vertical; }
+.work-time-field textarea:focus, .work-time-tags-input:focus-within { border-color: rgba(24,130,152,.48); box-shadow: 0 0 0 2px rgba(25,139,162,.09); }
+.work-time-field textarea::placeholder, .work-time-tags-input input::placeholder { color: var(--muted); }
+.work-time-tags-input { display: flex; align-items: center; gap: 6px; }
+.work-time-tags-input > svg { flex: none; color: var(--accent); }
+.work-time-tags-input input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--ink); background: transparent; font: inherit; font-size: 9px; }
+.work-time-tags-input small { flex: none; color: var(--muted); font-size: 7px; font-weight: 400; }
+.work-time-character-count { margin-top: -6px; color: var(--muted); font-size: 7px; text-align: right; }
+.work-time-entry-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 1px; }
+.work-time-entry-actions .primary-button, .work-time-entry-actions .secondary-button, .work-time-discard { min-height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 9px; font-size: 8px; }
+.work-time-discard { border: 1px solid transparent; border-radius: 8px; color: var(--danger); background: transparent; cursor: pointer; }
+.work-time-discard:hover { border-color: rgba(176,95,77,.14); background: rgba(176,95,77,.06); }
+.work-time-history-card { min-height: 72px; }
+.work-time-history-list { display: flex; flex-direction: column; }
+.work-time-history-row { min-width: 0; gap: 10px; padding: 9px 1px; border-top: 1px solid var(--line); }
+.work-time-history-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.work-time-history-main > strong { overflow: hidden; color: var(--ink); font-size: 9px; font-weight: 630; text-overflow: ellipsis; white-space: nowrap; }
+.work-time-history-main > span { color: var(--muted); font-size: 7px; }
+.work-time-history-duration { flex: none; color: var(--muted-strong); font-size: 9px; font-weight: 620; font-variant-numeric: tabular-nums; }
+.work-time-tag-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.work-time-tag { padding: 2px 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--accent-strong); background: var(--accent-soft); font-size: 7px; }
+.work-time-history-empty { min-height: 57px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--muted); }
+.work-time-history-empty > span { color: rgba(70,125,137,.46); }
+.work-time-history-empty p { margin: 0; font-size: 8px; }
+
+.work-time-reports { flex: none; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 13px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.31); }
+.window-shell[data-theme="dark"] .work-time-reports { background: rgba(20,31,35,.32); }
+.work-time-reports-heading, .work-time-reports-heading > div { display: flex; align-items: center; }
+.work-time-reports-heading { justify-content: space-between; gap: 12px; }
+.work-time-reports-heading > div { min-width: 0; gap: 8px; color: var(--accent); }
+.work-time-reports-heading h2 { margin: 0; color: var(--ink); font-size: 11px; font-weight: 680; }
+.work-time-reports-heading p { margin: 3px 0 0; color: var(--muted); font-size: 8px; }
+.work-time-export { min-height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 8px; }
+.work-time-export:disabled, .work-time-report-filters button:disabled, .work-time-report-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.work-time-report-totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.work-time-report-totals article { min-width: 0; display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.24); }
+.window-shell[data-theme="dark"] .work-time-report-totals article { background: rgba(255,255,255,.035); }
+.work-time-report-totals article > span { color: var(--muted-strong); font-size: 8px; font-weight: 620; }
+.work-time-report-totals article > strong { grid-column: 1; color: var(--ink); font-size: 16px; font-weight: 680; font-variant-numeric: tabular-nums; }
+.work-time-report-totals article > small { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: var(--muted); font-size: 8px; }
+.work-time-report-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; padding: 9px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.2); }
+.window-shell[data-theme="dark"] .work-time-report-filters { background: rgba(255,255,255,.025); }
+.work-time-report-filters label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 7px; font-weight: 620; }
+.work-time-report-filters input, .work-time-report-filters select { min-height: 28px; max-width: 160px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px; outline: 0; color: var(--ink); background: var(--control); font: inherit; font-size: 8px; }
+.work-time-report-filters input:focus, .work-time-report-filters select:focus { border-color: rgba(24,130,152,.48); box-shadow: 0 0 0 2px rgba(25,139,162,.09); }
+.work-time-report-filters .work-time-tag-filter select { min-width: 130px; }
+.work-time-clear-filters { min-height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted-strong); background: var(--control); font: inherit; font-size: 8px; cursor: pointer; }
+.work-time-clear-filters:hover { color: var(--ink); border-color: rgba(24,130,152,.28); }
+.work-time-report-count { margin-left: auto; padding-bottom: 6px; color: var(--muted); font-size: 8px; }
+.work-time-report-list { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.work-time-report-row { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 10px 3px; border-bottom: 1px solid var(--line); }
+.work-time-report-main { min-width: 120px; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.work-time-report-main > strong { overflow-wrap: anywhere; color: var(--ink); font-size: 9px; font-weight: 640; }
+.work-time-report-main > span { color: var(--muted); font-size: 7px; }
+.work-time-report-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.work-time-report-actions > button { min-height: 27px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px; font-size: 8px; }
+.work-time-report-actions > .work-time-discard { padding: 0 6px; }
+.work-time-edit-form { width: 100%; display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(140px, 1fr); align-items: end; gap: 8px; }
+.work-time-edit-form label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 7px; font-weight: 620; }
+.work-time-edit-form input { min-width: 0; min-height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; outline: 0; color: var(--ink); background: var(--control); font: inherit; font-size: 9px; }
+.work-time-edit-form input:focus { border-color: rgba(24,130,152,.48); box-shadow: 0 0 0 2px rgba(25,139,162,.09); }
+.work-time-edit-form .work-time-report-actions { grid-column: 1 / -1; }
+.work-time-delete-confirm { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 8px; border: 1px solid rgba(176,95,77,.18); border-radius: 8px; color: var(--muted-strong); background: rgba(176,95,77,.055); font-size: 8px; }
+.work-time-delete-confirm > span { margin-right: auto; }
+.work-time-reports .work-time-history-empty { min-height: 84px; border: 1px dashed var(--line); border-radius: 9px; }
+
+@media (max-width: 420px) {
+  .work-time-current-card { gap: 10px; padding: 11px; }
+  .work-time-clock-block { width: 110px; padding-right: 10px; }
+  .work-time-clock { font-size: 26px; }
+  .work-time-current-copy p { font-size: 8px; }
+  .work-time-tags-input small { display: none; }
+  .work-time-reports-heading { align-items: flex-start; flex-direction: column; }
+  .work-time-edit-form { grid-template-columns: 1fr; }
+  .work-time-edit-form .work-time-report-actions { grid-column: 1; }
+}

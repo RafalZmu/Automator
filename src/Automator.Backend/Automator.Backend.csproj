@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName>Automator.Backend</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Automator.Core\Automator.Core.csproj" />
+    <ProjectReference Include="..\Automator.Application\Automator.Application.csproj" />
+    <ProjectReference Include="..\Automator.Protocol\Automator.Protocol.csproj" />
+    <ProjectReference Include="..\Automator.Infrastructure\Automator.Infrastructure.csproj" />
+    <ProjectReference Include="..\Automator.Windows\Automator.Windows.csproj" />
+  </ItemGroup>
+</Project>
