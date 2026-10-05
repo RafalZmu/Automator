@@ -12,6 +12,9 @@ Read the root AGENTS.md first. Script Runner executes saved, trusted user script
 - For JSON output mode, stdout must contain exactly one valid JSON document. Send progress and diagnostics to stderr so they do not corrupt JSON parsing.
 - Global variable references in argument values use the form {{variables.name}}. Do not interpolate arbitrary environment variables or commands.
 - Do not put secrets, script output, or response data in application logs. Do not automatically execute follow-up actions from script-provided data; actions must be declared and validated by the Automator module and require a user click.
+- Bundled template origins are valid only for the exact registered version, installed script path, and embedded asset bytes. Do not preserve template origin when converting a library profile into an ordinary edited script.
+- Firebird template credentials are transient form values and must never be saved to profile arguments. Template profiles require an interactive Script Runner run; Workflow/Scheduler saved-profile calls have no transient inputs and must fail clearly without starting the script.
+- File and directory template inputs must be fully qualified paths, but may name output paths that do not exist yet.
 
 ## Script authoring guidance
 

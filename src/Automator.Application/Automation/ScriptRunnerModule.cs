@@ -135,12 +135,14 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
             installed ? $"Installed {profile.Name}." : "This template is already installed.", new { profile, installed });
     }
 
-    private static async Task<AutomationResult> SaveProfileAsync(
+    private async Task<AutomationResult> SaveProfileAsync(
         JsonElement input, AutomationServicesContext services, CancellationToken cancellationToken)
     {
         var profile = JsonSerializer.Deserialize<ScriptRunnerProfile>(input.GetRawText(), JsonOptions)
             ?? throw new InvalidDataException("The script profile is empty or invalid.");
         Validate(profile);
+        if (profile.TemplateOrigin is not null && !_templateInstaller.MatchesInstalledAsset(profile))
+            throw new InvalidDataException("Template origin does not match a registered installed script asset.");
 
         await services.Library!.UpsertAsync(ProfileCollection, profile.Id, SettingsVersionValue,
             JsonSerializer.SerializeToElement(profile, JsonOptions), cancellationToken).ConfigureAwait(false);
@@ -172,8 +174,8 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
         if (profile.TemplateOrigin is { } origin)
         {
             template = ScriptRunnerTemplateCatalog.Get(origin.Id);
-            if (template is null || template.Version != origin.Version)
-                return Error("The installed template version is no longer registered. Remove and reinstall the profile to repair it.");
+            if (template is null || template.Version != origin.Version || !_templateInstaller.MatchesInstalledAsset(profile))
+                return Error("The installed template origin, path, or script content is invalid. Remove and reinstall the profile to repair it.");
             if (!hasTemplateValues) return Error("This template requires interactive input values before it can run.");
             transientArguments = ScriptRunnerTemplateCatalog.MapArguments(template, templateValues).ToArray();
         }

@@ -119,6 +119,9 @@ public static partial class ScriptRunnerTemplateCatalog
                 }
                 if (value.ValueKind != JsonValueKind.String) throw new InvalidDataException($"{parameter.Label} must be text.");
                 var input = value.GetString()!;
+                var requiresAbsolutePath = parameter.Type is ScriptRunnerTemplateParameterType.File or ScriptRunnerTemplateParameterType.Directory;
+                if (requiresAbsolutePath && !Path.IsPathFullyQualified(input))
+                    throw new InvalidDataException($"{parameter.Label} must be an absolute path.");
                 if (input.Length > AutomationProcessLimits.MaximumArgumentLength || parameter.Required && string.IsNullOrWhiteSpace(input) ||
                     parameter.Type == ScriptRunnerTemplateParameterType.Choice && !(parameter.Options?.Contains(input) ?? false))
                     throw new InvalidDataException($"{parameter.Label} is invalid.");

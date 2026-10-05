@@ -31,3 +31,12 @@ export function clearSensitiveTemplateValues(
   for (const parameter of template.parameters) if (parameter.sensitive) result[parameter.key] = '';
   return result;
 }
+
+export function updateScriptPath<T extends { scriptPath: string; templateOrigin?: { id: string; version: number } | null }>(
+  profile: T,
+  scriptPath: string,
+): T {
+  return profile.scriptPath !== scriptPath && profile.templateOrigin
+    ? { ...profile, scriptPath, templateOrigin: null }
+    : { ...profile, scriptPath };
+}

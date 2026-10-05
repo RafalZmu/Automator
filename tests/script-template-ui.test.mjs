@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { filterScriptTemplates, initialTemplateValues, clearSensitiveTemplateValues } from '../ui/modules/scriptTemplateViewModel.ts';
+import { filterScriptTemplates, initialTemplateValues, clearSensitiveTemplateValues, updateScriptPath } from '../ui/modules/scriptTemplateViewModel.ts';
 import { parseScriptTemplateCatalog } from '../contracts/scriptRunner.ts';
 
 const template = { id: 'firebird-3-backup-zip', name: 'Firebird 3 database backup and ZIP', description: 'Create an archive', tags: ['database'], parameters: [
@@ -24,4 +24,9 @@ test('catalog parser accepts the host JSON nulls used for optional parameter fie
   const parsed = parseScriptTemplateCatalog([{ id: 'example', version: 1, name: 'Example', description: 'A test', tags: [], interpreter: 'powershell', assetId: 'example', outputMode: 'text', timeoutSeconds: 10,
     parameters: [{ key: 'input', label: 'Input', type: 'file', required: true, argumentIndex: 0, description: null, sensitive: false, defaultValue: null, options: null }] }]);
   assert.equal(parsed[0].parameters[0].type, 'file');
+});
+test('editing the installed script path clears its template origin', () => {
+  const profile = { scriptPath: 'C:\\Automator\\template.ps1', templateOrigin: { id: 'firebird-3-backup-zip', version: 1 } };
+  assert.equal(updateScriptPath(profile, profile.scriptPath).templateOrigin?.id, 'firebird-3-backup-zip');
+  assert.equal(updateScriptPath(profile, 'C:\\Scripts\\edited.ps1').templateOrigin, null);
 });

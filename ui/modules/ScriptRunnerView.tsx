@@ -7,7 +7,7 @@ import type { AutomationServices } from '../automationServices';
 import type { BackendUiState, ModuleSettingsUpdateRequest } from '../../contracts/rpc';
 import type { ScriptRunnerInterpreter } from '../../contracts/scriptRunner';
 import { parseScriptTemplateCatalog, validateScriptTemplateValues, type ScriptTemplateDescriptor, type ScriptTemplateValue } from '../../contracts/scriptRunner';
-import { clearSensitiveTemplateValues, filterScriptTemplates, initialTemplateValues } from './scriptTemplateViewModel';
+import { clearSensitiveTemplateValues, filterScriptTemplates, initialTemplateValues, updateScriptPath } from './scriptTemplateViewModel';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 
 type ScriptProfile = {
@@ -276,7 +276,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     ...(runningId ? [{ id: 'cancel-script-run', label: 'Cancel running script', keywords: ['stop', 'terminate'], run: () => runController.current?.abort() }] : []),
     ...profiles.flatMap((profile) => [
       { id: `run-script:${profile.id}`, label: `Run ${profile.name}`, keywords: [profile.id, profile.interpreter], disabled: runningId !== null, confirmationPrompt: `Run script profile “${profile.name}”?`, run: () => runProfile(profile) },
-      { id: `edit-script:${profile.id}`, label: `Edit ${profile.name}`, keywords: [profile.id, 'profile'], disabled: runningId !== null, run: () => { setOutput(null); setEditing({ ...profile, arguments: [...profile.arguments] }); } },
+      { id: `edit-script:${profile.id}`, label: `Edit ${profile.name}`, keywords: [profile.id, 'profile'], disabled: runningId !== null, run: () => { setOutput(null); setEditing({ ...profile, arguments: [...profile.arguments], ...(profile.templateOrigin ? { templateOrigin: null } : {}) }); } },
       { id: `delete-script:${profile.id}`, label: `Delete ${profile.name}`, keywords: [profile.id, 'remove'], disabled: runningId !== null, confirmationPrompt: `Delete saved script profile “${profile.name}”?`, run: () => deleteProfile(profile) },
     ]),
   ], [deleteProfile, interpreterDefaults, profiles, runProfile, runningId, settingsReady]);
@@ -287,8 +287,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     try {
       const path = await services.files.pickScriptFile(editing.interpreter);
       if (path) setEditing((current) => current ? {
-        ...current,
-        scriptPath: path,
+        ...updateScriptPath(current, path),
         workingDirectory: current.workingDirectory || path.slice(0, Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))),
       } : current);
     } catch (error) {
@@ -357,7 +356,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
               } : current);
             }}><option value="python">Python</option><option value="bash">Bash</option><option value="powershell">PowerShell</option></select></label>
             <label className="script-field-wide"><span>Interpreter executable</span><input required value={editing.interpreterPath} placeholder={editing.interpreter === 'python' ? 'C:\\Python\\python.exe' : editing.interpreter === 'bash' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'} onChange={(event) => setEditing({ ...editing, interpreterPath: event.target.value })} /></label>
-            <label className="script-field-wide"><span>Script file</span><span className="script-path-row"><input required value={editing.scriptPath} placeholder={editing.interpreter === 'python' ? 'C:\\Scripts\\report.py' : editing.interpreter === 'bash' ? 'C:\\Scripts\\report.sh' : 'C:\\Scripts\\report.ps1'} onChange={(event) => setEditing({ ...editing, scriptPath: event.target.value })} /><button className="secondary-button" type="button" onClick={() => void browseForScript()}><FolderOpen size={13} /> Browse</button></span></label>
+            <label className="script-field-wide"><span>Script file</span><span className="script-path-row"><input required value={editing.scriptPath} placeholder={editing.interpreter === 'python' ? 'C:\\Scripts\\report.py' : editing.interpreter === 'bash' ? 'C:\\Scripts\\report.sh' : 'C:\\Scripts\\report.ps1'} onChange={(event) => setEditing((current) => current ? updateScriptPath(current, event.target.value) : current)} /><button className="secondary-button" type="button" onClick={() => void browseForScript()}><FolderOpen size={13} /> Browse</button></span></label>
             <label className="script-field-wide"><span>Arguments <small>one argument per line</small></span><textarea rows={3} value={editing.arguments.join('\n')} placeholder={'--daily\nvalue with spaces'} onChange={(event) => setEditing({ ...editing, arguments: event.target.value.split(/\r?\n/) })} /></label>
             <div className="script-field-wide"><GlobalVariableHints onInsert={(reference) => setEditing({ ...editing, arguments: [...editing.arguments, reference] })} /></div>
             <label className="script-field-wide"><span>Working directory</span><span className="script-path-row"><input required value={editing.workingDirectory} placeholder="C:\\Scripts" onChange={(event) => setEditing({ ...editing, workingDirectory: event.target.value })} /><button className="secondary-button" type="button" onClick={() => void browseForWorkingDirectory()}><FolderOpen size={13} /> Browse</button></span></label>
@@ -378,7 +377,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
             <button className="icon-button script-row-action" type="button" aria-label={runningId === profile.id ? `Cancel ${profile.name}` : `Run ${profile.name}`} title={runningId === profile.id ? 'Cancel run' : 'Run profile'} disabled={runningId !== null && runningId !== profile.id} onClick={() => void runProfile(profile)}>
               {runningId === profile.id ? <Square size={14} /> : <Play size={15} />}
             </button>
-            <button className="icon-button script-row-action" type="button" aria-label={`Edit ${profile.name}`} title="Edit" disabled={runningId !== null} onClick={() => { setOutput(null); setEditing({ ...profile, arguments: [...profile.arguments] }); }}><Pencil size={14} /></button>
+            <button className="icon-button script-row-action" type="button" aria-label={`Edit ${profile.name}`} title="Edit" disabled={runningId !== null} onClick={() => { setOutput(null); setEditing({ ...profile, arguments: [...profile.arguments], ...(profile.templateOrigin ? { templateOrigin: null } : {}) }); }}><Pencil size={14} /></button>
             <button className="icon-button script-row-action" type="button" aria-label={`Remove ${profile.name}`} title="Remove" disabled={runningId !== null} onClick={() => void deleteProfile(profile)}><Trash2 size={14} /></button>
           </article>
         )) : !editing ? <div className="script-empty"><span className="empty-icon"><Terminal size={20} /></span><strong>No script profiles yet</strong><p>Add a saved Python, Bash, or PowerShell command. Each argument is passed as its own value.</p><button className="secondary-button" type="button" disabled={!settingsReady} onClick={() => setEditing(blankProfile(interpreterDefaults))}><Plus size={13} /> Create a profile</button></div> : null}

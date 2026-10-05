@@ -76,6 +76,38 @@ public sealed class ScriptRunnerTemplateInstaller
         finally { InstallGate.Release(); }
     }
 
+    /// <summary>Confirms a profile still points at the exact registered asset installed under this data root.</summary>
+    public bool MatchesInstalledAsset(ScriptRunnerProfile profile)
+    {
+        var origin = profile.TemplateOrigin;
+        if (origin is null) return false;
+        var template = ScriptRunnerTemplateCatalog.Get(origin.Id);
+        if (template is null || origin.Version != template.Version || profile.Interpreter != template.Interpreter) return false;
+        var filename = $"{template.AssetId}.v{template.Version}.ps1";
+        string expectedPath;
+        string actualPath;
+        try
+        {
+            expectedPath = Path.GetFullPath(Path.Combine(_directory, filename));
+            actualPath = Path.GetFullPath(profile.ScriptPath);
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return false;
+        }
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!string.Equals(expectedPath, actualPath, comparison)) return false;
+
+        using var source = _openAsset("Automator.Templates." + filename);
+        if (source is null || !File.Exists(actualPath)) return false;
+        using var expected = new MemoryStream();
+        source.CopyTo(expected);
+        var info = new FileInfo(actualPath);
+        if (info.Length != expected.Length) return false;
+        var installedBytes = File.ReadAllBytes(actualPath);
+        return expected.ToArray().AsSpan().SequenceEqual(installedBytes);
+    }
+
     private string ResolveInterpreter(JsonElement settings)
     {
         var path = _interpreter;

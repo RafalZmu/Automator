@@ -4,6 +4,10 @@ Script Runner saves reusable Python, Bash, and PowerShell profiles. A profile ha
 
 Each argument row is passed as one process argument, including values containing spaces. Text mode displays bounded stdout and stderr. JSON mode parses stdout as one JSON value and displays it as structured data. Scripts run as the signed-in Windows user and are not sandboxed.
 
+## Script Library templates
+
+The Script Runner Library provides registered bundled templates that can be installed as ordinary profiles. Template forms collect typed inputs for an interactive run; the Firebird 3 backup template defaults to `SYSDBA` / `masterkey`, and its password is transient and is not saved with the profile. Template runs require the Script Runner form. Workflow or Scheduler attempts to run a template profile do not have transient credentials and fail with a message to run it interactively. Editing a template profile converts it to a regular script profile. File and directory inputs require fully qualified paths; output destinations need not exist yet.
+
 ## Creating scripts that work well here
 
 - Use .py with the configured Python executable, .sh with a configured Bash executable such as Git Bash, and .ps1 with PowerShell.
