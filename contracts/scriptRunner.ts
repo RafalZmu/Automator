@@ -18,17 +18,18 @@ export function scriptFileFilter(interpreter: ScriptRunnerInterpreter): ScriptFi
 }
 
 export type ScriptTemplateValue = string | boolean;
-export type ScriptTemplateParameter = {
+type ScriptTemplateParameterBase = {
   key: string;
   label: string;
   description?: string;
-  type: 'text' | 'file' | 'directory' | 'boolean' | 'choice';
   required: boolean;
-  sensitive?: boolean;
-  defaultValue?: ScriptTemplateValue;
-  options?: string[];
   argumentIndex: number;
 };
+export type ScriptTemplateParameter =
+  | (ScriptTemplateParameterBase & { type: 'text'; sensitive?: boolean; defaultValue?: string; options?: never })
+  | (ScriptTemplateParameterBase & { type: 'file' | 'directory'; sensitive?: false; defaultValue?: string; options?: never })
+  | (ScriptTemplateParameterBase & { type: 'boolean'; sensitive?: false; defaultValue?: boolean; options?: never })
+  | (ScriptTemplateParameterBase & { type: 'choice'; sensitive?: false; defaultValue?: string; options: string[] });
 export type ScriptTemplateDescriptor = {
   id: string;
   version: number;
@@ -85,7 +86,11 @@ function validateParameter(value: unknown, index: number): ScriptTemplateParamet
       if (type === 'choice' && !options!.includes(defaultValue)) throw new Error('Choice default is invalid.');
     }
   }
-  return { key, label, description, type, required: item.required, sensitive: item.sensitive, defaultValue, options, argumentIndex: index };
+  const base = { key, label, description, required: item.required, argumentIndex: index };
+  if (type === 'choice') return { ...base, type, options: options!, defaultValue: defaultValue as string | undefined };
+  if (type === 'boolean') return { ...base, type, defaultValue: defaultValue as boolean | undefined };
+  if (type === 'text') return { ...base, type, sensitive: item.sensitive as boolean | undefined, defaultValue: defaultValue as string | undefined };
+  return { ...base, type, defaultValue: defaultValue as string | undefined };
 }
 
 export function parseScriptTemplateCatalog(value: unknown): ScriptTemplateDescriptor[] {

@@ -29,12 +29,13 @@ test('Script template contract accepts a Firebird descriptor and validates trans
   assert.throws(() => validateScriptTemplateValues(template, { database: '', destination: 'x', username: 'u', password: 'p', compression: 'fast' }));
   assert.throws(() => validateScriptTemplateValues(template, { database: 'x', destination: 'y', username: 'u', password: 'p', compression: 'unknown' }));
   assert.throws(() => validateScriptTemplateValues(template, { database: 'x', destination: 'y', username: 'u', password: 'p', compression: 'fast', scriptPath: 'C:\\evil.ps1' }));
+  assert.throws(() => validateScriptTemplateValues(template, { database: 'x'.repeat(8193), destination: 'y', username: 'u', password: 'p', compression: 'fast' }));
 });
 
 test('Script template contract rejects duplicate IDs, keys, argument mappings, and malformed inputs', () => {
   assert.throws(() => parseScriptTemplateCatalog([firebird, firebird]));
   for (const change of [
-    { parameters: [...firebird.parameters, { ...firebird.parameters[0] }] },
+    { parameters: firebird.parameters.map((p, i) => i === 1 ? { ...p, key: firebird.parameters[0].key } : p) },
     { parameters: firebird.parameters.map((p, i) => i === 1 ? { ...p, argumentIndex: 0 } : p) },
     { parameters: firebird.parameters.map((p, i) => i === 1 ? { ...p, argumentIndex: 63 } : p) },
     { parameters: firebird.parameters.map((p, i) => i === 1 ? { ...p, type: 'executable' } : p) },

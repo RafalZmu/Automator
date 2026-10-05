@@ -74,7 +74,7 @@ public static partial class ScriptRunnerTemplateCatalog
             for (var index = 0; index < template.Parameters.Count; index++)
             {
                 var parameter = template.Parameters[index];
-                if (parameter is null || !KeyPattern.IsMatch(parameter.Key) || !keys.Add(parameter.Key) ||
+                if (parameter is null || parameter.Key is null || !KeyPattern.IsMatch(parameter.Key) || !keys.Add(parameter.Key) ||
                     !Bounded(parameter.Label, 128) ||
                     parameter.Description is not null && !Bounded(parameter.Description, 512) ||
                     !Enum.IsDefined(parameter.Type) || parameter.ArgumentIndex != index ||

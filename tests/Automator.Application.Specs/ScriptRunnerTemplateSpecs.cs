@@ -13,8 +13,11 @@ internal static class ScriptRunnerTemplateSpecs
         ScriptRunnerTemplateCatalog.Validate([template]);
         Throws(() => ScriptRunnerTemplateCatalog.Validate([template, template]), "duplicate template IDs");
         Throws(() => ScriptRunnerTemplateCatalog.Validate([
-            template with { Parameters = [template.Parameters[0], template.Parameters[0]] }
+            template with { Parameters = [template.Parameters[0], template.Parameters[1] with { Key = template.Parameters[0].Key }] }
         ]), "duplicate parameter keys");
+        Throws(() => ScriptRunnerTemplateCatalog.Validate([
+            template with { Parameters = [template.Parameters[0] with { Key = null! }] }
+        ]), "null parameter key");
         Throws(() => ScriptRunnerTemplateCatalog.Validate([
             template with { Parameters = [template.Parameters[0], template.Parameters[1] with { ArgumentIndex = 0 }] }
         ]), "duplicate argument positions");
@@ -26,6 +29,8 @@ internal static class ScriptRunnerTemplateSpecs
         Throws(() => ScriptRunnerTemplateCatalog.MapArguments(template, unknown.RootElement), "unknown renderer values");
         using var badType = JsonDocument.Parse("""{"database":42}""");
         Throws(() => ScriptRunnerTemplateCatalog.MapArguments(template, badType.RootElement), "invalid renderer value type");
+        using var oversized = JsonDocument.Parse("{\"database\":\"" + new string('x', 8193) + "\"}");
+        Throws(() => ScriptRunnerTemplateCatalog.MapArguments(template, oversized.RootElement), "oversized submitted value");
 
         const string legacy = """
             {"id":"legacy","name":"Legacy","interpreter":"powershell","interpreterPath":"C:\\PowerShell\\pwsh.exe","scriptPath":"C:\\Scripts\\legacy.ps1","arguments":[],"workingDirectory":"C:\\Scripts","outputMode":"text","timeoutSeconds":30}
