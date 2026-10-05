@@ -39,7 +39,12 @@ public sealed record ScriptRunnerTemplateOrigin(string Id, int Version);
 public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
 {
     private readonly IAutomationVariableProvider? _variables;
-    public ScriptRunnerModule(IAutomationVariableProvider? variables = null) => _variables = variables;
+    private readonly ScriptRunnerTemplateInstaller _templateInstaller;
+    public ScriptRunnerModule(IAutomationVariableProvider? variables = null, ScriptRunnerTemplateInstaller? templateInstaller = null)
+    {
+        _variables = variables;
+        _templateInstaller = templateInstaller ?? new();
+    }
     public const string IdValue = "script-runner";
     public const int ContractVersionValue = 1;
     public const int SettingsVersionValue = 1;
@@ -61,6 +66,7 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
         [LibraryCapability, ProcessCapability],
         [
             new("listProfiles", 1, [LibraryCapability]),
+            new("installTemplate", 1, [LibraryCapability]),
             new("saveProfile", 1, [LibraryCapability]),
             new("deleteProfile", 1, [LibraryCapability]),
             new("runProfile", 1, [LibraryCapability, ProcessCapability]),
@@ -93,6 +99,7 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
             return actionId switch
             {
                 "listProfiles" => await ListProfilesAsync(services, cancellationToken).ConfigureAwait(false),
+                "installTemplate" => await InstallTemplateAsync(input, moduleSettings, services, cancellationToken).ConfigureAwait(false),
                 "saveProfile" => await SaveProfileAsync(input, services, cancellationToken).ConfigureAwait(false),
                 "deleteProfile" => await DeleteProfileAsync(input, services, cancellationToken).ConfigureAwait(false),
                 "runProfile" => await RunProfileAsync(input, services, cancellationToken).ConfigureAwait(false),
@@ -112,6 +119,14 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
         var profiles = await services.Library!.ListAsync(ProfileCollection, cancellationToken).ConfigureAwait(false);
         return Result(AutomationStatus.Success, $"{profiles.Count} saved script profile{(profiles.Count == 1 ? string.Empty : "s")}.",
             new { profiles = profiles.Select(profile => profile.Data).ToArray() });
+    }
+
+    private async Task<AutomationResult> InstallTemplateAsync(JsonElement input, JsonElement settings,
+        AutomationServicesContext services, CancellationToken cancellationToken)
+    {
+        var (profile, installed) = await _templateInstaller.InstallAsync(ReadId(input), settings, services.Library!, cancellationToken).ConfigureAwait(false);
+        return Result(installed ? AutomationStatus.Success : AutomationStatus.Information,
+            installed ? $"Installed {profile.Name}." : "This template is already installed.", new { profile, installed });
     }
 
     private static async Task<AutomationResult> SaveProfileAsync(

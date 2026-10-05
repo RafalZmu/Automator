@@ -4,7 +4,7 @@ using Automator.Application.Automation;
 
 internal static class ScriptRunnerTemplateSpecs
 {
-    public static Task RunAsync()
+    public static async Task RunAsync()
     {
         var template = ScriptRunnerTemplateCatalog.Get("firebird-3-backup-zip")
             ?? throw new Exception("Firebird template is registered");
@@ -46,7 +46,7 @@ internal static class ScriptRunnerTemplateSpecs
         Ensure(roundTrip.Id == oldProfile.Id && roundTrip.ScriptPath == oldProfile.ScriptPath &&
             roundTrip.Arguments.SequenceEqual(oldProfile.Arguments) && roundTrip.TemplateOrigin is null,
             "legacy profile round-trips");
-        return Task.CompletedTask;
+        await ScriptRunnerTemplateInstallSpecs.RunAsync();
     }
 
     private static void Ensure(bool value, string label)
