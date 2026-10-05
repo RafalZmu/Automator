@@ -34,6 +34,7 @@ public sealed class ScriptRunnerTemplateInstaller
                 {
                     ScriptRunnerModule.Validate(existing);
                     if (!File.Exists(existing.ScriptPath)) throw new IOException("Installed template script is missing. Restore the script or remove its profile and install again.");
+                    if (!File.Exists(existing.InterpreterPath)) throw new IOException("Installed template PowerShell interpreter is missing. Repair its saved interpreter path in Script Runner; Automator will not rewrite it.");
                     return (existing, false);
                 }
             }

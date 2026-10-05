@@ -945,7 +945,7 @@ public sealed class BackendServer : IAsyncDisposable
             workflowRunnerFactory: _ => workflowEngine,
             schedulerCoordinatorFactory: _ => schedulerCoordinator,
             workTimeCoordinatorFactory: _ => workTimeCoordinator);
-        _automationModules = LauncherTabRegistry.CreateAutomationRegistry(_capabilityRegistry, _variableService);
+        _automationModules = LauncherTabRegistry.CreateAutomationRegistry(_capabilityRegistry, _variableService, dataDirectory);
         _hostMonitorTask = MonitorHostProcessAsync(_hostProcess!);
         _nativeChrome = new NativeChromeController(_log);
         _log.Write(ApplicationLogLevel.Information, "Backend.Initialize", "Backend protocol initialization was accepted.",

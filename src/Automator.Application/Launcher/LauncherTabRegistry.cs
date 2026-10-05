@@ -46,8 +46,9 @@ public static class LauncherTabRegistry
 
     public static AutomationModuleRegistry CreateAutomationRegistry(
         AutomationCapabilityRegistry capabilities,
-        IAutomationVariableProvider? variables = null) =>
-        new(CreateProviders(variables), capabilities);
+        IAutomationVariableProvider? variables = null,
+        string? dataDirectory = null) =>
+        new(CreateProviders(variables, dataDirectory), capabilities);
 
     public static bool TryGetAction(string moduleId, string actionId, out LauncherModuleAction? action)
     {
@@ -76,7 +77,8 @@ public static class LauncherTabRegistry
             definition.Capabilities);
     }
 
-    private static IReadOnlyList<ILauncherTabModuleProvider> CreateProviders(IAutomationVariableProvider? variables = null)
+    private static IReadOnlyList<ILauncherTabModuleProvider> CreateProviders(IAutomationVariableProvider? variables = null,
+        string? dataDirectory = null)
     {
         var providers = new List<ILauncherTabModuleProvider>
         {
@@ -89,7 +91,8 @@ public static class LauncherTabRegistry
                     new("addCustom", 1, [], "catalog/addCustom")
                 ]),
                 new Dictionary<string, string>()),
-            new ScriptRunnerModule(variables),
+            new ScriptRunnerModule(variables, new ScriptRunnerTemplateInstaller(
+                dataDirectory is null ? null : Path.Combine(dataDirectory, "script-templates"))),
             new ApiModule(),
             new BrowserAutomationModule(variables),
             new WorkflowModule(),

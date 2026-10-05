@@ -2,6 +2,8 @@ using System.Text.Json;
 using Automator.Application.Automation;
 using Automator.Core.Automation;
 using Automator.Core.Plugins;
+using Automator.Application.Launcher;
+using Automator.Core.Configuration;
 
 internal static class ScriptRunnerTemplateInstallSpecs
 {
@@ -13,6 +15,23 @@ internal static class ScriptRunnerTemplateInstallSpecs
         await File.WriteAllTextAsync(interpreter, "test fixture");
         try
         {
+            var productionAsset = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Automator", "script-templates", "firebird-3-backup-zip.v1.ps1");
+            var productionBefore = File.Exists(productionAsset) ? await File.ReadAllBytesAsync(productionAsset) : null;
+            var composedStore = new RecordingLibraryStore();
+            var composedCapabilities = new AutomationCapabilityRegistry(libraryStoreFactory: _ => composedStore);
+            var isolatedData = Path.Combine(root, "isolated-host");
+            var registry = LauncherTabRegistry.CreateAutomationRegistry(composedCapabilities, dataDirectory: isolatedData);
+            await using var composedContext = composedCapabilities.CreateContext(new AutomationModuleDescriptor(ScriptRunnerModule.IdValue,
+                [new(AutomationCapabilityIds.LibraryStorage, 1)]));
+            var composedSettings = JsonSerializer.SerializeToElement(new { interpreterDefaults = new { powershell = interpreter } });
+            using var composedInput = JsonDocument.Parse("""{"id":"firebird-3-backup-zip"}""");
+            var composedResult = await registry.DispatchAsync(ScriptRunnerModule.IdValue, "installTemplate", 1, 1,
+                composedInput.RootElement, ScriptRunnerModule.IdValue, composedContext,
+                [new ModuleSettingsEntry(ScriptRunnerModule.IdValue, 1, composedSettings)], CancellationToken.None);
+            Ensure(composedResult.Status == AutomationStatus.Success, composedResult.Message);
+            Ensure(Path.GetDirectoryName(composedResult.Data.GetProperty("profile").GetProperty("scriptPath").GetString()!) == Path.Combine(isolatedData, "script-templates"), "real provider composition uses selected host data root");
+            var productionAfter = File.Exists(productionAsset) ? await File.ReadAllBytesAsync(productionAsset) : null;
+            Ensure(productionBefore is null ? productionAfter is null : productionAfter is not null && productionBefore.SequenceEqual(productionAfter), "isolated host install leaves production asset untouched");
             var store = new RecordingLibraryStore();
             var installer = new ScriptRunnerTemplateInstaller(Path.Combine(root, "assets"), interpreter);
             var module = new ScriptRunnerModule(templateInstaller: installer);
@@ -34,6 +53,11 @@ internal static class ScriptRunnerTemplateInstallSpecs
             var duplicate = await module.ExecuteAsync("installTemplate", input.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
             Ensure(duplicate.Status == AutomationStatus.Information && duplicate.Data.GetProperty("profile").GetProperty("id").GetString() == profile.GetProperty("id").GetString(), "duplicate returns saved profile");
             Ensure(await File.ReadAllTextAsync(path) == "user modification", "duplicate does not overwrite");
+            File.Delete(interpreter);
+            var interpreterMissingDuplicate = await module.ExecuteAsync("installTemplate", input.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
+            Ensure(interpreterMissingDuplicate.Status == AutomationStatus.Error && interpreterMissingDuplicate.Message.Contains("PowerShell"), "duplicate with missing saved interpreter reports repair error");
+            Ensure(store.LastWrite!.Data.GetProperty("interpreterPath").GetString() == interpreter, "duplicate repair does not rewrite user interpreter");
+            await File.WriteAllTextAsync(interpreter, "restored test fixture");
             await context.Library!.DeleteAsync("profiles", profile.GetProperty("id").GetString()!, CancellationToken.None);
             var collision = await module.ExecuteAsync("installTemplate", input.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
             Ensure(collision.Status == AutomationStatus.Error && await File.ReadAllTextAsync(path) == "user modification", "orphan asset collision requires repair");

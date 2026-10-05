@@ -13,7 +13,9 @@ $archiveReserved = $false
 $complete = $false
 try {
     foreach ($path in @($Database, $Backup, $Archive, $Gbak)) {
-        if (-not [System.IO.Path]::IsPathRooted($path)) { throw 'All paths must be absolute.' }
+        # Windows PowerShell's .NET Framework lacks Path.IsPathFullyQualified.
+        # Accept drive roots and UNC server/share roots, rejecting C:foo and \foo.
+        if ($path -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+(?:[\\/]|$))') { throw 'All paths must be fully qualified absolute paths.' }
     }
     if (-not (Test-Path -LiteralPath $Database -PathType Leaf)) { throw 'Database file does not exist.' }
     if (-not (Test-Path -LiteralPath $Gbak -PathType Leaf)) { throw 'Firebird gbak executable does not exist.' }
