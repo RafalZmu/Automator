@@ -42,6 +42,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("script runner launches PowerShell profiles noninteractively with structured script arguments", ScriptRunnerRunsPowerShell),
     ("script runner rejects invalid profile paths and timeout bounds", ScriptRunnerRejectsInvalidProfiles),
     ("script runner reports timeout and invalid JSON output", ScriptRunnerReportsProcessWarnings),
+    ("script template catalog validates descriptors and legacy profile metadata", ScriptRunnerTemplateSpecs.RunAsync),
     ("API profiles save URL-only grants and profile default JSON", ApiProfilesSaveUrlOnlyAndDefaultInput),
     ("work-time log actions validate metadata and delegate to the host coordinator", FocusSessionModuleDispatchesCoordinatorActions),
     ("context disposal cancels active HTTP calls and rejects later calls", ContextDisposalScopesHttpCalls),

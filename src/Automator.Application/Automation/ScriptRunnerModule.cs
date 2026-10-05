@@ -30,7 +30,10 @@ public sealed record ScriptRunnerProfile(
     IReadOnlyList<string> Arguments,
     string WorkingDirectory,
     ScriptRunnerOutputMode OutputMode,
-    int TimeoutSeconds);
+    int TimeoutSeconds,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ScriptRunnerTemplateOrigin? TemplateOrigin = null);
+
+public sealed record ScriptRunnerTemplateOrigin(string Id, int Version);
 
 /// <summary>Reusable Python, Bash, and PowerShell profiles with bounded process results.</summary>
 public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
@@ -228,6 +231,9 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
             throw new InvalidDataException("The profile argument list is invalid or too large.");
         if (profile.TimeoutSeconds is < 1 or > 3600)
             throw new InvalidDataException("Profile timeout must be between 1 and 3600 seconds.");
+        if (profile.TemplateOrigin is { } origin &&
+            (string.IsNullOrWhiteSpace(origin.Id) || !ProfileIdPattern.IsMatch(origin.Id) || origin.Version < 1))
+            throw new InvalidDataException("Template origin is invalid.");
     }
 
     private static AutomationResult Error(string message) => Result(AutomationStatus.Error, message, new { });
