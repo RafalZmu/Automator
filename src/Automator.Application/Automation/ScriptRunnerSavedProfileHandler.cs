@@ -33,6 +33,13 @@ public sealed class ScriptRunnerSavedProfileHandler(
         var record = await library.GetAsync(ModuleId, ScriptRunnerModule.ProfileCollection, profileId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidDataException("The selected script profile no longer exists.");
         var profile = ReadProfile(record.Data);
+        if (profile.TemplateOrigin is { } origin)
+        {
+            var template = ScriptRunnerTemplateCatalog.Get(origin.Id);
+            if (template is null || template.Version != origin.Version)
+                throw new InvalidDataException("The installed template version is no longer registered. Repair it in Script Runner.");
+            throw new InvalidDataException("This template requires interactive input values. Run it from Script Runner.");
+        }
         var globals = variables is null ? null : await variables.GetAsync(cancellationToken).ConfigureAwait(false);
         if (globals is not null) profile = profile with { Arguments = profile.Arguments.Select(argument => AutomationVariableInterpolation.Expand(argument, globals.Values)).ToArray() };
         ScriptRunnerModule.Validate(profile);

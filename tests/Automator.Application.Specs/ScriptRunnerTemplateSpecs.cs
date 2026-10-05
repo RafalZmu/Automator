@@ -47,6 +47,7 @@ internal static class ScriptRunnerTemplateSpecs
             roundTrip.Arguments.SequenceEqual(oldProfile.Arguments) && roundTrip.TemplateOrigin is null,
             "legacy profile round-trips");
         await ScriptRunnerTemplateInstallSpecs.RunAsync();
+        await ScriptRunnerTemplateRunSpecs.RunAsync();
     }
 
     private static void Ensure(bool value, string label)

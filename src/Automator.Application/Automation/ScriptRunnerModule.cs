@@ -66,6 +66,7 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
         [LibraryCapability, ProcessCapability],
         [
             new("listProfiles", 1, [LibraryCapability]),
+            new("listTemplates", 1, [LibraryCapability]),
             new("installTemplate", 1, [LibraryCapability]),
             new("saveProfile", 1, [LibraryCapability]),
             new("deleteProfile", 1, [LibraryCapability]),
@@ -99,6 +100,7 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
             return actionId switch
             {
                 "listProfiles" => await ListProfilesAsync(services, cancellationToken).ConfigureAwait(false),
+                "listTemplates" => ListTemplates(),
                 "installTemplate" => await InstallTemplateAsync(input, moduleSettings, services, cancellationToken).ConfigureAwait(false),
                 "saveProfile" => await SaveProfileAsync(input, services, cancellationToken).ConfigureAwait(false),
                 "deleteProfile" => await DeleteProfileAsync(input, services, cancellationToken).ConfigureAwait(false),
@@ -121,6 +123,10 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
             new { profiles = profiles.Select(profile => profile.Data).ToArray() });
     }
 
+    private static AutomationResult ListTemplates() => Result(AutomationStatus.Success,
+        $"{ScriptRunnerTemplateCatalog.All.Count} script template{(ScriptRunnerTemplateCatalog.All.Count == 1 ? string.Empty : "s")} available.",
+        new { templates = ScriptRunnerTemplateCatalog.All });
+
     private async Task<AutomationResult> InstallTemplateAsync(JsonElement input, JsonElement settings,
         AutomationServicesContext services, CancellationToken cancellationToken)
     {
@@ -135,6 +141,7 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
         var profile = JsonSerializer.Deserialize<ScriptRunnerProfile>(input.GetRawText(), JsonOptions)
             ?? throw new InvalidDataException("The script profile is empty or invalid.");
         Validate(profile);
+
         await services.Library!.UpsertAsync(ProfileCollection, profile.Id, SettingsVersionValue,
             JsonSerializer.SerializeToElement(profile, JsonOptions), cancellationToken).ConfigureAwait(false);
         return Result(AutomationStatus.Success, $"Saved {profile.Name}.", new { profile });
@@ -159,28 +166,55 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
             ?? throw new InvalidDataException("The saved script profile is invalid.");
         Validate(profile);
 
+        var hasTemplateValues = input.TryGetProperty("templateValues", out var templateValues);
+        ScriptRunnerTemplateDescriptor? template = null;
+        string[]? transientArguments = null;
+        if (profile.TemplateOrigin is { } origin)
+        {
+            template = ScriptRunnerTemplateCatalog.Get(origin.Id);
+            if (template is null || template.Version != origin.Version)
+                return Error("The installed template version is no longer registered. Remove and reinstall the profile to repair it.");
+            if (!hasTemplateValues) return Error("This template requires interactive input values before it can run.");
+            transientArguments = ScriptRunnerTemplateCatalog.MapArguments(template, templateValues).ToArray();
+        }
+        else if (hasTemplateValues)
+        {
+            return Error("Transient template inputs are only accepted for a registered template profile.");
+        }
+
         if (_variables is not null)
         {
             var globals = await _variables.GetAsync(cancellationToken).ConfigureAwait(false);
             profile = profile with { Arguments = profile.Arguments.Select(argument => AutomationVariableInterpolation.Expand(argument, globals.Values)).ToArray() };
             Validate(profile);
         }
-        var arguments = profile.Interpreter == ScriptRunnerInterpreter.Powershell
-            ? new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", profile.ScriptPath }.Concat(profile.Arguments).ToArray()
-            : new[] { profile.ScriptPath }.Concat(profile.Arguments).ToArray();
-        var processResult = await services.Processes!.ExecuteAsync(new AutomationProcessRequest(
-            profile.InterpreterPath,
-            arguments,
-            profile.WorkingDirectory,
-            TimeSpan.FromSeconds(profile.TimeoutSeconds)), cancellationToken).ConfigureAwait(false);
+        var runProfile = transientArguments is null ? profile : profile with { Arguments = transientArguments };
+        var arguments = runProfile.Interpreter == ScriptRunnerInterpreter.Powershell
+            ? new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", runProfile.ScriptPath }.Concat(runProfile.Arguments).ToArray()
+            : new[] { runProfile.ScriptPath }.Concat(runProfile.Arguments).ToArray();
+        AutomationProcessResult processResult;
+        try
+        {
+            processResult = await services.Processes!.ExecuteAsync(new AutomationProcessRequest(
+                runProfile.InterpreterPath, arguments, runProfile.WorkingDirectory,
+                TimeSpan.FromSeconds(runProfile.TimeoutSeconds)), cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception exception) when (template is not null)
+        {
+            return Error(RedactSensitive(exception.Message, template, transientArguments!));
+        }
+
+        var stdout = template is null ? processResult.StandardOutput : RedactSensitive(processResult.StandardOutput, template, transientArguments!);
+        var stderr = template is null ? processResult.StandardError : RedactSensitive(processResult.StandardError, template, transientArguments!);
 
         JsonElement? structuredOutput = null;
         var parseFailure = false;
-        if (profile.OutputMode == ScriptRunnerOutputMode.Json && !string.IsNullOrWhiteSpace(processResult.StandardOutput))
+        if (profile.OutputMode == ScriptRunnerOutputMode.Json && !string.IsNullOrWhiteSpace(stdout))
         {
             try
             {
-                using var document = JsonDocument.Parse(processResult.StandardOutput);
+                using var document = JsonDocument.Parse(stdout);
                 structuredOutput = document.RootElement.Clone();
             }
             catch (JsonException) { parseFailure = true; }
@@ -198,14 +232,24 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
             profileId = profile.Id,
             exitCode = processResult.ExitCode,
             timedOut = processResult.TimedOut,
-            stdout = processResult.StandardOutput,
-            stderr = processResult.StandardError,
+            stdout,
+            stderr,
             stdoutTruncated = processResult.StandardOutputTruncated,
             stderrTruncated = processResult.StandardErrorTruncated,
             durationMilliseconds = processResult.DurationMilliseconds,
             structuredOutput,
             parseFailure,
-        }, [new AutomationAction("runAgain", "Run again", 1, JsonSerializer.SerializeToElement(new { id = profile.Id }))]);
+        }, template is null ? [new AutomationAction("runAgain", "Run again", 1, JsonSerializer.SerializeToElement(new { id = profile.Id }))] : []);
+    }
+
+    private static string RedactSensitive(string value, ScriptRunnerTemplateDescriptor template, IReadOnlyList<string> arguments)
+    {
+        foreach (var parameter in template.Parameters.Where(parameter => parameter.Sensitive))
+        {
+            var secret = arguments[parameter.ArgumentIndex];
+            if (secret.Length > 0) value = value.Replace(secret, "[redacted]", StringComparison.Ordinal);
+        }
+        return value;
     }
 
     private static string ReadId(JsonElement input)

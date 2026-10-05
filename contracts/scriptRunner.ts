@@ -62,11 +62,11 @@ function validateParameter(value: unknown, index: number): ScriptTemplateParamet
   const key = bounded(item.key, 'Parameter key', 64);
   if (!parameterKeyPattern.test(key)) throw new Error('Parameter key is invalid.');
   const label = bounded(item.label, 'Parameter label', 128);
-  const description = item.description === undefined ? undefined : bounded(item.description, 'Parameter description', 512);
+  const description = item.description == null ? undefined : bounded(item.description, 'Parameter description', 512);
   const type = item.type;
   if (type !== 'text' && type !== 'file' && type !== 'directory' && type !== 'boolean' && type !== 'choice') throw new Error('Parameter type is unsupported.');
   if (typeof item.required !== 'boolean') throw new Error('Parameter required flag is invalid.');
-  if (item.sensitive !== undefined && typeof item.sensitive !== 'boolean') throw new Error('Parameter sensitive flag is invalid.');
+  if (item.sensitive != null && typeof item.sensitive !== 'boolean') throw new Error('Parameter sensitive flag is invalid.');
   if (item.sensitive && type !== 'text') throw new Error('Only text parameters may be sensitive.');
   if (!Number.isInteger(item.argumentIndex) || item.argumentIndex !== index || index > 62) throw new Error('Parameter argument mapping is invalid.');
   let options: string[] | undefined;
@@ -74,9 +74,9 @@ function validateParameter(value: unknown, index: number): ScriptTemplateParamet
     if (!Array.isArray(item.options) || item.options.length < 1 || item.options.length > 32) throw new Error('Choice options are invalid.');
     options = item.options.map(option => bounded(option, 'Choice option', 128));
     if (new Set(options).size !== options.length) throw new Error('Choice options must be unique.');
-  } else if (item.options !== undefined) throw new Error('Only choice parameters may have options.');
+  } else if (item.options != null) throw new Error('Only choice parameters may have options.');
   let defaultValue: ScriptTemplateValue | undefined;
-  if (item.defaultValue !== undefined) {
+  if (item.defaultValue != null) {
     if (item.sensitive) throw new Error('Sensitive parameters cannot have catalog defaults.');
     if (type === 'boolean') {
       if (typeof item.defaultValue !== 'boolean') throw new Error('Boolean default is invalid.');

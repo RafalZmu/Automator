@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import type { AutomationServices } from '../automationServices';
 import type { BackendUiState, ModuleSettingsUpdateRequest } from '../../contracts/rpc';
 import type { ScriptRunnerInterpreter } from '../../contracts/scriptRunner';
+import { parseScriptTemplateCatalog, validateScriptTemplateValues, type ScriptTemplateDescriptor, type ScriptTemplateValue } from '../../contracts/scriptRunner';
+import { clearSensitiveTemplateValues, filterScriptTemplates, initialTemplateValues } from './scriptTemplateViewModel';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 
 type ScriptProfile = {
@@ -18,6 +20,7 @@ type ScriptProfile = {
   workingDirectory: string;
   outputMode: 'text' | 'json';
   timeoutSeconds: number;
+  templateOrigin?: { id: string; version: number } | null;
 };
 
 type ViewProps = {
@@ -93,6 +96,12 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   const [output, setOutput] = useState<RunOutput | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const [templates, setTemplates] = useState<ScriptTemplateDescriptor[]>([]);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [templateQuery, setTemplateQuery] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<ScriptTemplateDescriptor | null>(null);
+  const [templateProfile, setTemplateProfile] = useState<ScriptProfile | null>(null);
+  const [templateValues, setTemplateValues] = useState<Record<string, ScriptTemplateValue>>({});
   const runController = useRef<AbortController | null>(null);
   const moduleSettingsRef = useRef<ModuleSettingsValue>({});
 
@@ -132,6 +141,10 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
       if (result.status === 'error') throw new Error(result.message);
       const savedProfiles = readProfiles(result.data);
       setProfiles(savedProfiles);
+      const catalog = await services.modules.dispatch('listTemplates', {});
+      if (catalog.status === 'error') throw new Error(catalog.message);
+      const rawTemplates = catalog.data && typeof catalog.data === 'object' && 'templates' in catalog.data ? catalog.data.templates : [];
+      setTemplates(parseScriptTemplateCatalog(rawTemplates));
       await loadModuleSettings(savedProfiles);
       setNotice('');
     } catch (error) {
@@ -183,6 +196,19 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   };
 
   const runProfile = async (profile: ScriptProfile) => {
+    if (profile.templateOrigin) {
+      const template = templates.find((item) => item.id === profile.templateOrigin?.id && item.version === profile.templateOrigin.version);
+      if (!template) { setNotice('This template version is unavailable. Remove and reinstall its profile.'); return; }
+      setSelectedTemplate(template);
+      setTemplateProfile(profile);
+      setTemplateValues(initialTemplateValues(template));
+      setLibraryOpen(true);
+      return;
+    }
+    await dispatchRun(profile, undefined);
+  };
+
+  const dispatchRun = async (profile: ScriptProfile, values: Record<string, ScriptTemplateValue> | undefined) => {
     if (runController.current) {
       runController.current.abort();
       return;
@@ -192,7 +218,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     setRunningId(profile.id);
     setNotice('');
     try {
-      const result = await services.modules.dispatch('runProfile', { id: profile.id }, { signal: controller.signal });
+      const result = await services.modules.dispatch('runProfile', { id: profile.id, ...(values ? { templateValues: values } : {}) }, { signal: controller.signal });
       if (result.data && typeof result.data === 'object' && 'profileId' in result.data) setOutput(result.data as RunOutput);
       setNotice(result.message);
     } catch (error) {
@@ -200,7 +226,38 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     } finally {
       if (runController.current === controller) runController.current = null;
       setRunningId(null);
+      if (selectedTemplate) setTemplateValues((current) => clearSensitiveTemplateValues(selectedTemplate, current));
     }
+  };
+
+  const runTemplate = async () => {
+    if (!selectedTemplate || !templateProfile) return;
+    try {
+      const values = validateScriptTemplateValues(selectedTemplate, templateValues);
+      setNotice('');
+      await dispatchRun(templateProfile, values);
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'Template inputs are invalid.'); }
+  };
+
+  const closeTemplateLibrary = () => {
+    if (templateProfile && runningId === templateProfile.id) runController.current?.abort();
+    if (selectedTemplate) setTemplateValues((current) => clearSensitiveTemplateValues(selectedTemplate, current));
+    setLibraryOpen(false);
+    setSelectedTemplate(null);
+    setTemplateProfile(null);
+  };
+
+  const installTemplate = async (template: ScriptTemplateDescriptor) => {
+    try {
+      const result = await services.modules.dispatch('installTemplate', { id: template.id });
+      if (result.status === 'error') throw new Error(result.message);
+      setNotice(result.message);
+      setSelectedTemplate(template);
+      const installedProfile = result.data && typeof result.data === 'object' && 'profile' in result.data ? result.data.profile : null;
+      setTemplateProfile(installedProfile && typeof installedProfile === 'object' ? installedProfile as ScriptProfile : null);
+      setTemplateValues(initialTemplateValues(template));
+      await refresh();
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not install this template.'); }
   };
 
   const deleteProfile = async (profile: ScriptProfile) => {
@@ -255,12 +312,34 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
           <span className="script-module-icon"><Terminal size={16} /></span>
           <div><h1>Script Runner</h1><p>Saved Python, Bash, and PowerShell tasks</p></div>
         </div>
-        <button className="primary-button" type="button" disabled={!settingsReady} onClick={() => { setOutput(null); setEditing(blankProfile(interpreterDefaults)); }}>
+        <div className="script-editor-actions"><button className="secondary-button" type="button" onClick={() => libraryOpen ? closeTemplateLibrary() : setLibraryOpen(true)}>Library</button><button className="primary-button" type="button" disabled={!settingsReady} onClick={() => { setOutput(null); setEditing(blankProfile(interpreterDefaults)); }}>
           <Plus size={14} /> New profile
-        </button>
+        </button></div>
       </div>
 
       {notice && <p className="script-notice" role="status">{notice}</p>}
+
+      {libraryOpen && <section className="script-editor" aria-label="Script template library">
+        <div className="script-editor-heading"><FileCode2 size={16} /><strong>Script Library</strong><button className="icon-button" type="button" aria-label="Close library" onClick={closeTemplateLibrary}><X size={15} /></button></div>
+        <label className="script-field-wide"><span>Search templates</span><input type="search" value={templateQuery} placeholder="Name, description, or tag" onChange={(event) => setTemplateQuery(event.target.value)} /></label>
+        <div className="script-profile-list">{filterScriptTemplates(templates, templateQuery).map((template) => <article className="script-profile-row" key={template.id}>
+          <span className="script-profile-icon"><Terminal size={16} /></span><div className="script-profile-copy"><strong>{template.name}</strong><span>{template.description} · v{template.version} · {template.tags.join(', ')}</span></div>
+          <button className="secondary-button" type="button" onClick={() => { setSelectedTemplate(template); setTemplateProfile(null); setTemplateValues(initialTemplateValues(template)); }}>Details</button>
+        </article>)}</div>
+        {selectedTemplate && <div className="script-fields">
+          <h2 className="script-field-wide">{selectedTemplate.name} · v{selectedTemplate.version}</h2>
+          <p className="script-field-wide">{selectedTemplate.description}</p>
+          <p className="script-trust-note script-field-wide">Scripts run as your Windows user with the same access as Automator. They are not sandboxed. Review and trust this code before running it.</p>
+          {!templateProfile && <button className="secondary-button script-field-wide" type="button" onClick={() => void installTemplate(selectedTemplate)}>Install as profile</button>}
+          {selectedTemplate.parameters.map((parameter) => <label key={parameter.key}>
+            <span>{parameter.label}{parameter.required ? ' *' : ''}{parameter.description && <small>{parameter.description}</small>}</span>
+            {parameter.type === 'boolean' ? <input type="checkbox" checked={Boolean(templateValues[parameter.key])} onChange={(event) => setTemplateValues((current) => ({ ...current, [parameter.key]: event.target.checked }))} />
+              : parameter.type === 'choice' ? <select required={parameter.required} value={String(templateValues[parameter.key] ?? '')} onChange={(event) => setTemplateValues((current) => ({ ...current, [parameter.key]: event.target.value }))}><option value="">Choose…</option>{parameter.options.map((option) => <option key={option}>{option}</option>)}</select>
+              : <input required={parameter.required} type={parameter.sensitive ? 'password' : 'text'} value={String(templateValues[parameter.key] ?? '')} placeholder={parameter.type === 'file' ? 'Paste a file path' : ''} onChange={(event) => setTemplateValues((current) => ({ ...current, [parameter.key]: event.target.value }))} />}
+          </label>)}
+          {templateProfile && <div className="script-editor-actions script-field-wide"><button className="primary-button" type="button" disabled={runningId !== null} onClick={() => void runTemplate()}>{runningId === templateProfile.id ? 'Running…' : 'Run template'}</button>{runningId === templateProfile.id && <button className="secondary-button" type="button" onClick={() => runController.current?.abort()}>Cancel</button>}</div>}
+        </div>}
+      </section>}
 
       {editing && (
         <form className="script-editor" onSubmit={(event) => void saveProfile(event)}>
