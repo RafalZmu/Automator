@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import {
   automationHttpIpcResponseSchema,
   createAutomationHttpIpcFailure,
@@ -43,6 +43,11 @@ const api: AutomatorBridge = Object.freeze({
   selectBinding: (bindingId: string) => ipcRenderer.invoke('automator:select-binding', { bindingId }),
   addCustomApp: () => ipcRenderer.invoke('automator:add-custom-app'),
   pickScriptFile: (interpreter: Parameters<AutomatorBridge['pickScriptFile']>[0]) => ipcRenderer.invoke('automator:pick-script-file', interpreter) as Promise<string | null>,
+  pickPath: (kind: Parameters<AutomatorBridge['pickPath']>[0]) => ipcRenderer.invoke('automator:pick-path', kind) as Promise<string | null>,
+  resolveDroppedFile: (file: File) => {
+    try { return Promise.resolve(webUtils.getPathForFile(file)); }
+    catch { return Promise.resolve(''); }
+  },
   pickWorkingDirectory: () => ipcRenderer.invoke('automator:pick-working-directory') as Promise<string | null>,
   pickBrowserProjectDirectory: () => ipcRenderer.invoke('automator:pick-browser-project-directory') as Promise<string | null>,
   saveWorkTimeCsv: async (csvText: string) => {

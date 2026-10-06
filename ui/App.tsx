@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import { backendUiStateSchema, type AutomationResult, type BackendUiState, type GlobalVariableSnapshot, type SettingsImportResult } from '../contracts/rpc';
 import type { RunActivityEntry, RunActivitySnapshot } from '../contracts/activity';
 import type { VariableJsonValue } from './contracts/variables';
+import { readWebsiteLauncherQuickActions } from './contracts/websiteLauncher';
 import { createAutomationServices } from './automationServices';
 import type { AutomationServices } from './automationServices';
 import { getAutomatorBridge } from './bridge';
@@ -273,6 +274,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickActionsHome, setQuickActionsHomeState] = useState(false);
   const [globalVariables, setGlobalVariables] = useState<GlobalVariableSnapshot>({ version: 1, values: {}, migrationConflicts: [] });
+  const [websiteShortcuts, setWebsiteShortcuts] = useState<ReturnType<typeof readWebsiteLauncherQuickActions>>([]);
   const [runActivity, setRunActivity] = useState<RunActivitySnapshot>({ contractVersion: 1, entries: [] });
   const [activityOpen, setActivityOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -369,6 +371,23 @@ export function App() {
     if (state.mode === 'settings' || state.mode === 'recordingHotkey') setSettingsOpen(true);
     else setSettingsOpen(false);
   }, [state?.mode]);
+
+  useEffect(() => {
+    if (!state) return undefined;
+    const websiteState = state.moduleStates.find((item) => item.moduleId === 'website-launcher');
+    setWebsiteShortcuts(readWebsiteLauncherQuickActions(websiteState?.values.globalActions));
+  }, [state?.buildId, state?.revision]);
+
+  useEffect(() => {
+    const onChanged = (event: Event) => {
+      const detail = (event as CustomEvent<unknown>).detail;
+      setWebsiteShortcuts(readWebsiteLauncherQuickActions(detail));
+    };
+    window.addEventListener('automator:website-launcher-settings-changed', onChanged);
+    return () => {
+      window.removeEventListener('automator:website-launcher-settings-changed', onChanged);
+    };
+  }, []);
 
   const activeTab = state?.tabs.find((tab) => tab.slot === state.selectedTab) ?? state?.tabs[0];
   const moduleState = activeTab ? state?.moduleStates.find((item) => item.moduleId === activeTab.id) : undefined;
@@ -589,7 +608,12 @@ export function App() {
       run: noop,
     }));
     const discoveredCommandIds = new Set(commandCatalog.map(({ scope, command }) => `${scope}:${command.id}`));
-    const bootstrappedCommands: QuickAction[] = quickActionBootstrap.flatMap((descriptor) => {
+    const websiteBootstrap: typeof quickActionBootstrap = websiteShortcuts.map((row) => ({
+      scope: 'website-launcher', id: `launch-${row.id}`, label: `Launch ${row.name}`,
+      keywords: [row.alias.toLocaleLowerCase() + 'w', row.name, 'websites browser'],
+      category: `Website Launcher · alias ${row.alias.toLocaleLowerCase()}w`,
+    }));
+    const bootstrappedCommands: QuickAction[] = [...quickActionBootstrap, ...websiteBootstrap].flatMap((descriptor) => {
       const tab = state.tabs.find((candidate) => candidate.id === descriptor.scope);
       if (!tab || discoveredCommandIds.has(`${descriptor.scope}:${descriptor.id}`)) return [];
       return [{
@@ -780,7 +804,7 @@ export function App() {
           ))}
         </Tabs.List>
 
-        {!showQuickActions && !activityOpen && activeTab && activeTab.slot !== 1 && activeTab.slot < 8 && <TabCommandBar scope={activeTab.id} />}
+        {!showQuickActions && !activityOpen && activeTab && activeTab.slot !== 1 && activeTab.kind !== 'reserved' && <TabCommandBar scope={activeTab.id} />}
 
         {isWorkspaceSurface && activityOpen ? <div className="activity-workspace-content"><RunActivityView
           entries={runActivity.entries}

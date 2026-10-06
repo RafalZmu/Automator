@@ -26,10 +26,16 @@ const tabs: BackendUiState['tabs'] = [
     searchEnabled: false, contractVersion: 1, settingsVersion: 1,
     actions: ['listProfiles', 'saveProfile', 'deleteProfile', 'runProfile'].map((id) => ({ id, version: 1, command: null, requiredCapabilities: [] })),
     capabilities: [{ id: 'storage.library', version: 1 }, { id: 'process.execute', version: 1 }] },
-  ...Array.from({ length: 7 }, (_, index) => ({
+  ...Array.from({ length: 5 }, (_, index) => ({
     slot: index + 3, id: `reserved-${index + 3}`, title: `Tab ${index + 3}`, iconKey: 'grid', kind: 'reserved' as const,
     searchEnabled: false, contractVersion: 1, settingsVersion: 1, actions: [], capabilities: [],
   })),
+  { slot: 8, id: 'website-launcher', title: 'Website Launcher', iconKey: 'globe', kind: 'website-launcher' as const,
+    searchEnabled: true, contractVersion: 1, settingsVersion: 1,
+    actions: [{ id: 'launchRow', version: 1, command: null, requiredCapabilities: [{ id: 'website.launch', version: 1 }] }],
+    capabilities: [{ id: 'website.launch', version: 1 }] },
+  { slot: 9, id: 'reserved-9', title: 'Tab 9', iconKey: 'grid', kind: 'reserved' as const,
+    searchEnabled: false, contractVersion: 1, settingsVersion: 1, actions: [], capabilities: [] },
 ];
 
 const emptyBinding = (id: string, name: string, targetPath: string, alias: string): BackendUiState['bindings'][number] => ({
@@ -165,6 +171,8 @@ class BrowserPreviewBridge implements AutomatorBridge {
   }
   async cancelAutomationModuleAction(_moduleId: string, _requestId: string) { return { canceled: false }; }
   async pickScriptFile(_interpreter: Parameters<AutomatorBridge['pickScriptFile']>[0]) { return null; }
+  async pickPath(_kind: Parameters<AutomatorBridge['pickPath']>[0]) { return null; }
+  async resolveDroppedFile(_file: File) { return ''; }
   async pickWorkingDirectory() { return null; }
   async pickBrowserProjectDirectory() { return null; }
   async saveWorkTimeCsv(_csvText: string) { return false; }

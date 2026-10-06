@@ -11,6 +11,9 @@ Read the root AGENTS.md first. Slot 7 is the Work Time logger; the legacy Focus 
 - Avoid silently saving an empty description or losing a pending interval when the user changes tabs or the process restarts.
 - Keep the history bounded and do not put work descriptions or tags in application logs.
 - Add coordinator specs for time boundaries and renderer tests for duration/report formatting.
+- The transient “Count only working hours” checkbox is off by default and counts only local 08:00–16:00 overlap per calendar day. Apply it to active and pending displays, saved-entry displays, report totals, and CSV duration columns without changing stored timestamps or durations.
+- Keep working-period overlap and duration derivation in `ui/modules/workTimeViewModel.ts`. The checkbox state is component-local and resets when the view is recreated; do not claim it is persisted.
+- The unmodified `S` key toggles the timer while this tab is active. Ignore it in editable controls and while a stopped interval is pending; expose the toggle in the tab command list on both surfaces.
 
 ## Code and checks
 

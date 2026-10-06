@@ -4,7 +4,7 @@ Automator tabs are compiled into the .NET backend. The backend owns slot registr
 
 ## Register a tab
 
-Add one `IAutomationModule` provider to `LauncherTabRegistry.CreateProviders`. Its `AutomationModuleDefinition` is the source for the backend runtime registry and the metadata sent to React, so slot, ID, title, view kind, versions, actions, and capabilities do not need a second backend registration. Slot 1 remains the app launcher; slot 2 is Script Runner; slots 3–9 remain reserved.
+Add one `IAutomationModule` provider to `LauncherTabRegistry.CreateProviders`. Its `AutomationModuleDefinition` is the source for the backend runtime registry and the metadata sent to React, so slot, ID, title, view kind, versions, actions, and capabilities do not need a second backend registration. Slots 1–7 are Launcher, Script Runner, API, Browser Automation, Workflows, Scheduler, and Work Time. Slot 8 is Website Launcher; slot 9 remains reserved.
 
 Module IDs use lowercase stable names such as `report-viewer`. Action IDs use stable names such as `refresh` or `open-report`. Increase an action version when its input or behavior changes incompatibly. Increase `ContractVersion` only when the shared module contract changes. Slots remain numbered 1–9.
 

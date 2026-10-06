@@ -1,6 +1,6 @@
 import { GlobalVariableHints } from '../variables/GlobalVariables';
 import {
-  Braces, Check, Clock3, FileCode2, FolderOpen, Pencil, Play, Plus, Save, Square, Terminal, Trash2, X,
+  Braces, Check, Clock3, FileCode2, Pencil, Play, Plus, Save, Square, Terminal, Trash2, X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AutomationServices } from '../automationServices';
@@ -9,6 +9,7 @@ import type { ScriptRunnerInterpreter } from '../../contracts/scriptRunner';
 import { parseScriptTemplateCatalog, validateScriptTemplateValues, type ScriptTemplateDescriptor, type ScriptTemplateValue } from '../../contracts/scriptRunner';
 import { clearSensitiveTemplateValues, filterScriptTemplates, initialTemplateValues, updateScriptPath } from './scriptTemplateViewModel';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
+import { PathField } from '../components/PathField';
 
 type ScriptProfile = {
   id: string;
@@ -282,25 +283,29 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   ], [deleteProfile, interpreterDefaults, profiles, runProfile, runningId, settingsReady]);
   useRegisterTabCommands(tab.id, commands);
 
-  const browseForScript = async () => {
-    if (!editing) return;
+  const browseForScript = async (): Promise<string | null> => {
+    if (!editing) return null;
     try {
       const path = await services.files.pickScriptFile(editing.interpreter);
       if (path) setEditing((current) => current ? {
         ...updateScriptPath(current, path),
         workingDirectory: current.workingDirectory || path.slice(0, Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))),
       } : current);
+      return path;
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not open the script picker.');
+      return null;
     }
   };
 
-  const browseForWorkingDirectory = async () => {
+  const browseForWorkingDirectory = async (): Promise<string | null> => {
     try {
       const path = await services.files.pickWorkingDirectory();
       if (path) setEditing((current) => current ? { ...current, workingDirectory: path } : current);
+      return path;
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not open the folder picker.');
+      return null;
     }
   };
 
@@ -330,11 +335,13 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
           <p className="script-field-wide">{selectedTemplate.description}</p>
           <p className="script-trust-note script-field-wide">Scripts run as your Windows user with the same access as Automator. They are not sandboxed. Review and trust this code before running it.</p>
           {!templateProfile && <button className="secondary-button script-field-wide" type="button" onClick={() => void installTemplate(selectedTemplate)}>Install as profile</button>}
-          {selectedTemplate.parameters.map((parameter) => <label key={parameter.key}>
+          {selectedTemplate.parameters.map((parameter) => parameter.type === 'file' || parameter.type === 'directory'
+            ? <PathField key={parameter.key} label={`${parameter.label}${parameter.required ? ' *' : ''}${parameter.description ? ` — ${parameter.description}` : ''}`} kind={parameter.type} required={parameter.required} value={String(templateValues[parameter.key] ?? '')} onChange={(value) => setTemplateValues((current) => ({ ...current, [parameter.key]: value }))} onBrowse={() => services.files.pickPath(parameter.type)} />
+            : <label key={parameter.key}>
             <span>{parameter.label}{parameter.required ? ' *' : ''}{parameter.description && <small>{parameter.description}</small>}</span>
             {parameter.type === 'boolean' ? <input type="checkbox" checked={Boolean(templateValues[parameter.key])} onChange={(event) => setTemplateValues((current) => ({ ...current, [parameter.key]: event.target.checked }))} />
               : parameter.type === 'choice' ? <select required={parameter.required} value={String(templateValues[parameter.key] ?? '')} onChange={(event) => setTemplateValues((current) => ({ ...current, [parameter.key]: event.target.value }))}><option value="">Choose…</option>{parameter.options.map((option) => <option key={option}>{option}</option>)}</select>
-              : <input required={parameter.required} type={parameter.sensitive ? 'password' : 'text'} value={String(templateValues[parameter.key] ?? '')} placeholder={parameter.type === 'file' ? 'Paste a file path' : ''} onChange={(event) => setTemplateValues((current) => ({ ...current, [parameter.key]: event.target.value }))} />}
+              : <input required={parameter.required} type={parameter.sensitive ? 'password' : 'text'} value={String(templateValues[parameter.key] ?? '')} onChange={(event) => setTemplateValues((current) => ({ ...current, [parameter.key]: event.target.value }))} />}
           </label>)}
           {templateProfile && <div className="script-editor-actions script-field-wide"><button className="primary-button" type="button" disabled={runningId !== null} onClick={() => void runTemplate()}>{runningId === templateProfile.id ? 'Running…' : 'Run template'}</button>{runningId === templateProfile.id && <button className="secondary-button" type="button" onClick={() => runController.current?.abort()}>Cancel</button>}</div>}
         </div>}
@@ -356,10 +363,10 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
               } : current);
             }}><option value="python">Python</option><option value="bash">Bash</option><option value="powershell">PowerShell</option></select></label>
             <label className="script-field-wide"><span>Interpreter executable</span><input required value={editing.interpreterPath} placeholder={editing.interpreter === 'python' ? 'C:\\Python\\python.exe' : editing.interpreter === 'bash' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'} onChange={(event) => setEditing({ ...editing, interpreterPath: event.target.value })} /></label>
-            <label className="script-field-wide"><span>Script file</span><span className="script-path-row"><input required value={editing.scriptPath} placeholder={editing.interpreter === 'python' ? 'C:\\Scripts\\report.py' : editing.interpreter === 'bash' ? 'C:\\Scripts\\report.sh' : 'C:\\Scripts\\report.ps1'} onChange={(event) => setEditing((current) => current ? updateScriptPath(current, event.target.value) : current)} /><button className="secondary-button" type="button" onClick={() => void browseForScript()}><FolderOpen size={13} /> Browse</button></span></label>
+            <div className="script-field-wide"><PathField label="Script file" kind="file" required value={editing.scriptPath} placeholder={editing.interpreter === 'python' ? 'C:\\Scripts\\report.py' : editing.interpreter === 'bash' ? 'C:\\Scripts\\report.sh' : 'C:\\Scripts\\report.ps1'} onChange={(value) => setEditing((current) => current ? updateScriptPath(current, value) : current)} onBrowse={browseForScript} /></div>
             <label className="script-field-wide"><span>Arguments <small>one argument per line</small></span><textarea rows={3} value={editing.arguments.join('\n')} placeholder={'--daily\nvalue with spaces'} onChange={(event) => setEditing({ ...editing, arguments: event.target.value.split(/\r?\n/) })} /></label>
             <div className="script-field-wide"><GlobalVariableHints onInsert={(reference) => setEditing({ ...editing, arguments: [...editing.arguments, reference] })} /></div>
-            <label className="script-field-wide"><span>Working directory</span><span className="script-path-row"><input required value={editing.workingDirectory} placeholder="C:\\Scripts" onChange={(event) => setEditing({ ...editing, workingDirectory: event.target.value })} /><button className="secondary-button" type="button" onClick={() => void browseForWorkingDirectory()}><FolderOpen size={13} /> Browse</button></span></label>
+            <div className="script-field-wide"><PathField label="Working directory" kind="directory" required value={editing.workingDirectory} placeholder="C:\\Scripts" onChange={(value) => setEditing({ ...editing, workingDirectory: value })} onBrowse={browseForWorkingDirectory} /></div>
             <label><span>Output</span><select value={editing.outputMode} onChange={(event) => setEditing({ ...editing, outputMode: event.target.value as ScriptProfile['outputMode'] })}><option value="text">Plain text</option><option value="json">JSON</option></select></label>
             <label><span>Timeout <small>seconds</small></span><input required type="number" min={1} max={3600} value={editing.timeoutSeconds} onChange={(event) => setEditing({ ...editing, timeoutSeconds: Number(event.target.value) })} /></label>
           </div>

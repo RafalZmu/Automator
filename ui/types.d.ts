@@ -78,6 +78,8 @@ export interface AutomatorBridge {
   dispatchModuleAction(request: AutomationModuleActionRequest): Promise<AutomationResult>;
   cancelAutomationModuleAction(moduleId: string, requestId: string): Promise<{ canceled: boolean }>;
   pickScriptFile(interpreter: ScriptRunnerInterpreter): Promise<string | null>;
+  pickPath(kind: 'file' | 'directory'): Promise<string | null>;
+  resolveDroppedFile(file: File): Promise<string>;
   pickBrowserProjectDirectory(): Promise<string | null>;
   pickWorkingDirectory(): Promise<string | null>;
   saveWorkTimeCsv(csvText: string): Promise<boolean>;

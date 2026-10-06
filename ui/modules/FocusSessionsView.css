@@ -15,6 +15,12 @@
 .work-time-state.is-pending .work-time-state-dot { background: #c79535; }
 .window-shell[data-theme="dark"] .work-time-state.is-pending { color: #eac479; background: rgba(194,145,62,.11); }
 .work-time-notice { flex: none; margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted-strong); background: rgba(255,255,255,.33); font-size: 9px; line-height: 1.4; }
+.work-time-working-period-toggle { flex: none; display: inline-flex; align-items: center; align-self: flex-start; gap: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted-strong); background: rgba(255,255,255,.24); cursor: pointer; }
+.window-shell[data-theme="dark"] .work-time-working-period-toggle { background: rgba(255,255,255,.035); }
+.work-time-working-period-toggle input { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); }
+.work-time-working-period-toggle span { display: flex; flex-direction: column; gap: 2px; }
+.work-time-working-period-toggle strong { color: var(--ink); font-size: 8px; font-weight: 640; }
+.work-time-working-period-toggle small { color: var(--muted); font-size: 7px; }
 .window-shell[data-theme="dark"] .work-time-notice { background: rgba(255,255,255,.045); }
 .work-time-loading { flex: 1; min-height: 140px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); }
 .work-time-loading p { margin: 0; font-size: 9px; }

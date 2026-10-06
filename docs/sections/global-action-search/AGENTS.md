@@ -7,6 +7,7 @@ Read the root AGENTS.md first. Global Action Search is the compact launcher's ho
 - Preserve unique-match behavior and present choices for ambiguous matches. Disabled actions must stay non-runnable.
 - Add confirmation prompts for actions with destructive or externally visible effects; do not auto-run a command merely because its name is similar.
 - Preserve app aliases as a separate Tab 1 flow. Do not repurpose digit keys or add a new numbered slot for search.
+- Website Launcher aliases are exposed as `<alias>w`; keep the suffix and route the resulting command through the Website Launcher tab's live module command.
 - Add command matching and renderer integration tests when changing ranking, routing, focus, or execution timing.
 
 Code: ui/commands/QuickActionsHome.tsx, TabCommandBar.tsx, TabCommandRegistry.tsx, and commandMatching.ts; composition and routing live in ui/App.tsx.

@@ -26,6 +26,7 @@ import { isScriptRunnerInterpreter, scriptFileFilter } from '../contracts/script
 import { authorizeAutomationServiceCall, type AutomationWindowContext } from './automationServiceAuthorization';
 import { injectHostWindowContext } from './hostWindowContext';
 import { projectStateForWindow, WindowContextRegistry } from './windowContextRegistry';
+import { getScriptRunnerPathPickerSpec } from './scriptRunnerPathPicker';
 
 const moduleDirectory = __dirname;
 const workspaceRoot = path.resolve(moduleDirectory, '../..');
@@ -597,6 +598,13 @@ function registerIpc(): void {
       title: 'Select a working directory',
       properties: ['openDirectory', 'createDirectory'],
     });
+    return selected.canceled || selected.filePaths.length === 0 ? null : selected.filePaths[0];
+  });
+  ipcMain.handle('automator:pick-path', async (event, kind: unknown) => {
+    const context = assertMainFrame(event, ['launcher', 'workspace']);
+    const activeLauncher = context.role !== 'launcher' || Boolean(currentState?.visible && currentState.mode === 'launcher');
+    const spec = getScriptRunnerPathPickerSpec(kind, context.selectedTab, activeLauncher);
+    const selected = await showDialogForCaller(event, spec);
     return selected.canceled || selected.filePaths.length === 0 ? null : selected.filePaths[0];
   });
   ipcMain.handle('automator:pick-browser-project-directory', async (event) => {

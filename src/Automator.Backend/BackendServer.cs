@@ -944,7 +944,8 @@ public sealed class BackendServer : IAsyncDisposable
             browserServiceFactory: _ => browserService,
             workflowRunnerFactory: _ => workflowEngine,
             schedulerCoordinatorFactory: _ => schedulerCoordinator,
-            workTimeCoordinatorFactory: _ => workTimeCoordinator);
+            workTimeCoordinatorFactory: _ => workTimeCoordinator,
+            websiteLauncherFactory: _ => new WindowsAutomationWebsiteLauncher());
         _automationModules = LauncherTabRegistry.CreateAutomationRegistry(_capabilityRegistry, _variableService, dataDirectory);
         _hostMonitorTask = MonitorHostProcessAsync(_hostProcess!);
         _nativeChrome = new NativeChromeController(_log);
@@ -1016,12 +1017,30 @@ public sealed class BackendServer : IAsyncDisposable
         var catalog = session.CatalogApps.Where(binding => string.IsNullOrWhiteSpace(session.Query)
             || binding.Name.Contains(session.Query, StringComparison.CurrentCultureIgnoreCase)
             || binding.Alias.Contains(session.Query, StringComparison.CurrentCultureIgnoreCase)).ToArray();
+        var moduleStates = LauncherTabRegistry.States.ToArray();
+        var websiteStateIndex = Array.FindIndex(moduleStates, item => item.ModuleId == WebsiteLauncherModule.IdValue);
+        if (websiteStateIndex >= 0 && _automationModules is not null)
+        {
+            try
+            {
+                var websiteSettings = _automationModules.GetSettings(WebsiteLauncherModule.IdValue, settings.ModuleSettings);
+                var values = new Dictionary<string, string>(moduleStates[websiteStateIndex].Values, StringComparer.Ordinal)
+                {
+                    ["globalActions"] = WebsiteLauncherModule.SerializeQuickActions(websiteSettings)
+                };
+                moduleStates[websiteStateIndex] = moduleStates[websiteStateIndex] with { Values = values };
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or JsonException or InvalidDataException)
+            {
+                // Invalid imported preferences are not exposed to Global Action Search; the tab reports the settings issue.
+            }
+        }
         return new BackendUiState(
             RpcProtocol.Version,
             _buildId,
             Interlocked.Read(ref _stateRevision),
             LauncherTabRegistry.Version,
-            LauncherTabRegistry.States,
+            moduleStates,
             session.Visible,
             session.SelectedTab,
             session.Query,

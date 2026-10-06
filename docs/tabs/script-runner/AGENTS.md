@@ -15,6 +15,9 @@ Read the root AGENTS.md first. Script Runner executes saved, trusted user script
 - Bundled template origins are valid only for the exact registered version, installed script path, and embedded asset bytes. Do not preserve template origin when converting a library profile into an ordinary edited script.
 - Firebird template credentials are transient form values and must never be saved to profile arguments. Template profiles require an interactive Script Runner run; Workflow/Scheduler saved-profile calls have no transient inputs and must fail clearly without starting the script.
 - File and directory template inputs must be fully qualified paths, but may name output paths that do not exist yet.
+- Use the shared `ui/components/PathField.tsx` for Script Runner script paths, working directories, and template file/directory inputs. It supports typed/pasted paths, an app-owned Browse callback, and one dropped filesystem item resolved in preload through Electron `webUtils.getPathForFile`; it must never read dropped file contents.
+- Keep path picker IPC limited to the active Script Runner tab and the allowlisted `file`/`directory` picker kinds. Native dialog options remain host controlled. Browser preview has no local filesystem and should show a recoverable path-resolution message for dropped items.
+- The path field is a reusable UI component only. Do not migrate unrelated tabs or add a generic cross-tab file capability without updating their own contributor guides and authorization boundaries.
 
 ## Script authoring guidance
 

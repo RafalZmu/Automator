@@ -16,6 +16,7 @@ var checks = new (string Name, Action Run)[]
     ("invalid app paths return no icon instead of breaking backend state", InvalidIconPathIsIgnored),
     ("schema 1 settings load upgrades atomically while preserving launcher fields", LegacySettingsUpgradeIsAtomic),
     ("failed module settings migration leaves the saved file untouched", FailedModuleMigrationPreservesSource),
+    ("website launcher capability is module scoped and opens only HTTP URLs in group order", WebsiteLauncherOpensValidatedGroups),
 };
 
 static void NormalizerMapsStableKeysAndModifiers()
@@ -173,6 +174,70 @@ static void FailedModuleMigrationPreservesSource()
     finally { Directory.Delete(dataDirectory, recursive: true); }
 }
 
+static void WebsiteLauncherOpensValidatedGroups()
+{
+    var starts = new List<System.Diagnostics.ProcessStartInfo>();
+    var adapter = new WindowsAutomationWebsiteLauncher(starts.Add, "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe");
+    var registry = new AutomationCapabilityRegistry(websiteLauncherFactory: _ => adapter);
+    var grants = new[] { new AutomationCapabilityRequirement(AutomationCapabilityIds.WebsiteLaunch, 1) };
+    using var cancellation = new CancellationTokenSource();
+    var context = registry.CreateContext(new AutomationModuleDescriptor("website-launcher", grants));
+    Check.True(context.HasCapability(AutomationCapabilityIds.WebsiteLaunch));
+    Check.True(context.WebsiteLauncher is not null);
+
+    context.WebsiteLauncher!.LaunchAsync(
+        [
+            [new Uri("https://example.test/one"), new Uri("http://example.test/two")],
+            [new Uri("https://example.test/three")],
+        ], cancellation.Token).GetAwaiter().GetResult();
+
+    Check.Equal(2, starts.Count);
+    Check.Equal("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", starts[0].FileName);
+    Check.Equal("--new-window", starts[0].ArgumentList[0]);
+    Check.Equal("https://example.test/one", starts[0].ArgumentList[1]);
+    Check.Equal("http://example.test/two", starts[0].ArgumentList[2]);
+    Check.Equal("--new-window", starts[1].ArgumentList[0]);
+    Check.Equal("https://example.test/three", starts[1].ArgumentList[1]);
+    Check.True(starts.All(start => !start.UseShellExecute));
+    Check.True(starts.All(start => start.ArgumentList.Count > 0));
+    Check.Throws<ArgumentException>(() => adapter.LaunchAsync(
+        [[new Uri("file:///C:/secret.txt")]], CancellationToken.None).GetAwaiter().GetResult());
+    Check.Throws<ArgumentException>(() => adapter.LaunchAsync(
+        [[new Uri("javascript:alert(1)")]], CancellationToken.None).GetAwaiter().GetResult());
+    Check.Equal(2, starts.Count);
+    Check.Throws<ArgumentException>(() => adapter.LaunchAsync(
+        [[new Uri("https://example.test/valid"), new Uri("file:///C:/secret.txt")]], CancellationToken.None).GetAwaiter().GetResult());
+    Check.Equal(2, starts.Count);
+
+    starts.Clear();
+    var firefox = new WindowsAutomationWebsiteLauncher(starts.Add, "C:\\Program Files\\Mozilla Firefox\\firefox.exe");
+    firefox.LaunchAsync(
+        [[new Uri("https://example.test/one"), new Uri("https://example.test/two")], [new Uri("https://example.test/three")]],
+        CancellationToken.None).GetAwaiter().GetResult();
+    Check.Equal(2, starts.Count);
+    Check.Equal("-new-window", starts[0].ArgumentList[0]);
+    Check.Equal("https://example.test/one", starts[0].ArgumentList[1]);
+    Check.Equal("-new-tab", starts[0].ArgumentList[2]);
+    Check.Equal("https://example.test/two", starts[0].ArgumentList[3]);
+    Check.Equal("-new-window", starts[1].ArgumentList[0]);
+    Check.Equal("https://example.test/three", starts[1].ArgumentList[1]);
+
+    starts.Clear();
+    var unknown = new WindowsAutomationWebsiteLauncher(starts.Add, "C:\\Program Files\\UnknownBrowser\\browser.exe");
+    unknown.LaunchAsync(
+        [[new Uri("https://example.test/one"), new Uri("https://example.test/two")], [new Uri("https://example.test/three")]],
+        CancellationToken.None).GetAwaiter().GetResult();
+    Check.Equal(3, starts.Count);
+    Check.Equal("https://example.test/one", starts[0].FileName);
+    Check.Equal("https://example.test/two", starts[1].FileName);
+    Check.Equal("https://example.test/three", starts[2].FileName);
+    Check.True(starts.All(start => start.UseShellExecute));
+
+    context.DisposeAsync().AsTask().GetAwaiter().GetResult();
+    Check.Throws<ObjectDisposedException>(() => context.WebsiteLauncher!.LaunchAsync(
+        [[new Uri("https://example.test")]], CancellationToken.None).GetAwaiter().GetResult());
+}
+
 static class Check
 {
     public static void True(bool actual)
@@ -189,6 +254,13 @@ static class Check
     {
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
             throw new InvalidOperationException($"Expected '{expected}', got '{actual}'.");
+    }
+
+    public static void Throws<TException>(Action action) where TException : Exception
+    {
+        try { action(); }
+        catch (TException) { return; }
+        throw new InvalidOperationException($"Expected {typeof(TException).Name}.");
     }
 }
 

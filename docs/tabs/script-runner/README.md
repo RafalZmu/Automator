@@ -6,7 +6,11 @@ Each argument row is passed as one process argument, including values containing
 
 ## Script Library templates
 
-The Script Runner Library provides registered bundled templates that can be installed as ordinary profiles. Template forms collect typed inputs for an interactive run; the Firebird 3 backup template defaults to `SYSDBA` / `masterkey`, and its password is transient and is not saved with the profile. Template runs require the Script Runner form. Workflow or Scheduler attempts to run a template profile do not have transient credentials and fail with a message to run it interactively. Editing a template profile converts it to a regular script profile. File and directory inputs require fully qualified paths; output destinations need not exist yet.
+The Script Runner Library provides registered bundled templates that can be installed as ordinary profiles. Template forms collect typed inputs for an interactive run; the Firebird 3 backup template defaults to `SYSDBA` / `masterkey`, and its password is transient and is not saved with the profile. Template runs require the Script Runner form. Workflow or Scheduler attempts to run a template profile do not have transient credentials and fail with a message to run it interactively. Editing a template profile converts it to a regular script profile.
+
+File and directory fields accept a pasted or typed path, Browse, or one dropped filesystem item. Dropped items resolve to a local path; Automator does not read their contents. File and directory inputs require fully qualified paths; output destinations need not exist yet. The Firebird `gbak` executable and ZIP destinations are entered as paths in the template form. The password stays out of saved profiles, settings, and logs. During execution the local process command line may expose the credentials to other processes running as the same user; this visibility is accepted for the initial template.
+
+Templates are bundled trusted code and run unsandboxed with the same Windows-user access as Automator. Review a template and trust its source before running it. The shared path field is currently reused in Script Runner only; other tabs can adopt it in a later focused change with their own authorization and docs.
 
 ## Creating scripts that work well here
 

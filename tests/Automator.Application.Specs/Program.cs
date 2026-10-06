@@ -24,6 +24,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("a later query cannot cancel an activation already requested", QueryChangeDoesNotCancelActivation),
     ("concurrent state changes publish revisions in serialized order", ConcurrentCommandsKeepRevisionOrder),
     ("tab registry publishes nine stable slots and their actions", TabRegistryPublishesVersionedSlots),
+    ("website shortcut actions validate settings and launch saved groups in order", WebsiteLauncherValidatesAndLaunchesGroups),
     ("bundled module registry validates and dispatches versioned actions", BundledModuleRegistryDispatches),
     ("bundled modules receive cancellation and module settings migrate", BundledModuleLifecycleAndSettings),
     ("module settings reads return defaults or saved values and reject stale or inactive requests", ModuleSettingsReadsAreScopedAndVersioned),
@@ -301,7 +302,12 @@ static Task TabRegistryPublishesVersionedSlots()
     Check.True(tabs[5].Actions.Any(action => action.Id == "runNow"));
     Check.Equal("focus-sessions", tabs[6].Id);
     Check.Equal("focus-sessions", tabs[6].Kind);
-    Check.True(tabs.Skip(7).All(tab => tab.Kind == "reserved" && tab.Actions.Count == 0));
+    Check.Equal("website-launcher", tabs[7].Id);
+    Check.Equal("website-launcher", tabs[7].Kind);
+    Check.True(tabs[7].Actions.Any(action => action.Id == "launchRow"));
+    Check.Equal("reserved-9", tabs[8].Id);
+    Check.Equal("reserved", tabs[8].Kind);
+    Check.Equal(0, tabs[8].Actions.Count);
     Check.True(tabs.Take(2).SelectMany(tab => tab.Capabilities).Any(capability => capability.Id == AutomationCapabilityIds.LibraryStorage));
     Check.Equal(9, LauncherTabRegistry.States.Count);
     Check.True(LauncherTabRegistry.States.All(state => state.Version == LauncherTabRegistry.Version));
@@ -322,6 +328,38 @@ static Task TabRegistryPublishesVersionedSlots()
     return Task.CompletedTask;
 }
 
+static async Task WebsiteLauncherValidatesAndLaunchesGroups()
+{
+    var launcher = new RecordingWebsiteLauncher();
+    var capabilities = new AutomationCapabilityRegistry(websiteLauncherFactory: _ => launcher);
+    var module = new WebsiteLauncherModule();
+    await using var services = capabilities.CreateContext(new AutomationModuleDescriptor(
+        module.Id, [new(AutomationCapabilityIds.WebsiteLaunch, 1)]));
+    var settings = JsonSerializer.SerializeToElement(new WebsiteLauncherSettings([
+        new("work", "Work", "docs", [
+            new("window-one", "Main", [new("wiki", "Wiki", "https://wiki.example.test"), new("chat", "Chat", "https://chat.example.test")]),
+            new("window-two", "Reports", [new("report", "Report", "https://report.example.test")]),
+        ])
+    ]), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    using var input = JsonDocument.Parse("{\"rowId\":\"work\"}");
+    var result = await module.ExecuteAsync("launchRow", input.RootElement, settings, services, CancellationToken.None);
+    Check.Equal(AutomationStatus.Success, result.Status);
+    Check.Equal(2, launcher.Groups!.Count);
+    Check.Equal("https://wiki.example.test/", launcher.Groups[0][0].AbsoluteUri);
+    Check.Equal("https://chat.example.test/", launcher.Groups[0][1].AbsoluteUri);
+    Check.Equal("https://report.example.test/", launcher.Groups[1][0].AbsoluteUri);
+    var quickActionsJson = WebsiteLauncherModule.SerializeQuickActions(settings);
+    Check.Equal("[{\"id\":\"work\",\"name\":\"Work\",\"alias\":\"docs\"}]", quickActionsJson);
+    Check.False(quickActionsJson.Contains("https://", StringComparison.Ordinal));
+
+    var invalid = JsonSerializer.SerializeToElement(new WebsiteLauncherSettings([
+        new("bad", "Bad", "bad", [new("group", "Group", [new("site", "Bad scheme", "javascript:alert(1)")])])
+    ]), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    var rejected = await module.ExecuteAsync("launchRow", input.RootElement, invalid, services, CancellationToken.None);
+    Check.Equal(AutomationStatus.Error, rejected.Status);
+    Check.Equal(2, launcher.Groups.Count);
+}
+
 static Task CapabilityRegistryRejectsUnknownCapabilitiesAndVersions()
 {
     var registry = new AutomationCapabilityRegistry();
@@ -337,7 +375,7 @@ static Task NewModuleServiceCapabilitiesAreValidated()
     var registry = new AutomationCapabilityRegistry();
     foreach (var capability in new[]
     {
-        "secrets.manage", "api.profileHttp", "browser.session", "workflow.execute", "scheduler.manage", "focus.manage"
+        "secrets.manage", "api.profileHttp", "browser.session", "workflow.execute", "scheduler.manage", "focus.manage", "website.launch"
     })
     {
         try
@@ -482,7 +520,7 @@ static Task ProductionModuleViewsMatchContract()
     var supportedKinds = document.RootElement.GetProperty("kinds").EnumerateArray()
         .Select(item => item.GetString()!).ToHashSet(StringComparer.Ordinal);
     Check.True(LauncherTabRegistry.Tabs.All(tab => supportedKinds.Contains(tab.Kind)));
-    Check.Equal(8, supportedKinds.Count);
+    Check.Equal(9, supportedKinds.Count);
     return Task.CompletedTask;
 }
 
@@ -1294,6 +1332,16 @@ sealed class RecordingLibraryStore : IAutomationLibraryStore
             return Task.FromResult(false);
         LastWrite = null;
         return Task.FromResult(true);
+    }
+}
+
+sealed class RecordingWebsiteLauncher : IAutomationWebsiteLauncher
+{
+    public IReadOnlyList<IReadOnlyList<Uri>>? Groups { get; private set; }
+    public Task LaunchAsync(IReadOnlyList<IReadOnlyList<Uri>> groups, CancellationToken cancellationToken)
+    {
+        Groups = groups.Select(group => (IReadOnlyList<Uri>)group.ToArray()).ToArray();
+        return Task.CompletedTask;
     }
 }
 

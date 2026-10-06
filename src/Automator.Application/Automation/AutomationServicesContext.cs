@@ -26,6 +26,12 @@ public interface IAutomationProcessService
     Task<AutomationProcessResult> ExecuteAsync(AutomationProcessRequest request, CancellationToken cancellationToken);
 }
 
+/// <summary>Launches groups of HTTP(S) URLs through the host's default browser.</summary>
+public interface IAutomationWebsiteLauncher
+{
+    Task LaunchAsync(IReadOnlyList<IReadOnlyList<Uri>> groups, CancellationToken cancellationToken);
+}
+
 /// <summary>Typed service grants scoped to one module activation.</summary>
 public sealed class AutomationServicesContext : IAsyncDisposable
 {
@@ -40,7 +46,7 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         IAutomationSecretManager? secrets = null, IAutomationApiProfileRunner? apiProfiles = null,
         IAutomationBrowserService? browser = null, IAutomationWorkflowRunner? workflows = null,
         IAutomationSchedulerCoordinator? scheduler = null, IAutomationFocusSessionCoordinator? focusSessions = null,
-        IAutomationWorkTimeCoordinator? workTime = null)
+        IAutomationWorkTimeCoordinator? workTime = null, IAutomationWebsiteLauncher? websiteLauncher = null)
     {
         ModuleId = moduleId;
         _lifetimeToken = _lifetime.Token;
@@ -55,6 +61,7 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         Scheduler = scheduler is null ? null : new ContextSchedulerCoordinator(this, scheduler);
         FocusSessions = focusSessions is null ? null : new ContextFocusCoordinator(this, focusSessions);
         WorkTime = workTime is null ? null : new ContextWorkTimeCoordinator(this, workTime);
+        WebsiteLauncher = websiteLauncher is null ? null : new ContextWebsiteLauncher(this, websiteLauncher);
     }
 
     public string ModuleId { get; }
@@ -69,6 +76,7 @@ public sealed class AutomationServicesContext : IAsyncDisposable
     public IAutomationSchedulerCoordinator? Scheduler { get; }
     public IAutomationFocusSessionCoordinator? FocusSessions { get; }
     public IAutomationWorkTimeCoordinator? WorkTime { get; }
+    public IAutomationWebsiteLauncher? WebsiteLauncher { get; }
     public CancellationToken LifetimeToken => _lifetimeToken;
     public bool HasCapability(string capabilityId) => capabilityId switch
     {
@@ -83,6 +91,7 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         AutomationCapabilityIds.SchedulerManagement => Scheduler is not null,
         AutomationCapabilityIds.FocusManagement => FocusSessions is not null,
         AutomationCapabilityIds.WorkTimeManagement => WorkTime is not null,
+        AutomationCapabilityIds.WebsiteLaunch => WebsiteLauncher is not null,
         _ => false,
     };
 
@@ -396,6 +405,16 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         {
             using var linked = Link(context, cancellationToken);
             return await inner.DiscardPendingAsync(linked.Token).ConfigureAwait(false);
+        }
+    }
+
+    private sealed class ContextWebsiteLauncher(AutomationServicesContext context, IAutomationWebsiteLauncher inner) : IAutomationWebsiteLauncher
+    {
+        public async Task LaunchAsync(IReadOnlyList<IReadOnlyList<Uri>> groups, CancellationToken cancellationToken)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref context._disposed) != 0, context);
+            using var linked = Link(context, cancellationToken);
+            await inner.LaunchAsync(groups, linked.Token).ConfigureAwait(false);
         }
     }
 

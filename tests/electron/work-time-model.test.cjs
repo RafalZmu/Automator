@@ -51,6 +51,16 @@ test('work-time display clock advances from a sampled backend duration', async (
   assert.equal(formatWorkTimeDuration(62 * 60_000), '1h 2m');
 });
 
+test('work-time working-period duration counts only local 08:00 to 16:00 overlap across midnight', async () => {
+  const { calculateWorkTimeIntervalMilliseconds } = await import(modelUrl);
+  const interval = (start, stop, nextDay = false) => calculateWorkTimeIntervalMilliseconds(
+    new Date(2026, 9, 6, ...start).toISOString(), new Date(2026, 9, 6 + Number(nextDay), ...stop).toISOString());
+
+  assert.equal(interval([7, 30], [17, 0]), 8 * 60 * 60_000);
+  assert.equal(interval([15, 30], [9, 30], true), 2 * 60 * 60_000);
+  assert.equal(interval([17, 0], [7, 0]), 0);
+});
+
 test('work-time reports calculate local daily and Monday-based weekly totals', async () => {
   const { calculateWorkTimeReportTotals } = await import(modelUrl);
   const entry = (id, started, durationMilliseconds, tags = []) => ({
@@ -74,6 +84,28 @@ test('work-time reports calculate local daily and Monday-based weekly totals', a
     todayEntries: 1,
     weekEntries: 2,
   });
+});
+
+test('work-time report totals and CSV can use working-period durations while preserving timestamps', async () => {
+  const { calculateWorkTimeReportTotals, createWorkTimeCsv, workTimeEntryDurationMilliseconds } = await import(modelUrl);
+  const entry = {
+    id: 'overnight',
+    startedUtc: new Date(2026, 9, 6, 15, 30).toISOString(),
+    stoppedUtc: new Date(2026, 9, 7, 9, 30).toISOString(),
+    durationMilliseconds: 18 * 60 * 60_000,
+    description: 'overnight',
+    tags: [],
+  };
+  const totals = calculateWorkTimeReportTotals([entry], new Date(2026, 9, 7, 12), true);
+  const csv = createWorkTimeCsv([entry], true);
+
+  assert.equal(workTimeEntryDurationMilliseconds(entry, true), 2 * 60 * 60_000);
+  assert.equal(totals.todayMilliseconds, 90 * 60_000, 'Wednesday receives only its own local working-period overlap');
+  assert.equal(totals.weekMilliseconds, 2 * 60 * 60_000);
+  assert.equal(totals.todayEntries, 1, 'today counts entries with working time on Wednesday');
+  assert.equal(totals.weekEntries, 1, 'the week counts the spanning entry once');
+  assert.match(csv, new RegExp(`${entry.startedUtc}.*${entry.stoppedUtc}.*"7200\.000","7200000"`));
+  assert.equal(entry.durationMilliseconds, 18 * 60 * 60_000);
 });
 
 test('work-time reports filter inclusive local dates and tags without changing source entries', async () => {

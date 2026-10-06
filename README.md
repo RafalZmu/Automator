@@ -51,17 +51,18 @@ The app keeps its compact numbered launcher tabs and also provides a larger Work
 | Slot 5 — Workflows | [Agent guide](docs/tabs/workflows/AGENTS.md) · [Functionality and code](docs/tabs/workflows/README.md) |
 | Slot 6 — Scheduler | [Agent guide](docs/tabs/scheduler/AGENTS.md) · [Functionality and code](docs/tabs/scheduler/README.md) |
 | Slot 7 — Work Time | [Agent guide](docs/tabs/work-time/AGENTS.md) · [Functionality and code](docs/tabs/work-time/README.md) |
+| Slot 8 — Website Launcher | [Agent guide](docs/tabs/website-launcher/AGENTS.md) · [Functionality and code](docs/tabs/website-launcher/README.md) |
 | Global action search | [Agent guide](docs/sections/global-action-search/AGENTS.md) · [Functionality and code](docs/sections/global-action-search/README.md) |
 | Options | [Agent guide](docs/sections/options/AGENTS.md) · [Functionality and code](docs/sections/options/README.md) |
 | Activity and notifications | [Agent guide](docs/sections/activity-center/AGENTS.md) · [Functionality and code](docs/sections/activity-center/README.md) |
 | Workspace window | [Agent guide](docs/sections/workspace/AGENTS.md) · [Functionality and code](docs/sections/workspace/README.md) |
 
-Slot 8 and slot 9 are reserved. Add their documentation when a module is assigned to them.
+Slot 9 is reserved.
 
 ## Controls and tab behavior
 
 - Tap **Right Ctrl** to open or close the panel. Opening selects slot 1.
-- Press **1–9** to select a workspace tab. Slot 1 is the app launcher; slots 2–7 are Script Runner, API, Browser Automation, Workflows, Scheduler, and Work Time.
+- Press **1–9** to select a workspace tab. Slot 1 is the app launcher; slots 2–8 are Script Runner, API, Browser Automation, Workflows, Scheduler, Work Time, and Website Launcher.
 - Opening the compact launcher shows Global Action Search as its home surface. It searches registered actions across tabs; a unique match runs, and choosing a tab-specific action switches to that tab. This home surface is not a numbered tab.
 - Press **/** in slot 1 to open the app catalog. The app under the pointer when the panel opens is pinned first.
 - Choose a listed app or browse for an EXE/shortcut, then assign a unique letters-only alias.
@@ -74,6 +75,7 @@ Slot 8 and slot 9 are reserved. Add their documentation when a module is assigne
 - Workflows run saved Script Runner, API, or Browser Automation profiles in order, map JSON values between steps, and stop after the first failed step.
 - Scheduler creates interval, daily, and weekly local-time schedules for saved scripts or workflows and includes an upcoming agenda/calendar.
 - Work Time records elapsed intervals, then saves a description and tags. Its history can be filtered, edited, summarized, and exported.
+- Website Launcher saves named shortcuts with ordered browser groups and website tabs. Type a row's letters-only alias in its tab, or append `w` to the alias in Global Action Search to launch it through the Windows default browser.
 - The Workspace window provides more room for editing modules, reviewing run activity, and opening notification summaries.
 
 Script profiles execute as the current Windows user and are not sandboxed. Only configure scripts and interpreters you trust. Bash uses a user-configured executable such as Git Bash.
@@ -96,4 +98,4 @@ The production startup entry launches the desktop host, not the backend. Automat
 - `tests` contains RPC fixtures, platform rules, .NET specifications, and Electron/Playwright integration tests.
 - `docs/tabs` and `docs/sections` contain the paired contributor guides and feature/code overviews indexed above.
 
-External plugin loading remains a future phase. Slots 8–9 are intentionally unassigned; slot 7 is the Work Time logger, while the older focus-session code remains for compatibility.
+External plugin loading remains a future phase. Slot 9 is intentionally unassigned; slot 7 is the Work Time logger, while the older focus-session code remains for compatibility.

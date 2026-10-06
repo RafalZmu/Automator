@@ -14,7 +14,8 @@ public sealed class AutomationCapabilityRegistry(
     Func<string, IAutomationWorkflowRunner>? workflowRunnerFactory = null,
     Func<string, IAutomationSchedulerCoordinator>? schedulerCoordinatorFactory = null,
     Func<string, IAutomationFocusSessionCoordinator>? focusCoordinatorFactory = null,
-    Func<string, IAutomationWorkTimeCoordinator>? workTimeCoordinatorFactory = null)
+    Func<string, IAutomationWorkTimeCoordinator>? workTimeCoordinatorFactory = null,
+    Func<string, IAutomationWebsiteLauncher>? websiteLauncherFactory = null)
 {
     private static readonly IReadOnlyDictionary<string, int> Supported = new Dictionary<string, int>(StringComparer.Ordinal)
     {
@@ -29,6 +30,7 @@ public sealed class AutomationCapabilityRegistry(
         [AutomationCapabilityIds.SchedulerManagement] = 1,
         [AutomationCapabilityIds.FocusManagement] = 1,
         [AutomationCapabilityIds.WorkTimeManagement] = 1,
+        [AutomationCapabilityIds.WebsiteLaunch] = 1,
     };
 
     public AutomationServicesContext CreateContext(AutomationModuleDescriptor descriptor)
@@ -111,8 +113,13 @@ public sealed class AutomationCapabilityRegistry(
             workTime = workTimeCoordinatorFactory?.Invoke(descriptor.ModuleId)
                 ?? throw new InvalidOperationException("The work-time capability has no host service registered.");
 
+        IAutomationWebsiteLauncher? websiteLauncher = null;
+        if (capabilityIds.Contains(AutomationCapabilityIds.WebsiteLaunch))
+            websiteLauncher = websiteLauncherFactory?.Invoke(descriptor.ModuleId)
+                ?? throw new InvalidOperationException("The website launch capability has no host service registered.");
+
         return new AutomationServicesContext(descriptor.ModuleId, keyboard, http, library, process,
-            secrets, apiProfiles, browser, workflows, scheduler, focusSessions, workTime);
+            secrets, apiProfiles, browser, workflows, scheduler, focusSessions, workTime, websiteLauncher);
     }
 
     public void ValidateRequirements(string moduleId, IReadOnlyList<AutomationCapabilityRequirement> capabilities)

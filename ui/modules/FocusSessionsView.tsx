@@ -3,14 +3,17 @@ import { Activity, Check, Clock3, Download, History, Play, Tag, Trash2, X } from
 import type { AutomationModuleActionRequest, BackendUiState } from '../../contracts/rpc';
 import type { AutomationServices } from '../automationServices';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
+import { isWorkTimeToggleShortcut } from './workTimeShortcut';
 import {
   calculateWorkTimeReportTotals,
+  calculateWorkTimeIntervalMilliseconds,
   createWorkTimeCsv,
   elapsedWorkTimeMilliseconds,
   filterWorkTimeEntries,
   formatWorkTimeDuration,
   getWorkTimeTags,
   readWorkTimeSnapshot,
+  workTimeEntryDurationMilliseconds,
   type WorkTimeReportFilter,
   type WorkTimeSnapshot,
 } from './workTimeViewModel';
@@ -30,6 +33,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [now, setNow] = useState(Date.now());
+  const [workingPeriodOnly, setWorkingPeriodOnly] = useState(false);
   const [reportFilter, setReportFilter] = useState<WorkTimeReportFilter>({ fromDate: '', toDate: '', tag: '' });
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editDescription, setEditDescription] = useState('');
@@ -83,12 +87,25 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
   };
 
   const cleanedDescription = description.trim();
+  const toggleWorkTimer = async () => {
+    if (busy || !snapshot || snapshot.pending) return;
+    await dispatch(snapshot.active ? 'stop' : 'start');
+  };
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (!isWorkTimeToggleShortcut(event)) return;
+      event.preventDefault();
+      void toggleWorkTimer();
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  });
   const tagValues = useMemo(() => tags.split(',').map((tag) => tag.trim()).filter(Boolean), [tags]);
   const reportEntries = useMemo(() => snapshot
     ? filterWorkTimeEntries(snapshot.history, reportFilter).slice().reverse()
     : [], [snapshot, reportFilter]);
   const reportTags = useMemo(() => getWorkTimeTags(snapshot?.history ?? []), [snapshot]);
-  const reportTotals = useMemo(() => calculateWorkTimeReportTotals(snapshot?.history ?? [], new Date(now)), [snapshot, now]);
+  const reportTotals = useMemo(() => calculateWorkTimeReportTotals(snapshot?.history ?? [], new Date(now), workingPeriodOnly), [snapshot, now, workingPeriodOnly]);
 
   const beginEdit = (entry: WorkTimeSnapshot['history'][number]) => {
     setEditingEntryId(entry.id);
@@ -121,7 +138,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
     setBusy('exportCsv');
     setNotice('');
     try {
-      const saved = await services.files.saveWorkTimeCsv(createWorkTimeCsv(reportEntries));
+      const saved = await services.files.saveWorkTimeCsv(createWorkTimeCsv(reportEntries, workingPeriodOnly));
       setNotice(saved ? 'Filtered work-time report exported.' : 'CSV export cancelled.');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not export the work-time report.');
@@ -131,6 +148,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
   };
 
   const commands = useMemo(() => [
+    { id: 'toggle-work', label: 'Toggle work timer', keywords: ['start stop shortcut s'], disabled: !!busy || !snapshot || !!snapshot.pending, run: toggleWorkTimer },
     { id: 'start-work', label: 'Start work timer', keywords: ['begin interval'], disabled: !!busy || !snapshot || !!snapshot.active || !!snapshot.pending, run: async () => { await dispatch('start'); } },
     { id: 'stop-work', label: 'Stop work timer', keywords: ['end interval'], disabled: !!busy || !snapshot?.active, run: async () => { await dispatch('stop'); } },
     { id: 'save-work-entry', label: 'Save work entry', keywords: ['description tags log'], disabled: !!busy || !snapshot?.pending || !cleanedDescription, run: async () => { await dispatch('saveEntry', { description: cleanedDescription, tags: tagValues }); } },
@@ -143,7 +161,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
         { id: `delete-work-time-${entry.id}`, label: `Delete ${entry.description}`, keywords: ['remove saved log entry'], disabled: !!busy, confirmationPrompt: `Delete “${entry.description}”?`, run: async () => { await deleteEntry(entry.id); } },
       ]),
     ] : []),
-  ], [busy, snapshot, cleanedDescription, tagValues, services, surface, reportEntries, reportFilter, editDescription, editTags, editingEntryId]);
+  ], [busy, snapshot, cleanedDescription, tagValues, services, surface, reportEntries, reportFilter, editDescription, editTags, editingEntryId, toggleWorkTimer]);
   useRegisterTabCommands(tab.id, commands);
 
   const submitEntry = (event: FormEvent<HTMLFormElement>) => {
@@ -151,7 +169,12 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
     void dispatch('saveEntry', { description: cleanedDescription, tags: tagValues });
   };
 
-  const activeElapsed = snapshot?.active ? elapsedWorkTimeMilliseconds(snapshot.active, now) : 0;
+  const activeElapsed = snapshot?.active
+    ? workingPeriodOnly
+      ? calculateWorkTimeIntervalMilliseconds(snapshot.active.startedUtc, new Date(now).toISOString())
+      : elapsedWorkTimeMilliseconds(snapshot.active, now)
+    : 0;
+  const pendingDuration = snapshot?.pending ? workTimeEntryDurationMilliseconds(snapshot.pending, workingPeriodOnly) : 0;
   return <section className="module-view work-time-view" aria-label="Work Time Log" data-module-id={tab.id}>
     <header className="work-time-heading">
       <div className="work-time-heading-title">
@@ -166,6 +189,10 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
     {notice && <p className="work-time-notice" role="status">{notice}</p>}
 
     {!snapshot ? <div className="work-time-loading" role="status"><Clock3 size={20} /><p>Loading your work log…</p></div> : <>
+      <label className="work-time-working-period-toggle">
+        <input aria-label="Count only working hours" type="checkbox" checked={workingPeriodOnly} onChange={(event) => setWorkingPeriodOnly(event.target.checked)} />
+        <span><strong>Count only working hours</strong><small>08:00–16:00 local time each day</small></span>
+      </label>
       <section className="work-time-current-card" aria-label="Current work interval">
         {snapshot.active ? <>
           <div className="work-time-clock-block">
@@ -183,7 +210,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
         </> : snapshot.pending ? <>
           <div className="work-time-clock-block is-pending">
             <span className="work-time-eyebrow">UNSAVED INTERVAL</span>
-            <strong className="work-time-clock">{formatWorkTimeDuration(snapshot.pending.durationMilliseconds)}</strong>
+            <strong className="work-time-clock">{formatWorkTimeDuration(pendingDuration)}</strong>
             <span className="work-time-started">{new Date(snapshot.pending.startedUtc).toLocaleString()}</span>
           </div>
           <div className="work-time-current-copy">
@@ -207,7 +234,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
       </section>
 
       {snapshot.pending && <section className="work-time-entry-card" aria-label="Save work interval details">
-        <header><div><Check size={14} /><h2>Save this interval</h2></div><span>{formatWorkTimeDuration(snapshot.pending.durationMilliseconds)}</span></header>
+        <header><div><Check size={14} /><h2>Save this interval</h2></div><span>{formatWorkTimeDuration(pendingDuration)}</span></header>
         <form onSubmit={submitEntry}>
           <label className="work-time-field">
             <span>Description <b>Required</b></span>
@@ -271,7 +298,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
                   <span>{new Date(entry.startedUtc).toLocaleDateString()} · {new Date(entry.startedUtc).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}–{new Date(entry.stoppedUtc).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
                   {entry.tags.length > 0 && <div className="work-time-tag-list">{entry.tags.map((tag) => <span className="work-time-tag" key={tag}>{tag}</span>)}</div>}
                 </div>
-                <span className="work-time-history-duration">{formatWorkTimeDuration(entry.durationMilliseconds)}</span>
+                <span className="work-time-history-duration">{formatWorkTimeDuration(workTimeEntryDurationMilliseconds(entry, workingPeriodOnly))}</span>
                 <div className="work-time-report-actions">
                   <button className="secondary-button" type="button" disabled={!!busy} aria-label={`Edit work log entry ${entry.description}`} onClick={() => beginEdit(entry)}>Edit</button>
                   <button className="work-time-discard" type="button" disabled={!!busy} aria-label={`Delete work log entry ${entry.description}`} onClick={() => { setDeleteCandidateId(entry.id); setEditingEntryId(null); }}><Trash2 size={12} /> Delete</button>

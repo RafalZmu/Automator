@@ -18,6 +18,13 @@ test('command search ignores case and diacritics and returns no results for an u
   assert.deepEqual(matchTabCommands(commands, 'missing action'), []);
 });
 
+test('website aliases work directly in their tab and use a trailing w to disambiguate global search', () => {
+  const app = { id: 'app-docs', label: 'Documentation app', keywords: ['docs'] };
+  const website = { id: 'website-docs', label: 'docs · Project sites', keywords: ['docs', 'docsw'] };
+  assert.deepEqual(matchTabCommands([website], 'docs').map((command) => command.id), ['website-docs']);
+  assert.deepEqual(matchTabCommands([app, website], 'docsw').map((command) => command.id), ['website-docs']);
+});
+
 test('a command executes from Enter only when the query has one unique match', () => {
   assert.deepEqual(resolveTabCommand(matchTabCommands(commands, 'run')), { kind: 'ambiguous' });
   assert.deepEqual(resolveTabCommand(matchTabCommands(commands, 'run build')), { kind: 'unique', command: commands[1] });

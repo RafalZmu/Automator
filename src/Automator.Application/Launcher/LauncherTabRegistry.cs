@@ -98,15 +98,14 @@ public static class LauncherTabRegistry
             new WorkflowModule(),
             new SchedulerModule(),
             new FocusSessionsModule(),
+            new WebsiteLauncherModule(),
         };
 
-        for (var slot = 8; slot <= 9; slot++)
-        {
-            var id = $"reserved-{slot}";
-            providers.Add(new BundledModuleProvider(
-                new AutomationModuleDefinition(slot, id, $"Tab {slot}", "grid", "reserved", false, 1, 1, [], []),
-                new Dictionary<string, string> { ["status"] = "reserved" }));
-        }
+        const int slot = 9;
+        var id = $"reserved-{slot}";
+        providers.Add(new BundledModuleProvider(
+            new AutomationModuleDefinition(slot, id, $"Tab {slot}", "grid", "reserved", false, 1, 1, [], []),
+            new Dictionary<string, string> { ["status"] = "reserved" }));
 
         return providers.AsReadOnly();
     }

@@ -66,6 +66,36 @@ export function elapsedWorkTimeMilliseconds(active: WorkTimeActive, now = Date.n
   return Math.max(0, active.elapsedMilliseconds + (Number.isFinite(sampled) ? now - sampled : 0));
 }
 
+function workTimeIntervalDailyOverlaps(startedUtc: string, stoppedUtc: string): Map<string, number> {
+  const start = Date.parse(startedUtc);
+  const stop = Date.parse(stoppedUtc);
+  if (!Number.isFinite(start) || !Number.isFinite(stop) || stop <= start) return new Map();
+
+  const overlaps = new Map<string, number>();
+  const day = new Date(start);
+  day.setHours(0, 0, 0, 0);
+  while (day.getTime() < stop) {
+    const windowStart = new Date(day);
+    windowStart.setHours(8, 0, 0, 0);
+    const windowStop = new Date(day);
+    windowStop.setHours(16, 0, 0, 0);
+    const overlap = Math.max(0, Math.min(stop, windowStop.getTime()) - Math.max(start, windowStart.getTime()));
+    if (overlap > 0) overlaps.set(localDateKey(day), overlap);
+    day.setDate(day.getDate() + 1);
+  }
+  return overlaps;
+}
+
+export function calculateWorkTimeIntervalMilliseconds(startedUtc: string, stoppedUtc: string): number {
+  return [...workTimeIntervalDailyOverlaps(startedUtc, stoppedUtc).values()].reduce((total, overlap) => total + overlap, 0);
+}
+
+export function workTimeEntryDurationMilliseconds(entry: Pick<WorkTimeEntry, 'startedUtc' | 'stoppedUtc' | 'durationMilliseconds'>, workingPeriodOnly = false): number {
+  return workingPeriodOnly
+    ? calculateWorkTimeIntervalMilliseconds(entry.startedUtc, entry.stoppedUtc)
+    : entry.durationMilliseconds;
+}
+
 export function formatWorkTimeDuration(milliseconds: number): string {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1_000));
   if (totalSeconds < 60) return `${totalSeconds}s`;
@@ -87,7 +117,7 @@ function localDateKey(value: string | Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export function calculateWorkTimeReportTotals(entries: readonly WorkTimeEntry[], now = new Date()): {
+export function calculateWorkTimeReportTotals(entries: readonly WorkTimeEntry[], now = new Date(), workingPeriodOnly = false): {
   todayMilliseconds: number;
   weekMilliseconds: number;
   todayEntries: number;
@@ -101,13 +131,31 @@ export function calculateWorkTimeReportTotals(entries: readonly WorkTimeEntry[],
   let todayEntries = 0;
   let weekEntries = 0;
   for (const entry of entries) {
+    if (workingPeriodOnly) {
+      let entryContributesToday = false;
+      let entryContributesThisWeek = false;
+      for (const [entryDate, duration] of workTimeIntervalDailyOverlaps(entry.startedUtc, entry.stoppedUtc)) {
+        if (entryDate === today) {
+          todayMilliseconds += duration;
+          entryContributesToday = true;
+        }
+        if (entryDate >= weekStart && entryDate <= today) {
+          weekMilliseconds += duration;
+          entryContributesThisWeek = true;
+        }
+      }
+      if (entryContributesToday) todayEntries += 1;
+      if (entryContributesThisWeek) weekEntries += 1;
+      continue;
+    }
+    const duration = workTimeEntryDurationMilliseconds(entry, workingPeriodOnly);
     const entryDate = localDateKey(entry.startedUtc);
     if (entryDate === today) {
-      todayMilliseconds += entry.durationMilliseconds;
+      todayMilliseconds += duration;
       todayEntries += 1;
     }
     if (entryDate >= weekStart && entryDate <= today) {
-      weekMilliseconds += entry.durationMilliseconds;
+      weekMilliseconds += duration;
       weekEntries += 1;
     }
   }
@@ -145,15 +193,15 @@ function csvCell(value: string | number): string {
   return `"${safe.replaceAll('"', '""')}"`;
 }
 
-export function createWorkTimeCsv(entries: readonly WorkTimeEntry[]): string {
+export function createWorkTimeCsv(entries: readonly WorkTimeEntry[], workingPeriodOnly = false): string {
   const rows = [[
     'id', 'startedUtc', 'stoppedUtc', 'durationSeconds', 'durationMilliseconds', 'description', 'tags',
   ], ...entries.map((entry) => [
     entry.id,
     new Date(entry.startedUtc).toISOString(),
     new Date(entry.stoppedUtc).toISOString(),
-    (entry.durationMilliseconds / 1_000).toFixed(3),
-    String(entry.durationMilliseconds),
+    (workTimeEntryDurationMilliseconds(entry, workingPeriodOnly) / 1_000).toFixed(3),
+    String(workTimeEntryDurationMilliseconds(entry, workingPeriodOnly)),
     entry.description,
     entry.tags.join(', '),
   ])];
