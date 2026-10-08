@@ -7,7 +7,7 @@ import type { AutomationServices } from '../automationServices';
 import type { BackendUiState, ModuleSettingsUpdateRequest } from '../../contracts/rpc';
 import type { ScriptRunnerInterpreter } from '../../contracts/scriptRunner';
 import { parseScriptTemplateCatalog, validateScriptTemplateValues, type ScriptTemplateDescriptor, type ScriptTemplateValue } from '../../contracts/scriptRunner';
-import { clearSensitiveTemplateValues, filterScriptTemplates, initialTemplateValues, updateScriptPath } from './scriptTemplateViewModel';
+import { clearSensitiveTemplateValues, filterScriptTemplates, resetTemplateValues, templateDetailParameters, updateScriptPath } from './scriptTemplateViewModel';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import { PathField } from '../components/PathField';
 
@@ -202,7 +202,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
       if (!template) { setNotice('This template version is unavailable. Remove and reinstall its profile.'); return; }
       setSelectedTemplate(template);
       setTemplateProfile(profile);
-      setTemplateValues(initialTemplateValues(template));
+      setTemplateValues((current) => resetTemplateValues(template, current));
       setLibraryOpen(true);
       return;
     }
@@ -256,7 +256,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
       setSelectedTemplate(template);
       const installedProfile = result.data && typeof result.data === 'object' && 'profile' in result.data ? result.data.profile : null;
       setTemplateProfile(installedProfile && typeof installedProfile === 'object' ? installedProfile as ScriptProfile : null);
-      setTemplateValues(initialTemplateValues(template));
+      setTemplateValues((current) => resetTemplateValues(template, current));
       await refresh();
     } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not install this template.'); }
   };
@@ -326,16 +326,28 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
       {libraryOpen && <section className="script-editor" aria-label="Script template library">
         <div className="script-editor-heading"><FileCode2 size={16} /><strong>Script Library</strong><button className="icon-button" type="button" aria-label="Close library" onClick={closeTemplateLibrary}><X size={15} /></button></div>
         <label className="script-field-wide"><span>Search templates</span><input type="search" value={templateQuery} placeholder="Name, description, or tag" onChange={(event) => setTemplateQuery(event.target.value)} /></label>
-        <div className="script-profile-list">{filterScriptTemplates(templates, templateQuery).map((template) => <article className="script-profile-row" key={template.id}>
-          <span className="script-profile-icon"><Terminal size={16} /></span><div className="script-profile-copy"><strong>{template.name}</strong><span>{template.description} · v{template.version} · {template.tags.join(', ')}</span></div>
-          <button className="secondary-button" type="button" onClick={() => { setSelectedTemplate(template); setTemplateProfile(null); setTemplateValues(initialTemplateValues(template)); }}>Details</button>
-        </article>)}</div>
+        <div className="script-profile-list">{filterScriptTemplates(templates, templateQuery).map((template) => {
+          const targetDatabaseParameter = template.id === 'firebird-3-backup-zip'
+            ? template.parameters.find((parameter) => parameter.key === 'database')
+            : undefined;
+          const installedProfile = profiles.find((profile) => profile.templateOrigin?.id === template.id
+            && profile.templateOrigin?.version === template.version);
+          return <article className="script-profile-row script-template-row" key={template.id}>
+            <span className="script-profile-icon"><Terminal size={16} /></span><div className="script-profile-copy"><strong>{template.name}</strong><span>{template.description} · v{template.version} · {template.tags.join(', ')}</span></div>
+            <button className="secondary-button" type="button" onClick={() => { setSelectedTemplate(template); setTemplateProfile(installedProfile ?? null); setTemplateValues((current) => resetTemplateValues(template, current)); }}>Details</button>
+            <button className={installedProfile ? 'secondary-button' : 'primary-button'} type="button" disabled={!settingsReady || Boolean(installedProfile) || runningId !== null} onClick={() => void installTemplate(template)}>
+              {installedProfile ? 'Profile added' : <><Plus size={13} />Add to Script Runner</>}
+            </button>
+            {targetDatabaseParameter?.type === 'file' && <div className="script-template-target">
+              <PathField label={`${targetDatabaseParameter.label}${targetDatabaseParameter.required ? ' *' : ''}`} kind="file" required={targetDatabaseParameter.required} value={String(templateValues[targetDatabaseParameter.key] ?? '')} onChange={(value) => setTemplateValues((current) => ({ ...current, [targetDatabaseParameter.key]: value }))} onBrowse={() => services.files.pickPath('file')} />
+            </div>}
+          </article>;
+        })}</div>
         {selectedTemplate && <div className="script-fields">
           <h2 className="script-field-wide">{selectedTemplate.name} · v{selectedTemplate.version}</h2>
           <p className="script-field-wide">{selectedTemplate.description}</p>
           <p className="script-trust-note script-field-wide">Scripts run as your Windows user with the same access as Automator. They are not sandboxed. Review and trust this code before running it.</p>
-          {!templateProfile && <button className="secondary-button script-field-wide" type="button" onClick={() => void installTemplate(selectedTemplate)}>Install as profile</button>}
-          {selectedTemplate.parameters.map((parameter) => parameter.type === 'file' || parameter.type === 'directory'
+          {templateDetailParameters(selectedTemplate).map((parameter) => parameter.type === 'file' || parameter.type === 'directory'
             ? <PathField key={parameter.key} label={`${parameter.label}${parameter.required ? ' *' : ''}${parameter.description ? ` — ${parameter.description}` : ''}`} kind={parameter.type} required={parameter.required} value={String(templateValues[parameter.key] ?? '')} onChange={(value) => setTemplateValues((current) => ({ ...current, [parameter.key]: value }))} onBrowse={() => services.files.pickPath(parameter.type)} />
             : <label key={parameter.key}>
             <span>{parameter.label}{parameter.required ? ' *' : ''}{parameter.description && <small>{parameter.description}</small>}</span>

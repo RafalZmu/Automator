@@ -23,6 +23,21 @@ export function initialTemplateValues(template: ScriptTemplateDescriptor): Recor
   return result;
 }
 
+export function templateDetailParameters(template: ScriptTemplateDescriptor): ScriptTemplateDescriptor['parameters'] {
+  return template.id === 'firebird-3-backup-zip'
+    ? template.parameters.filter((parameter) => parameter.key !== 'database')
+    : template.parameters;
+}
+
+export function resetTemplateValues(
+  template: ScriptTemplateDescriptor,
+  current: Record<string, ScriptTemplateValue>,
+): Record<string, ScriptTemplateValue> {
+  const result = initialTemplateValues(template);
+  if (template.id === 'firebird-3-backup-zip' && typeof current.database === 'string') result.database = current.database;
+  return result;
+}
+
 export function clearSensitiveTemplateValues(
   template: ScriptTemplateDescriptor,
   values: Record<string, ScriptTemplateValue>,

@@ -41,7 +41,7 @@ public static partial class ScriptRunnerTemplateCatalog
             "Create a Firebird database backup and ZIP archive.", ["database", "backup", "firebird"],
             ScriptRunnerInterpreter.Powershell, "firebird-3-backup-zip", ScriptRunnerOutputMode.Text, 3600,
             [
-                new("database", "Database file", ScriptRunnerTemplateParameterType.File, true, 0),
+                new("database", "Target database", ScriptRunnerTemplateParameterType.File, true, 0),
                 new("backup", "Backup file", ScriptRunnerTemplateParameterType.File, true, 1),
                 new("archive", "ZIP file", ScriptRunnerTemplateParameterType.File, true, 2),
                 new("gbak", "gbak executable", ScriptRunnerTemplateParameterType.File, true, 3),

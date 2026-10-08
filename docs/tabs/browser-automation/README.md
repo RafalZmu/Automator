@@ -16,3 +16,7 @@ When the configured managed project is first created, Automator creates a tests 
 - Tests: tests/browser-automation-contract.test.mjs and Browser Infrastructure/Application spec projects.
 
 Test files are maintained as normal Playwright code. Automator owns display and execution; test behavior belongs in the project files.
+
+## Test case steps
+
+See [TESTS.md](TESTS.md) for the profile, explorer, preview, and managed-project test steps.

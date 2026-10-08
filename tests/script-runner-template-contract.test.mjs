@@ -7,7 +7,7 @@ const firebird = {
   description: 'Back up a Firebird database and compress the backup.', tags: ['database', 'backup'],
   interpreter: 'powershell', assetId: 'firebird-3-backup-zip', outputMode: 'text', timeoutSeconds: 3600,
   parameters: [
-    { key: 'database', label: 'Database file', type: 'file', required: true, argumentIndex: 0 },
+    { key: 'database', label: 'Target database', type: 'file', required: true, argumentIndex: 0 },
     { key: 'destination', label: 'ZIP destination', type: 'file', required: true, argumentIndex: 1 },
     { key: 'username', label: 'Username', type: 'text', required: true, argumentIndex: 2 },
     { key: 'password', label: 'Password', type: 'text', required: true, sensitive: true, argumentIndex: 3 },

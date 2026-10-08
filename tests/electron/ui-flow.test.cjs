@@ -203,6 +203,69 @@ test('settings and tab transitions preserve focus in the isolated desktop host',
   }
 });
 
+test('compact launcher uses the larger fixed size and remains non-resizable', async () => {
+  const app = await launchHost('launcher-size');
+  try {
+    const page = await app.firstWindow();
+    await page.getByPlaceholder('Search apps, profiles, and actions…').waitFor({ state: 'visible' });
+
+    const windowState = await app.evaluate(({ BrowserWindow, screen }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      const bounds = window.getBounds();
+      const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+      return {
+        bounds,
+        workArea: screen.getDisplayNearestPoint(center).workArea,
+        resizable: window.isResizable(),
+      };
+    });
+    assert.equal(windowState.bounds.width, Math.min(760, windowState.workArea.width));
+    assert.equal(windowState.bounds.height, Math.min(800, windowState.workArea.height));
+    assert.equal(windowState.resizable, false, 'the compact launcher remains fixed-size');
+  } finally {
+    await app.close();
+  }
+});
+
+test('active tab content scrolls independently from the launcher chrome', async () => {
+  const app = await launchHost('launcher-scroll');
+  try {
+    const page = await app.firstWindow();
+    await page.getByPlaceholder('Search apps, profiles, and actions…').waitFor({ state: 'visible' });
+    await page.getByRole('tab', { name: 'Script Runner, tab 2' }).click();
+    const activeView = page.locator('.module-view[aria-label="Script Runner"]');
+    await activeView.waitFor({ state: 'visible' });
+    const before = await activeView.evaluate((view) => {
+      const tallContent = document.createElement('div');
+      tallContent.dataset.testTallContent = 'true';
+      tallContent.style.cssText = 'flex:none;height:1400px';
+      view.append(tallContent);
+      const selectors = ['.topbar', '.tabs', '.tab-command', '.footer'];
+      return {
+        overflowY: getComputedStyle(view).overflowY,
+        scrollHeight: view.scrollHeight,
+        clientHeight: view.clientHeight,
+        chromeTop: selectors.map((selector) => document.querySelector(selector)?.getBoundingClientRect().top),
+      };
+    });
+    assert.equal(before.overflowY, 'auto', 'the active view exposes a vertical scrollbar');
+    assert.ok(before.scrollHeight > before.clientHeight, 'tall tab content extends beyond the viewport');
+
+    const after = await activeView.evaluate((view) => {
+      view.scrollTop = view.scrollHeight;
+      const selectors = ['.topbar', '.tabs', '.tab-command', '.footer'];
+      return {
+        scrollTop: view.scrollTop,
+        chromeTop: selectors.map((selector) => document.querySelector(selector)?.getBoundingClientRect().top),
+      };
+    });
+    assert.ok(after.scrollTop > 0, 'the tab content can be scrolled');
+    assert.deepEqual(after.chromeTop, before.chromeTop, 'the topbar, selector, command bar, and footer stay fixed');
+  } finally {
+    await app.close();
+  }
+});
+
 async function assertVisibleLauncher(page) {
   const state = await page.evaluate(() => window.automator.getInitialState());
   const diagnostics = await page.evaluate(() => window.automator.getWindowDiagnostics());
@@ -214,7 +277,7 @@ test('backend retry restores a visible launcher after the child process exits', 
   const app = await launchHost('backend-retry');
   try {
     const page = await app.firstWindow();
-    await page.getByRole('textbox', { name: 'Search applications' }).waitFor({ state: 'visible' });
+    await page.getByPlaceholder('Search apps, profiles, and actions…').waitFor({ state: 'visible' });
     const firstHost = await page.evaluate(() => window.automator.getHostInfo());
     assert.ok(firstHost.backendProcessId > 0);
     process.kill(firstHost.backendProcessId, 'SIGKILL');
@@ -229,7 +292,17 @@ test('backend retry restores a visible launcher after the child process exits', 
       ]);
       return initial.host.backendState === 'ready' && initial.state?.visible === true && diagnostics?.visible === true;
     }, 'backend retry to restore a visible launcher', 15_000);
-    await page.waitForFunction(() => document.activeElement?.id === 'quick-actions-search');
+    try {
+      await waitForPageCondition(page, () => document.activeElement?.id === 'quick-actions-search',
+        'backend retry to focus Global Action Search', 15_000);
+    } catch (error) {
+      console.log('BACKEND_RETRY_FOCUS_DIAGNOSTICS', await page.evaluate(() => ({
+        activeElement: document.activeElement?.id,
+        documentFocused: document.hasFocus(),
+        searchPresent: Boolean(document.getElementById('quick-actions-search')),
+      })));
+      throw error;
+    }
     const recovered = await page.evaluate(() => window.automator.getInitialState());
     assert.equal(recovered.host.backendState, 'ready');
     assert.equal(recovered.state.visible, true);

@@ -42,20 +42,20 @@ The helper waits for a fresh `App.Ready` event matching the launched host and bu
 
 The app keeps its compact numbered launcher tabs and also provides a larger Workspace window for detailed editing and reports. Each tab and shared surface has an agent guide and a README that describe how to extend it and where its code lives.
 
-| Surface | Documentation |
-| --- | --- |
-| Slot 1 — Launcher | [Agent guide](docs/tabs/launcher/AGENTS.md) · [Functionality and code](docs/tabs/launcher/README.md) |
-| Slot 2 — Script Runner | [Agent guide](docs/tabs/script-runner/AGENTS.md) · [Functionality and code](docs/tabs/script-runner/README.md) |
-| Slot 3 — API | [Agent guide](docs/tabs/api/AGENTS.md) · [Functionality and code](docs/tabs/api/README.md) |
-| Slot 4 — Browser Automation | [Agent guide](docs/tabs/browser-automation/AGENTS.md) · [Functionality and code](docs/tabs/browser-automation/README.md) |
-| Slot 5 — Workflows | [Agent guide](docs/tabs/workflows/AGENTS.md) · [Functionality and code](docs/tabs/workflows/README.md) |
-| Slot 6 — Scheduler | [Agent guide](docs/tabs/scheduler/AGENTS.md) · [Functionality and code](docs/tabs/scheduler/README.md) |
-| Slot 7 — Work Time | [Agent guide](docs/tabs/work-time/AGENTS.md) · [Functionality and code](docs/tabs/work-time/README.md) |
-| Slot 8 — Website Launcher | [Agent guide](docs/tabs/website-launcher/AGENTS.md) · [Functionality and code](docs/tabs/website-launcher/README.md) |
-| Global action search | [Agent guide](docs/sections/global-action-search/AGENTS.md) · [Functionality and code](docs/sections/global-action-search/README.md) |
-| Options | [Agent guide](docs/sections/options/AGENTS.md) · [Functionality and code](docs/sections/options/README.md) |
-| Activity and notifications | [Agent guide](docs/sections/activity-center/AGENTS.md) · [Functionality and code](docs/sections/activity-center/README.md) |
-| Workspace window | [Agent guide](docs/sections/workspace/AGENTS.md) · [Functionality and code](docs/sections/workspace/README.md) |
+| Surface | Documentation | Test cases |
+| --- | --- | --- |
+| Slot 1 — Launcher | [Agent guide](docs/tabs/launcher/AGENTS.md) · [Functionality and code](docs/tabs/launcher/README.md) | [Test steps](docs/tabs/launcher/TESTS.md) |
+| Slot 2 — Script Runner | [Agent guide](docs/tabs/script-runner/AGENTS.md) · [Functionality and code](docs/tabs/script-runner/README.md) | [Test steps](docs/tabs/script-runner/TESTS.md) |
+| Slot 3 — API | [Agent guide](docs/tabs/api/AGENTS.md) · [Functionality and code](docs/tabs/api/README.md) | [Test steps](docs/tabs/api/TESTS.md) |
+| Slot 4 — Browser Automation | [Agent guide](docs/tabs/browser-automation/AGENTS.md) · [Functionality and code](docs/tabs/browser-automation/README.md) | [Test steps](docs/tabs/browser-automation/TESTS.md) |
+| Slot 5 — Workflows | [Agent guide](docs/tabs/workflows/AGENTS.md) · [Functionality and code](docs/tabs/workflows/README.md) | [Test steps](docs/tabs/workflows/TESTS.md) |
+| Slot 6 — Scheduler | [Agent guide](docs/tabs/scheduler/AGENTS.md) · [Functionality and code](docs/tabs/scheduler/README.md) | [Test steps](docs/tabs/scheduler/TESTS.md) |
+| Slot 7 — Work Time | [Agent guide](docs/tabs/work-time/AGENTS.md) · [Functionality and code](docs/tabs/work-time/README.md) | [Test steps](docs/tabs/work-time/TESTS.md) |
+| Slot 8 — Website Launcher | [Agent guide](docs/tabs/website-launcher/AGENTS.md) · [Functionality and code](docs/tabs/website-launcher/README.md) | [Test steps](docs/tabs/website-launcher/TESTS.md) |
+| Global action search | [Agent guide](docs/sections/global-action-search/AGENTS.md) · [Functionality and code](docs/sections/global-action-search/README.md) | — |
+| Options | [Agent guide](docs/sections/options/AGENTS.md) · [Functionality and code](docs/sections/options/README.md) | — |
+| Activity and notifications | [Agent guide](docs/sections/activity-center/AGENTS.md) · [Functionality and code](docs/sections/activity-center/README.md) | — |
+| Workspace window | [Agent guide](docs/sections/workspace/AGENTS.md) · [Functionality and code](docs/sections/workspace/README.md) | — |
 
 Slot 9 is reserved.
 

@@ -14,3 +14,7 @@ The tab shows schedule history and an upcoming agenda/calendar. The agenda uses 
 - Tests: tests/scheduler-view.test.mjs and tests/Automator.Scheduler.Specs.
 
 Schedule a saved profile by ID so interpreter and profile validation stay owned by the source module.
+
+## Test case steps
+
+See [TESTS.md](TESTS.md) for recurrence, schedule snapshot, agenda, and calendar cases with their steps and expected results.

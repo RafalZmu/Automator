@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { filterScriptTemplates, initialTemplateValues, clearSensitiveTemplateValues, updateScriptPath } from '../ui/modules/scriptTemplateViewModel.ts';
+import { filterScriptTemplates, initialTemplateValues, clearSensitiveTemplateValues, updateScriptPath, templateDetailParameters, resetTemplateValues } from '../ui/modules/scriptTemplateViewModel.ts';
 import { parseScriptTemplateCatalog } from '../contracts/scriptRunner.ts';
 
 const template = { id: 'firebird-3-backup-zip', name: 'Firebird 3 database backup and ZIP', description: 'Create an archive', tags: ['database'], parameters: [
@@ -19,6 +19,12 @@ test('Firebird defaults live in new forms only and secrets clear without mutatin
   assert.equal(cleared.password, '');
   assert.equal(values.password, 'masterkey');
   assert.equal(initialTemplateValues({ ...template, id: 'other' }).password, '');
+});
+test('Firebird target database stays visible outside Details and its value survives template selection', () => {
+  const details = templateDetailParameters(template);
+  assert.deepEqual(details.map((parameter) => parameter.key), ['username', 'password', 'verbose']);
+  const current = { ...initialTemplateValues(template), database: 'C:\\Data\\current.fdb' };
+  assert.deepEqual(resetTemplateValues(template, current), current);
 });
 test('catalog parser accepts the host JSON nulls used for optional parameter fields', () => {
   const parsed = parseScriptTemplateCatalog([{ id: 'example', version: 1, name: 'Example', description: 'A test', tags: [], interpreter: 'powershell', assetId: 'example', outputMode: 'text', timeoutSeconds: 10,

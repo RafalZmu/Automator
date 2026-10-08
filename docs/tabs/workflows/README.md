@@ -14,3 +14,7 @@ Mappings can use literal JSON, workflow variables, or a JSON Pointer into an ear
 - Tests: tests/workflows-contract.test.mjs and tests/Automator.Workflows.Specs.
 
 Credentials remain in the API secret store; workflows refer to saved profiles rather than copying secret values.
+
+## Test case steps
+
+See [TESTS.md](TESTS.md) for workflow profile, variable, and input-mapping cases with their steps and expected results.

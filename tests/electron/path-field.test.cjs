@@ -39,6 +39,13 @@ test('Script Runner uses file and directory PathFields with the matching picker 
   assert.match(source, /kind=\{parameter\.type\}[^\n]*onBrowse=\{\(\) => services\.files\.pickPath\(parameter\.type\)\}/);
 });
 
+test('Firebird Target database PathField is rendered on its library card before Details or installation', async () => {
+  const source = await fs.readFile(path.join(root, 'ui/modules/ScriptRunnerView.tsx'), 'utf8');
+  assert.match(source, /template\.id === 'firebird-3-backup-zip'[\s\S]*?<PathField[^>]*label=\{`\$\{targetDatabaseParameter\.label\}/);
+  assert.match(source, /value=\{String\(templateValues\[targetDatabaseParameter\.key\] \?\? ''\)\}/);
+  assert.match(source, /onChange=\{\(value\) => setTemplateValues\(\(current\) => \(\{ \.\.\.current, \[targetDatabaseParameter\.key\]: value \}\)\)\}/);
+});
+
 test('path drop rejects multiple files, unsupported payloads, and browser-preview paths accessibly', async () => {
   const { resolvePathDrop } = await import(modelUrl);
   const file = { name: 'one.fdb', size: 1 };

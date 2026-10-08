@@ -4,9 +4,13 @@ Script Runner saves reusable Python, Bash, and PowerShell profiles. A profile ha
 
 Each argument row is passed as one process argument, including values containing spaces. Text mode displays bounded stdout and stderr. JSON mode parses stdout as one JSON value and displays it as structured data. Scripts run as the signed-in Windows user and are not sandboxed.
 
+## Test case steps
+
+See [TESTS.md](TESTS.md) for template, profile, path-field, and Electron integration cases with their steps and expected results.
+
 ## Script Library templates
 
-The Script Runner Library provides registered bundled templates that can be installed as ordinary profiles. Template forms collect typed inputs for an interactive run; the Firebird 3 backup template defaults to `SYSDBA` / `masterkey`, and its password is transient and is not saved with the profile. Template runs require the Script Runner form. Workflow or Scheduler attempts to run a template profile do not have transient credentials and fail with a message to run it interactively. Editing a template profile converts it to a regular script profile.
+The Script Runner Library provides registered bundled templates that can be installed as ordinary profiles. Each template card has a primary `Add to Script Runner` action beside `Details`; after installation, the card shows `Profile added`. Open `Details` to review a template and access its interactive run form. The Firebird 3 backup template keeps its `Target database` path field visible on the Library card before Details or installation, so you can choose the database while adding the template. The field value stays transient for the template run and is not saved in the profile. Other template inputs appear in the Details form; the Firebird template defaults to `SYSDBA` / `masterkey`, and its password is transient and is not saved with the profile. Template runs require the Script Runner form. Workflow or Scheduler attempts to run a template profile do not have transient credentials and fail with a message to run it interactively. Editing a template profile converts it to a regular script profile.
 
 File and directory fields accept a pasted or typed path, Browse, or one dropped filesystem item. Dropped items resolve to a local path; Automator does not read their contents. File and directory inputs require fully qualified paths; output destinations need not exist yet. The Firebird `gbak` executable and ZIP destinations are entered as paths in the template form. The password stays out of saved profiles, settings, and logs. During execution the local process command line may expose the credentials to other processes running as the same user; this visibility is accepted for the initial template.
 

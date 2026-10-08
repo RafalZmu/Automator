@@ -17,3 +17,7 @@ The “Count only working hours” checkbox is off by default and is a view-only
 - Tests: tests/electron/work-time-model.test.cjs and tests/Automator.Focus.Specs.
 
 Work Time entries are local application data. The coordinator stores timestamps and descriptions; the UI formats durations from the saved timestamps.
+
+## Test case steps
+
+See [TESTS.md](TESTS.md) for interval, duration, report, shortcut, and Workspace end-to-end cases.

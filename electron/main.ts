@@ -49,7 +49,7 @@ const localData = testMode
   : path.join(process.env.LOCALAPPDATA ?? app.getPath('userData'), 'Automator');
 const logDirectory = path.join(localData, 'Logs');
 const logPath = path.join(logDirectory, `automator-${new Date().toISOString().slice(0, 10)}.jsonl`);
-const panelSize = { width: 520, height: 550 };
+const panelSize = { width: 760, height: 800 };
 const backendMethods: Record<string, RpcMethod> = {
   'set-query': 'launcher/setQuery',
   'open-catalog': 'launcher/openCatalog',

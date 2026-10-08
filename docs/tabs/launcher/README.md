@@ -4,6 +4,12 @@ The Launcher binds short letter aliases to installed apps, EXEs, and shortcuts. 
 
 When the compact panel opens, its home surface is Global Action Search. That surface searches actions from all tabs and does not consume a numbered slot. Typing a unique command runs it; selecting a tab-specific result routes to that tab. The normal app-alias flow remains available on slot 1.
 
+The compact launcher uses a fixed 760×800 preferred window size and clamps to the selected display's work area when needed. The active tab view scrolls vertically; the topbar, tab selector, command bar, and footer stay in place.
+
+## Test case steps
+
+See [TESTS.md](TESTS.md) for launcher, host, platform, and end-to-end cases with their steps and expected results.
+
 ## Code map
 
 - `ui/App.tsx` composes launcher state, tabs, alias entry, and the Quick Actions home.

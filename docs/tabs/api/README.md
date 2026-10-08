@@ -14,3 +14,7 @@ The tab can import Chrome's Copy as cURL text into a profile. Import parses supp
 - Tests: `tests/api-view.test.mjs`, `tests/rpc-contracts.test.mjs`, and Application/Infrastructure specification projects.
 
 Credentials and raw HTTP bodies are excluded from logs and library exports.
+
+## Test case steps
+
+See [TESTS.md](TESTS.md) for the API contract and HTTP service cases with their steps and expected results.

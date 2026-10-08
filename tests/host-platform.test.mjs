@@ -32,7 +32,7 @@ test('panel placement clamps both its origin and dimensions to small work areas'
   const bounds = computePanelBounds(
     { x: 500, y: 400 },
     { x: -1280, y: 0, width: 420, height: 300 },
-    { width: 520, height: 550 },
+    { width: 760, height: 800 },
   );
   assert.deepEqual(bounds, { x: -1280, y: 0, width: 420, height: 300 });
 });
@@ -41,8 +41,9 @@ test('panel placement remains inside a negative-origin secondary monitor', () =>
   const bounds = computePanelBounds(
     { x: -10, y: 1070 },
     { x: -1920, y: 0, width: 1920, height: 1080 },
-    { width: 520, height: 550 },
+    { width: 760, height: 800 },
   );
+  assert.deepEqual({ width: bounds.width, height: bounds.height }, { width: 760, height: 800 });
   assert.ok(bounds.x >= -1920 && bounds.x + bounds.width <= 0);
   assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 1080);
 });

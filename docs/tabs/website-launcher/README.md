@@ -14,3 +14,7 @@ Launch requests go through the active `website-launcher` module action and the h
 - Tests: `tests/website-launcher-contract.test.mjs`, `tests/Automator.Application.Specs`, and `tests/Automator.Windows.Specs`.
 
 Website URLs are restricted to absolute HTTP and HTTPS addresses and are not fetched by Automator.
+
+## Test case steps
+
+See [TESTS.md](TESTS.md) for website settings, alias, command-matching, and launch-order test steps.

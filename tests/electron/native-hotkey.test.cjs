@@ -14,8 +14,8 @@ const focusTargetScript = path.join(__dirname, 'Focus-TestWindow.ps1');
 const sendKeyScript = path.join(__dirname, 'Send-Key.ps1');
 
 function panelBoundsAt(pointer, workArea) {
-  const width = Math.max(1, Math.min(520, workArea.width));
-  const height = Math.max(1, Math.min(550, workArea.height));
+  const width = Math.max(1, Math.min(760, workArea.width));
+  const height = Math.max(1, Math.min(800, workArea.height));
   const left = Math.max(workArea.x, Math.min(Math.round(pointer.x - width / 2), workArea.x + workArea.width - width));
   const top = Math.max(workArea.y, Math.min(pointer.y + 18, workArea.y + workArea.height - height));
   return { x: left, y: top, width, height };
