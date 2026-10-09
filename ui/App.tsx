@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { backendUiStateSchema, type AutomationResult, type BackendUiState, type GlobalVariableSnapshot, type SettingsImportResult } from '../contracts/rpc';
+import { backendUiStateSchema, type AutomationResult, type BackendUiState, type GlobalVariableSnapshot, type FileExplorerLaunchRequest, type SettingsImportResult } from '../contracts/rpc';
 import type { RunActivityEntry, RunActivitySnapshot } from '../contracts/activity';
 import type { VariableJsonValue } from './contracts/variables';
 import { readWebsiteLauncherQuickActions } from './contracts/websiteLauncher';
@@ -24,6 +24,7 @@ import { NotificationCenter } from './activity/NotificationCenter';
 import { RunActivityView } from './activity/RunActivityView';
 import { LatestModuleResult } from './activity/LatestModuleResult';
 import { rememberTransientResult } from './activity/transientResults';
+import { FileExplorerLaunchContext } from './FileExplorerLaunchContext';
 
 type Binding = BackendUiState['bindings'][number];
 type SettingsDraft = Pick<BackendUiState, 'hotkey' | 'theme' | 'startWithWindows' | 'bindings'>;
@@ -266,6 +267,8 @@ function SettingsDialog({
 
 export function App() {
   const isWorkspaceSurface = new URLSearchParams(window.location.search).get('surface') === 'workspace';
+  const [explorerLaunches, setExplorerLaunches] = useState<FileExplorerLaunchRequest[]>([]);
+  const consumeExplorerLaunch = useCallback(() => setExplorerLaunches(current => current.slice(1)), []);
   const [bridge, setBridge] = useState<AutomatorBridge | null>(null);
   const [bridgeError, setBridgeError] = useState('');
   const [state, setState] = useState<BackendUiState | null>(null);
@@ -333,6 +336,12 @@ export function App() {
       const currentBridge = getAutomatorBridge();
       bridgeRef.current = currentBridge;
       setBridge(currentBridge);
+      const unsubscribeExplorer = currentBridge.onFileExplorerLaunch(request => {
+        setExplorerLaunches(current => [...current, request]);
+        setQuickActionsHome(false);
+        setActivityOpen(false);
+        setSettingsOpen(false);
+      });
       const unsubscribeState = currentBridge.onStateChanged(acceptState);
       const unsubscribeFailure = currentBridge.onBackendFailure((message) => {
         setBackendError(message);
@@ -359,7 +368,7 @@ export function App() {
           void currentBridge.reportRendererReady();
         }
       }).catch((error) => setBridgeError(errorMessage(error)));
-      return () => { unsubscribeState(); unsubscribeFailure(); unsubscribeFocus(); unsubscribeHotkey(); };
+      return () => { unsubscribeState(); unsubscribeFailure(); unsubscribeFocus(); unsubscribeHotkey(); unsubscribeExplorer(); };
     } catch (error) {
       setBridgeError(errorMessage(error));
       return undefined;
@@ -812,7 +821,7 @@ export function App() {
           onNavigate={(entry) => { void navigateToActivityModule(entry).catch((error) => setCommandError(errorMessage(error))); }}
           registeredActionsForModule={(moduleId) => state.tabs.find((tab) => tab.id === moduleId)?.actions ?? []}
           onAction={(entry, action) => runActivityFollowUp(entry, action)}
-        />{activeTab && <LatestModuleResult moduleId={activeTab.id} moduleTitle={activeTab.title} />}</div> : <AnimatePresence mode="wait" initial={false}>
+        />{activeTab && <LatestModuleResult moduleId={activeTab.id} moduleTitle={activeTab.title} />}</div> : <FileExplorerLaunchContext.Provider value={{ request: explorerLaunches[0] ?? null, consume: consumeExplorerLaunch }}><AnimatePresence mode="wait" initial={false}>
           {showQuickActions ? <QuickActionsHome key="quick-actions" actions={quickActions} onRun={runQuickAction}
             onAddApp={() => { setQuickActionsHome(false); void bridge.openCatalog().then(acceptState).catch((error) => setCommandError(errorMessage(error))); }}
             onOpenSettings={openSettings} onClose={() => { void runCommand(() => bridge.close()); }} />
@@ -899,7 +908,7 @@ export function App() {
               </div>
             )}
           </ActiveView> : <div className="module-service-loading" role="status" aria-live="polite">Preparing module services…</div>}
-        </AnimatePresence>}
+        </AnimatePresence></FileExplorerLaunchContext.Provider>}
       </Tabs.Root>
 
       {commandError && <div className="command-error" role="alert"><AlertCircle size={14} /><span>{commandError}</span><button type="button" aria-label="Dismiss error" onClick={() => setCommandError('')}><X size={13} /></button></div>}

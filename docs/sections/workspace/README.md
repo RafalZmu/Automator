@@ -13,3 +13,5 @@ The compact panel remains optimized for quick access. Workspace changes should r
 - tests/electron/ui-flow.test.cjs and other Electron integration specs cover window behavior.
 
 Window visibility, focus, and per-window tab selection are host/UI shell concerns; module profile semantics remain owned by each tab.
+
+The shared App shell also retains File Explorer launch requests until Script Runner can display a transient run form in the compact launcher. The Workspace continues to reuse the same Script Runner views and module services with its own local tab selection.

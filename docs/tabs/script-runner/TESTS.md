@@ -199,3 +199,173 @@ Run after npm.cmd run build:desktop with node --experimental-strip-types --test 
 ## Additional backend coverage
 
 Script Runner installation, trusted template origin, execution, and persisted profile behavior also have Application specification coverage under tests/Automator.Application.Specs. Run the full suite with npm.cmd run test:dotnet.
+
+## Explorer action UI model — tests/explorer-action-ui.test.mjs
+
+### Explorer mapping extensions normalize without accepting malformed file patterns
+
+**Steps**
+
+1. Normalize mixed-case extensions separated by commas, semicolons, and whitespace, including duplicates.
+2. Try empty input, wildcards, multiple dots, and path separators.
+
+**Expected result:** `.fdb` and `.txt` are returned once each; malformed patterns are rejected.
+
+### Explorer launch prepares transient arguments and never mutates the saved profile
+
+**Steps**
+
+1. Prepare a mapped launch containing a Unicode file path with spaces and tokens in two arguments.
+2. Edit one prepared argument and inspect the original profile.
+
+**Expected result:** File tokens resolve in a separate argument array; edits leave the saved tokens and arguments unchanged.
+
+### Explorer launch reports stale mappings profiles extensions and invalid absolute paths
+
+**Steps**
+
+1. Prepare a launch with missing mapping, missing profile, a relative path, a mismatched extension, and a profile missing the file token.
+
+**Expected result:** Each case gives a specific error before a form can run.
+
+### Explorer templates prefill only the mapped input and create fresh typed values
+
+**Steps**
+
+1. Prepare a template action with a file input, password, and boolean default.
+2. Map the password instead of the file input.
+
+**Expected result:** Only the mapped file receives the selected path; fresh typed defaults are used, and a non-path mapping is rejected.
+
+### Explorer registration warnings retain saved mappings and describe disabled hosts
+
+**Steps**
+
+1. Read registration notices for disabled, failed, and updated outcomes.
+
+**Expected result:** Disabled and error details remain visible; successful registration produces no warning.
+
+## Explorer action forms — tests/electron/explorer-action-ui.test.cjs
+
+### Explorer mapping UI saves edits removes and clears mappings while registration stays disabled in test mode
+
+**Steps**
+
+1. Seed an isolated saved profile containing the file token, open Explorer actions, and add a mapping for mixed-case duplicate extensions.
+2. Inspect persisted normalized extensions and disabled registration.
+3. Rename and remove the mapping, add another, then remove all mappings.
+
+**Expected result:** CRUD changes persist, duplicates normalize, delete/clear leave no mappings, and test mode keeps registration disabled.
+
+### Explorer launch opens a transient Unicode file form and requires Run after argument edits
+
+**Steps**
+
+1. Launch a saved action through the existing-instance event with a Unicode file path containing spaces.
+2. Inspect selected file and resolved arguments; edit and Cancel, then reopen.
+3. Edit again and press Run on an isolated echo script; inspect output and saved profile arguments.
+4. Remove the selected file and attempt a run, then launch a missing action.
+
+**Expected result:** Opening and Cancel produce no output; Run receives one-run edits without saving them. Missing files and stale actions produce visible errors.
+
+### Explorer template mapping prefills the typed file input and keeps credentials transient on cancel
+
+**Steps**
+
+1. Install the plain Firebird Backup template and map its database input to `.fdb` through the mapping form.
+2. Launch it, inspect the selected file and credential defaults, change the password, and press Run with missing required destinations.
+3. Fill a destination, Cancel, and reopen; inspect fresh values and saved profile arguments.
+4. Cancel, delete its profile, and try the now-stale action.
+
+**Expected result:** The file is prefilled, missing inputs prevent execution, credentials/destinations remain transient, and deleting the profile removes its mapping.
+
+### Explorer registration errors remain visible beside persisted mappings
+
+**Steps**
+
+1. Persist a real isolated mapping.
+2. Replace the host's list response with the saved mapping and a simulated registration error.
+3. Open Explorer actions and inspect the warning and edit control.
+
+**Expected result:** A registration failure is visible and the saved mapping remains available.
+
+### cold Explorer launch retains a mapped Unicode file until the Script Runner form mounts
+
+**Steps**
+
+1. Save a profile and action in an isolated host, then close it.
+2. Relaunch with the action ID and Unicode selected path as separate CLI arguments.
+3. Inspect the prefilled form and Cancel.
+
+**Expected result:** The request survives startup and mounting; no execution occurs before Run or on Cancel.
+
+### Firebird Library card path labels address the input on each card
+
+**Steps**
+
+1. Open the Library with the plain Backup and Backup and ZIP cards present.
+2. Find Target database by its accessible label inside each card.
+3. Compare the input IDs and owning cards.
+
+**Expected result:** Each label resolves exactly one input on its own card and IDs are unique between instances.
+
+## Explorer launch bridge — tests/electron/file-explorer-launch.test.cjs
+
+### Explorer command parser preserves one Unicode path and rejects malformed commands
+
+**Steps**
+
+1. Parse the fixed action flag, action ID, separator, and one Unicode path.
+2. Try missing arguments, unsafe IDs, relative/rooted paths, and additional selections.
+
+**Expected result:** Only the constrained one-file command is accepted and its path is preserved.
+
+### Explorer action IDs use the backend profile ID contract
+
+**Steps**
+
+1. Parse dotted and maximum-length action IDs through the CLI parser and typed request schema.
+2. Try uppercase, punctuation prefixes, and excessive length.
+
+**Expected result:** Both boundaries accept and reject the same ID contract.
+
+### Explorer queue retains cold requests until ready and serializes existing-instance requests
+
+**Steps**
+
+1. Queue a request while delivery is not ready.
+2. Queue another and drain when ready.
+
+**Expected result:** Cold requests remain queued and are delivered in order.
+
+### only stable packaged hosts advertise Explorer registration executable
+
+**Steps**
+
+1. Request the registration path from a stable packaged host.
+2. Try development, test mode, portable, and temporary hosts.
+
+**Expected result:** Only the stable package supplies the executable path.
+
+### cold and second-instance Explorer launches open Script Runner and preserve the backend
+
+**Steps**
+
+1. Start an isolated cold host with an unmapped action and wait for its visible stale-action error in Script Runner.
+2. Subscribe additional listeners and launch a second process with a Unicode path.
+3. Unsubscribe a temporary listener twice, deliver another request, and inspect the retained listener and backend process ID.
+
+**Expected result:** Cold delivery reaches the App subscriber, later requests preserve the path and running backend, and temporary unsubscription does not disable remaining listeners.
+
+## Explorer mapping contract — tests/script-runner-template-contract.test.mjs
+
+### Explorer mapping contract normalizes extensions and rejects unsafe or malformed mappings
+
+**Steps**
+
+1. Parse a mapping with duplicate mixed-case extensions and an optional file-parameter key.
+2. Try malformed IDs, labels, extensions, parameter keys, and duplicate action IDs.
+
+**Expected result:** Valid extensions normalize and unsafe mapping shapes are rejected.
+
+Backend mapping validation, token/template requirements, file/extension revalidation, transient execution, deletion cleanup, and registry reconciliation are covered by Application and Windows specification projects. Registry reconciliation uses isolated test keys and checks unrelated-key/default-association preservation. Real File Explorer menus on Windows 10 and Windows 11 require manual packaged smoke checks; automated test-mode hosts never register production menu keys.

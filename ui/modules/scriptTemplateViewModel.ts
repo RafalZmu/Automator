@@ -15,8 +15,8 @@ export function initialTemplateValues(template: ScriptTemplateDescriptor): Recor
   const result: Record<string, ScriptTemplateValue> = {};
   for (const parameter of template.parameters) {
     if (parameter.defaultValue !== undefined && !parameter.sensitive) result[parameter.key] = parameter.defaultValue;
-    else if (parameter.sensitive && parameter.key === 'password' && template.id === 'firebird-3-backup-zip') result[parameter.key] = 'masterkey';
-    else if (parameter.key === 'username' && template.id === 'firebird-3-backup-zip') result[parameter.key] = 'SYSDBA';
+    else if (parameter.sensitive && parameter.key === 'password' && (template.id === 'firebird-3-backup-zip' || template.id === 'firebird-3-backup')) result[parameter.key] = 'masterkey';
+    else if (parameter.key === 'username' && (template.id === 'firebird-3-backup-zip' || template.id === 'firebird-3-backup')) result[parameter.key] = 'SYSDBA';
     else if (parameter.type === 'boolean') result[parameter.key] = false;
     else result[parameter.key] = '';
   }
@@ -24,7 +24,7 @@ export function initialTemplateValues(template: ScriptTemplateDescriptor): Recor
 }
 
 export function templateDetailParameters(template: ScriptTemplateDescriptor): ScriptTemplateDescriptor['parameters'] {
-  return template.id === 'firebird-3-backup-zip'
+  return (template.id === 'firebird-3-backup-zip' || template.id === 'firebird-3-backup')
     ? template.parameters.filter((parameter) => parameter.key !== 'database')
     : template.parameters;
 }
@@ -34,7 +34,7 @@ export function resetTemplateValues(
   current: Record<string, ScriptTemplateValue>,
 ): Record<string, ScriptTemplateValue> {
   const result = initialTemplateValues(template);
-  if (template.id === 'firebird-3-backup-zip' && typeof current.database === 'string') result.database = current.database;
+  if ((template.id === 'firebird-3-backup-zip' || template.id === 'firebird-3-backup') && typeof current.database === 'string') result.database = current.database;
   return result;
 }
 

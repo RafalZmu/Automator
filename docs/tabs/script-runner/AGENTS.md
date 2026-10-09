@@ -31,3 +31,17 @@ UI: `ui/modules/ScriptRunnerView.tsx`; DTOs: `contracts/scriptRunner.ts`; module
 Tests: `tests/electron/script-runner.test.cjs` and the Application/Infrastructure specification projects.
 
 Update the sibling README when supported profile fields or script output behavior changes.
+
+## File Explorer actions
+
+- Explorer mappings live in the Script Runner Library collection `explorer-actions`, separate from profiles and settings. Use the version-1 `listExplorerActions`, `saveExplorerAction`, `deleteExplorerAction`, and `runExplorerAction` module actions; renderer code must never write the Windows registry.
+- Regular mapped profiles must contain the literal `{{file.path}}` token in saved arguments. Display a resolved copy for one run; never save argument edits made in the Explorer form. Template mappings choose one declared file/directory input, and all input values stay transient.
+- Subscribe to `onFileExplorerLaunch` at App level before reporting renderer readiness. Keep queued requests while the view mounts or another Explorer form is open; Cancel performs no run, and only explicit Run dispatches the constrained run action.
+- Re-read mappings/profiles/catalog when opening a launch form. The backend revalidates mapping/profile/template origin, absolute existing file, extension, and inputs immediately before execution. Display stale-definition and invalid-path errors.
+- Menu registration is a narrow `IAutomationFileExplorerMenu` host capability. Only the stable packaged Windows host supplies an executable path. Development, portable, and test-mode runs must leave the real per-user registry untouched. Reconcile only owned menu keys and preserve file associations and unrelated keys.
+- Mapping changes remain saved when registration returns `error` or `disabled`; display the outcome and retry reconciliation when reopening the section. Remove all mappings through the declared delete action to remove the owned submenu entries as well. Deleting a saved profile removes its mappings.
+- V1 supplies one selected file. Windows 11 can show the classic Automator submenu under Show more options. Both Firebird Backup and Backup and ZIP are Library opt-ins and must not be installed or mapped automatically.
+
+Explorer UI: `ui/modules/ExplorerActionsPanel.tsx` and `explorerActionViewModel.ts`; launch queue/context: `ui/App.tsx` and `ui/FileExplorerLaunchContext.ts`; registry adapter: `src/Automator.Windows/WindowsAutomationFileExplorerMenu.cs`. Update this guide, README, and TESTS together when these boundaries change.
+
+PathField uses a React per-instance ID so multiple Library cards and transient forms can reuse the same label without associating it with another input. Preserve that label/control association when changing shared fields.

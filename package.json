@@ -15,7 +15,7 @@
     "build:backend": "dotnet build src/Automator.Backend/Automator.Backend.csproj --no-restore -m:1 -v:minimal",
     "build:desktop": "npm run build && npm run build:backend",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test:contracts": "node --experimental-strip-types --test tests/host-platform.test.mjs tests/rpc-contracts.test.mjs tests/vite-watch-config.test.mjs tests/automation-services.test.mjs tests/api-view.test.mjs tests/browser-automation-contract.test.mjs tests/workflows-contract.test.mjs tests/scheduler-view.test.mjs tests/website-launcher-contract.test.mjs tests/command-matching.test.mjs tests/activity.test.mjs tests/variables-contract.test.mjs",
+    "test:contracts": "node --experimental-strip-types --test tests/host-platform.test.mjs tests/rpc-contracts.test.mjs tests/vite-watch-config.test.mjs tests/automation-services.test.mjs tests/api-view.test.mjs tests/browser-automation-contract.test.mjs tests/workflows-contract.test.mjs tests/scheduler-view.test.mjs tests/website-launcher-contract.test.mjs tests/command-matching.test.mjs tests/activity.test.mjs tests/variables-contract.test.mjs tests/explorer-action-ui.test.mjs tests/script-runner-template-contract.test.mjs tests/script-template-ui.test.mjs",
     "test:backend-client-build": "vite build --config vite.backend-process-test.config.ts",
     "test:electron": "npm run test:backend-client-build && node --experimental-strip-types --test --test-concurrency=1 tests/electron/*.test.cjs",
     "test:packaged-lifecycle": "node --test tests/electron/packaged-single-instance.package.cjs",

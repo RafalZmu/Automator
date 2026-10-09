@@ -48,25 +48,24 @@ test('cold and second-instance Explorer launches open Script Runner and preserve
   const app = await electron.launch({ args: [main, '--automator-file-action', 'first', '--', firstPath], cwd: workspace, env, timeout: 60000 });
   try {
     const page = await app.firstWindow();
-    await page.waitForFunction(() => !!window.automator, null, { timeout: 60000 });
+    await page.getByRole('region', { name: 'File Explorer actions', exact: true }).getByRole('status').filter({ hasText: 'action no longer exists' }).waitFor({ timeout: 60000 });
     await page.evaluate(() => {
       window.explorerRequests = [];
       window.unsubscribeExplorer = window.automator.onFileExplorerLaunch(request => window.explorerRequests.push(request));
+      window.temporaryExplorerSubscriber = window.automator.onFileExplorerLaunch(() => {});
     });
-    await page.waitForFunction(() => window.explorerRequests.length === 1, null, { timeout: 60000 });
-    assert.deepEqual(await page.evaluate(() => window.explorerRequests[0]), { actionId: 'first', filePath: firstPath });
     const before = await page.evaluate(() => window.automator.getHostInfo());
     assert.equal((await page.evaluate(() => window.automator.getInitialState())).state.selectedTab, 2);
     const child = spawn(require('electron'), [main, '--automator-file-action', 'second', '--', 'C:\\Zażółć plik.fdb'], { cwd: workspace, env, windowsHide: true, stdio: 'ignore' });
     child.on('error', error => { throw error; });
     child.unref();
-    await page.waitForFunction(() => window.explorerRequests.length === 2, null, { timeout: 60000 });
-    assert.deepEqual(await page.evaluate(() => window.explorerRequests[1]), { actionId: 'second', filePath: 'C:\\Zażółć plik.fdb' });
+    await page.waitForFunction(() => window.explorerRequests.length === 1, null, { timeout: 60000 });
+    assert.deepEqual(await page.evaluate(() => window.explorerRequests[0]), { actionId: 'second', filePath: 'C:\\Zażółć plik.fdb' });
     assert.equal((await page.evaluate(() => window.automator.getHostInfo())).backendProcessId, before.backendProcessId);
-    await page.evaluate(() => window.unsubscribeExplorer());
+    await page.evaluate(() => { window.temporaryExplorerSubscriber(); window.temporaryExplorerSubscriber(); });
     await app.evaluate(({ app }) => app.emit('second-instance', {}, ['exe', '--automator-file-action', 'third', '--', 'C:\\third.fdb'], '', { fileExplorerLaunch: { actionId: 'third', filePath: 'C:\\third.fdb' } }));
-    assert.equal(await page.evaluate(() => window.explorerRequests.length), 2);
-    await page.evaluate(() => { window.automator.onFileExplorerLaunch(request => window.explorerRequests.push(request)); });
-    await page.waitForFunction(() => window.explorerRequests.length === 3);
+    await page.waitForFunction(() => window.explorerRequests.length === 2);
+    assert.deepEqual(await page.evaluate(() => window.explorerRequests[1]), { actionId: 'third', filePath: 'C:\\third.fdb' });
+    await page.evaluate(() => window.unsubscribeExplorer());
   } finally { await app.close(); }
 });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { FolderOpen } from 'lucide-react';
 import { applyPathInputChange, browseAndApplyPath, resolvePathDrop } from './pathFieldModel';
 
@@ -13,9 +13,10 @@ type Props = {
 };
 
 export function PathField({ label, value, kind, required, placeholder, onChange, onBrowse }: Props) {
+  const instanceId = useId();
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
-  const id = `path-field-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  const id = `path-field-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${instanceId}`;
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragging(false);

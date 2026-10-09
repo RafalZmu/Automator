@@ -28,6 +28,8 @@ function listen<T>(channel: string, listener: (value: T) => void): () => void {
   return () => ipcRenderer.removeListener(channel, handler);
 }
 
+let fileExplorerSubscriberCount = 0;
+
 const api: AutomatorBridge = Object.freeze({
   getInitialState: () => ipcRenderer.invoke('automator:get-initial-state') as Promise<InitialState>,
   getHostInfo: () => ipcRenderer.invoke('automator:get-host-info') as Promise<HostInfo>,
@@ -166,8 +168,14 @@ const api: AutomatorBridge = Object.freeze({
       const parsed = fileExplorerLaunchRequestSchema.safeParse(value);
       if (parsed.success) listener(parsed.data);
     });
-    void ipcRenderer.invoke('automator:file-explorer-listener-ready');
-    return () => { unsubscribe(); void ipcRenderer.invoke('automator:file-explorer-listener-closed'); };
+    if (++fileExplorerSubscriberCount === 1) void ipcRenderer.invoke('automator:file-explorer-listener-ready');
+    let subscribed = true;
+    return () => {
+      if (!subscribed) return;
+      subscribed = false;
+      unsubscribe();
+      if (--fileExplorerSubscriberCount === 0) void ipcRenderer.invoke('automator:file-explorer-listener-closed');
+    };
   },
   onStateChanged: (listener: Parameters<AutomatorBridge['onStateChanged']>[0]) => listen<BackendUiState>('automator:state-changed', listener),
   onFocusPrimaryControl: (listener: Parameters<AutomatorBridge['onFocusPrimaryControl']>[0]) => listen<FocusRequest>('automator:focus-primary-control', listener),

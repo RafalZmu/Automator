@@ -10,6 +10,7 @@ import { parseScriptTemplateCatalog, validateScriptTemplateValues, type ScriptTe
 import { clearSensitiveTemplateValues, filterScriptTemplates, resetTemplateValues, templateDetailParameters, updateScriptPath } from './scriptTemplateViewModel';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import { PathField } from '../components/PathField';
+import { ExplorerActionsPanel } from './ExplorerActionsPanel';
 
 type ScriptProfile = {
   id: string;
@@ -99,6 +100,9 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   const [notice, setNotice] = useState('');
   const [templates, setTemplates] = useState<ScriptTemplateDescriptor[]>([]);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [explorerOpen, setExplorerOpen] = useState(false);
+  const openExplorer = useCallback(() => { setExplorerOpen(true); setEditing(null); setLibraryOpen(false); setSelectedTemplate(null); setTemplateProfile(null); setTemplateValues({}); }, []);
+  const explorerResult = useCallback((data: unknown) => { if (data && typeof data === 'object' && 'profileId' in data) setOutput(data as RunOutput); }, []);
   const [templateQuery, setTemplateQuery] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<ScriptTemplateDescriptor | null>(null);
   const [templateProfile, setTemplateProfile] = useState<ScriptProfile | null>(null);
@@ -316,18 +320,20 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
           <span className="script-module-icon"><Terminal size={16} /></span>
           <div><h1>Script Runner</h1><p>Saved Python, Bash, and PowerShell tasks</p></div>
         </div>
-        <div className="script-editor-actions"><button className="secondary-button" type="button" onClick={() => libraryOpen ? closeTemplateLibrary() : setLibraryOpen(true)}>Library</button><button className="primary-button" type="button" disabled={!settingsReady} onClick={() => { setOutput(null); setEditing(blankProfile(interpreterDefaults)); }}>
+        <div className="script-editor-actions"><button className="secondary-button" type="button" disabled={runningId !== null} onClick={() => setExplorerOpen(current => !current)}>Explorer actions</button><button className="secondary-button" type="button" onClick={() => libraryOpen ? closeTemplateLibrary() : setLibraryOpen(true)}>Library</button><button className="primary-button" type="button" disabled={!settingsReady || runningId !== null} onClick={() => { setOutput(null); setEditing(blankProfile(interpreterDefaults)); }}>
           <Plus size={14} /> New profile
         </button></div>
       </div>
 
       {notice && <p className="script-notice" role="status">{notice}</p>}
 
+      <ExplorerActionsPanel services={services} profiles={profiles} templates={templates} open={explorerOpen} onOpen={openExplorer} busy={runningId !== null} onRunning={setRunningId} onResult={explorerResult} />
+
       {libraryOpen && <section className="script-editor" aria-label="Script template library">
         <div className="script-editor-heading"><FileCode2 size={16} /><strong>Script Library</strong><button className="icon-button" type="button" aria-label="Close library" onClick={closeTemplateLibrary}><X size={15} /></button></div>
         <label className="script-field-wide"><span>Search templates</span><input type="search" value={templateQuery} placeholder="Name, description, or tag" onChange={(event) => setTemplateQuery(event.target.value)} /></label>
         <div className="script-profile-list">{filterScriptTemplates(templates, templateQuery).map((template) => {
-          const targetDatabaseParameter = template.id === 'firebird-3-backup-zip'
+          const targetDatabaseParameter = (template.id === 'firebird-3-backup-zip' || template.id === 'firebird-3-backup')
             ? template.parameters.find((parameter) => parameter.key === 'database')
             : undefined;
           const installedProfile = profiles.find((profile) => profile.templateOrigin?.id === template.id

@@ -9,3 +9,5 @@ Read the root AGENTS.md first. Workspace is the larger editing/review window ove
 - Run or add Electron integration coverage for Workspace open/hide, tab isolation, focus, and activity navigation when changing host or window behavior.
 
 Code: electron/main.ts, ui/App.tsx, ui/viewRegistry.tsx, and ui/automationServices.ts.
+
+File Explorer launch requests are subscribed in the shared App shell before renderer readiness and retained until Script Runner mounts. The host delivers them to the compact launcher; keep this explicit navigation separate from Workspace's local tab selection. Module forms and execution stay in Script Runner.
