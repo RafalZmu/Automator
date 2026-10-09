@@ -306,3 +306,15 @@ The cases below are executed by `npm.cmd run test:dotnet`. The existing renderer
 4. Reject missing inputs, invalid descriptions/tags, and stale module/action version 1 requests.
 
 **Expected result:** Only valid version 2 inputs reach the coordinator. Snapshots expose timers, pendingEntries, and history; all state-changing actions target the supplied ID and the shared result envelope remains supported.
+
+### resumed legacy timer preserves elapsed without fabricating paused segments
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Seed a schema 1 active timer originally started at 09:00, with one hour of accumulated work and a current resume at 15:00.
+2. Restore it at 15:00 and inspect its original start, elapsed value, and sole open segment.
+3. Advance thirty minutes, end the timer, and save it; inspect the draft and saved running segment.
+
+**Expected result:** The migrated timer preserves its 09:00 original start and 3,600,000 milliseconds of accrued work. Its only known segment starts at 15:00 and closes at 15:30. Draft/history retain 5,400,000 milliseconds total elapsed, while the recorded segment covers only 1,800,000 milliseconds; no segment fabricates the unknown period between original start and resume.

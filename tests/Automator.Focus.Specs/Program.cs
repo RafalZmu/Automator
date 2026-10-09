@@ -19,6 +19,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("only one timer runs and ending a paused timer preserves another runner", WorkTimeOnlyOneRunner),
     ("timers and independent drafts survive restart and targeted discard", WorkTimeDraftsSurviveRestart),
     ("legacy active pending and history records migrate without losing elapsed time", WorkTimeLegacyMigration),
+    ("resumed legacy timer preserves elapsed without fabricating paused segments", WorkTimeLegacyResumedSegments),
     ("work time state writes are atomic and cancellation leaves state intact", WorkTimeFailedWritesPreserveState),
     ("work time history is bounded and corrupt versions are rejected", WorkTimeHistoryIsBounded),
 };
@@ -435,6 +436,37 @@ static async Task WorkTimeLegacyMigration()
     await pendingLease.Coordinator.ResumeAsync(paused.Id, CancellationToken.None);
     time.Advance(TimeSpan.FromSeconds(2));
     Check.Equal(125_456L, (await pendingLease.Coordinator.EndAsync(paused.Id, CancellationToken.None)).PendingEntries.Single().DurationMilliseconds);
+}
+
+static async Task WorkTimeLegacyResumedSegments()
+{
+    var originalStart = new DateTimeOffset(2026, 10, 3, 9, 0, 0, TimeSpan.Zero);
+    var resumedAt = originalStart.AddHours(6);
+    var time = new ManualTimeProvider(resumedAt);
+    var store = new FocusLibraryStore();
+    await store.UpsertAsync(new AutomationLibraryRecord("focus-sessions", "work-time", "current", 1,
+        JsonSerializer.SerializeToElement(new { active = new { id = "resumed-legacy", startedUtc = originalStart,
+            accumulatedMilliseconds = 3_600_000L, runningSinceUtc = resumedAt }, pending = (object?)null }), resumedAt), CancellationToken.None);
+    await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    var c = lease.Coordinator;
+    var migrated = (await c.GetSnapshotAsync(CancellationToken.None)).Timers.Single();
+    Check.Equal(originalStart, migrated.StartedUtc);
+    Check.Equal(3_600_000L, migrated.ElapsedMilliseconds);
+    Check.Equal(1, migrated.Segments.Count);
+    Check.Equal(resumedAt, migrated.Segments.Single().StartedUtc);
+    Check.Equal(null, migrated.Segments.Single().StoppedUtc);
+    time.Advance(TimeSpan.FromMinutes(30));
+    var ended = (await c.EndAsync(migrated.Id, CancellationToken.None)).PendingEntries.Single();
+    Check.Equal(5_400_000L, ended.DurationMilliseconds);
+    Check.Equal(1, ended.Segments.Count);
+    Check.Equal(resumedAt, ended.Segments.Single().StartedUtc);
+    Check.Equal(resumedAt.AddMinutes(30), ended.Segments.Single().StoppedUtc);
+    var saved = (await c.SaveEntryAsync(migrated.Id, "Recovered work", [], CancellationToken.None)).History.Single();
+    Check.Equal(5_400_000L, saved.DurationMilliseconds);
+    Check.Equal(1, saved.Segments.Count);
+    Check.Equal(resumedAt, saved.Segments.Single().StartedUtc);
+    Check.Equal(resumedAt.AddMinutes(30), saved.Segments.Single().StoppedUtc);
+    Check.Equal(1_800_000L, (long)(saved.Segments.Single().StoppedUtc!.Value - saved.Segments.Single().StartedUtc).TotalMilliseconds);
 }
 
 static async Task WorkTimeFailedWritesPreserveState()

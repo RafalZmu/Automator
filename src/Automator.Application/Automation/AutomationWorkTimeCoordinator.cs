@@ -341,12 +341,10 @@ public sealed class AutomationWorkTimeCoordinator : IAutomationWorkTimeCoordinat
         {
             if (active.StartedUtc == default || active.RunningSinceUtc < active.StartedUtc || active.AccumulatedMilliseconds < 0)
                 throw new InvalidDataException("The legacy active work timer is invalid.");
-            var segments = new List<AutomationWorkTimeSegment>();
-            if (active.RunningSinceUtc > active.StartedUtc && active.AccumulatedMilliseconds > 0)
-                segments.Add(new(active.StartedUtc, active.RunningSinceUtc));
-            segments.Add(new(active.RunningSinceUtc, null));
+            // Version 1 retained accrued elapsed time but not prior running/paused boundaries.
+            // Preserve that elapsed value without inventing a span that could include a paused gap.
             return new([new(active.Id, UntitledTimer, active.StartedUtc, "running", active.AccumulatedMilliseconds,
-                active.RunningSinceUtc, segments.ToArray())], []);
+                active.RunningSinceUtc, [new(active.RunningSinceUtc, null)])], []);
         }
         if (legacy.Pending is { } pending)
         {
