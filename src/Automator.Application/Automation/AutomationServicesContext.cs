@@ -365,22 +365,34 @@ public sealed class AutomationServicesContext : IAsyncDisposable
             return await inner.GetSnapshotAsync(linked.Token).ConfigureAwait(false);
         }
 
-        public async Task<AutomationWorkTimeSnapshot> StartAsync(CancellationToken cancellationToken)
+        public async Task<AutomationWorkTimeSnapshot> StartAsync(string description, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);
-            return await inner.StartAsync(linked.Token).ConfigureAwait(false);
+            return await inner.StartAsync(description, linked.Token).ConfigureAwait(false);
         }
 
-        public async Task<AutomationWorkTimeSnapshot> StopAsync(CancellationToken cancellationToken)
+        public async Task<AutomationWorkTimeSnapshot> PauseAsync(string id, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);
-            return await inner.StopAsync(linked.Token).ConfigureAwait(false);
+            return await inner.PauseAsync(id, linked.Token).ConfigureAwait(false);
         }
 
-        public async Task<AutomationWorkTimeSnapshot> SaveEntryAsync(string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
+        public async Task<AutomationWorkTimeSnapshot> ResumeAsync(string id, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);
-            return await inner.SaveEntryAsync(description, tags, linked.Token).ConfigureAwait(false);
+            return await inner.ResumeAsync(id, linked.Token).ConfigureAwait(false);
+        }
+
+        public async Task<AutomationWorkTimeSnapshot> EndAsync(string id, CancellationToken cancellationToken)
+        {
+            using var linked = Link(context, cancellationToken);
+            return await inner.EndAsync(id, linked.Token).ConfigureAwait(false);
+        }
+
+        public async Task<AutomationWorkTimeSnapshot> SaveEntryAsync(string id, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
+        {
+            using var linked = Link(context, cancellationToken);
+            return await inner.SaveEntryAsync(id, description, tags, linked.Token).ConfigureAwait(false);
         }
 
         public async Task<AutomationWorkTimeSnapshot> UpdateEntryAsync(string id, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
@@ -395,17 +407,18 @@ public sealed class AutomationServicesContext : IAsyncDisposable
             return await inner.DeleteEntryAsync(id, linked.Token).ConfigureAwait(false);
         }
 
-        public async Task<AutomationWorkTimeSnapshot> ResumePendingAsync(CancellationToken cancellationToken)
+        public async Task<AutomationWorkTimeSnapshot> DiscardTimerAsync(string id, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);
-            return await inner.ResumePendingAsync(linked.Token).ConfigureAwait(false);
+            return await inner.DiscardTimerAsync(id, linked.Token).ConfigureAwait(false);
         }
 
-        public async Task<AutomationWorkTimeSnapshot> DiscardPendingAsync(CancellationToken cancellationToken)
+        public async Task<AutomationWorkTimeSnapshot> DiscardPendingAsync(string id, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);
-            return await inner.DiscardPendingAsync(linked.Token).ConfigureAwait(false);
+            return await inner.DiscardPendingAsync(id, linked.Token).ConfigureAwait(false);
         }
+
     }
 
     private sealed class ContextWebsiteLauncher(AutomationServicesContext context, IAutomationWebsiteLauncher inner) : IAutomationWebsiteLauncher

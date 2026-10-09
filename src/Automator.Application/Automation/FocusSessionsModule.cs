@@ -22,18 +22,20 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
         "activity",
         "focus-sessions",
         false,
-        1,
+        2,
         1,
         [WorkTimeCapability],
         [
-            new("getSnapshot", 1, [WorkTimeCapability]),
-            new("start", 1, [WorkTimeCapability]),
-            new("stop", 1, [WorkTimeCapability]),
-            new("saveEntry", 1, [WorkTimeCapability]),
-            new("updateEntry", 1, [WorkTimeCapability]),
-            new("deleteEntry", 1, [WorkTimeCapability]),
-            new("resumePending", 1, [WorkTimeCapability]),
-            new("discardPending", 1, [WorkTimeCapability]),
+            new("getSnapshot", 2, [WorkTimeCapability]),
+            new("start", 2, [WorkTimeCapability]),
+            new("pause", 2, [WorkTimeCapability]),
+            new("resume", 2, [WorkTimeCapability]),
+            new("end", 2, [WorkTimeCapability]),
+            new("saveEntry", 2, [WorkTimeCapability]),
+            new("updateEntry", 2, [WorkTimeCapability]),
+            new("deleteEntry", 2, [WorkTimeCapability]),
+            new("discardTimer", 2, [WorkTimeCapability]),
+            new("discardPending", 2, [WorkTimeCapability]),
         ]);
 
     public int ContractVersion => Definition.ContractVersion;
@@ -75,13 +77,15 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
             return actionId switch
             {
                 "getSnapshot" => SnapshotResult(await coordinator.GetSnapshotAsync(cancellationToken).ConfigureAwait(false), "Work-time log refreshed."),
-                "start" => SnapshotResult(await coordinator.StartAsync(cancellationToken).ConfigureAwait(false), "Work interval started."),
-                "stop" => SnapshotResult(await coordinator.StopAsync(cancellationToken).ConfigureAwait(false), "Interval stopped. Add a description to save this entry."),
+                "start" => SnapshotResult(await coordinator.StartAsync(ReadDescription(input), cancellationToken).ConfigureAwait(false), "Work interval started."),
+                "pause" => SnapshotResult(await coordinator.PauseAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Work timer paused."),
+                "resume" => SnapshotResult(await coordinator.ResumeAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Work timer resumed."),
+                "end" => SnapshotResult(await coordinator.EndAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Work timer ended. Review and save the entry."),
                 "saveEntry" => await SaveEntryAsync(coordinator, input, cancellationToken).ConfigureAwait(false),
                 "updateEntry" => await UpdateEntryAsync(coordinator, input, cancellationToken).ConfigureAwait(false),
                 "deleteEntry" => await DeleteEntryAsync(coordinator, input, cancellationToken).ConfigureAwait(false),
-                "resumePending" => SnapshotResult(await coordinator.ResumePendingAsync(cancellationToken).ConfigureAwait(false), "Pending interval resumed."),
-                "discardPending" => SnapshotResult(await coordinator.DiscardPendingAsync(cancellationToken).ConfigureAwait(false), "Pending interval discarded."),
+                "discardTimer" => SnapshotResult(await coordinator.DiscardTimerAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Paused timer discarded."),
+                "discardPending" => SnapshotResult(await coordinator.DiscardPendingAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Pending interval discarded."),
                 _ => Result(AutomationStatus.Error, "Unknown Work Time action.", new { }),
             };
         }
@@ -103,7 +107,7 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
         CancellationToken cancellationToken)
     {
         var (description, tags) = ReadEntryInput(input);
-        var snapshot = await coordinator.SaveEntryAsync(description, tags, cancellationToken).ConfigureAwait(false);
+        var snapshot = await coordinator.SaveEntryAsync(ReadEntryId(input), description, tags, cancellationToken).ConfigureAwait(false);
         return SnapshotResult(snapshot, "Work-time entry saved.");
     }
 
@@ -139,7 +143,7 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
         return id;
     }
 
-    private static (string Description, IReadOnlyList<string> Tags) ReadEntryInput(JsonElement input)
+    private static string ReadDescription(JsonElement input)
     {
         if (input.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("Work-time entry input must be an object.");
@@ -148,6 +152,13 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
         var description = descriptionValue.GetString()?.Trim() ?? string.Empty;
         if (description.Length == 0) throw new InvalidDataException("A description is required before saving the work entry.");
         if (description.Length > 500) throw new InvalidDataException("A work description can contain at most 500 characters.");
+
+        return description;
+    }
+
+    private static (string Description, IReadOnlyList<string> Tags) ReadEntryInput(JsonElement input)
+    {
+        var description = ReadDescription(input);
 
         var tags = new List<string>();
         if (input.TryGetProperty("tags", out var tagsValue))
@@ -171,8 +182,8 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
     private static AutomationResult SnapshotResult(AutomationWorkTimeSnapshot snapshot, string message) =>
         Result(AutomationStatus.Success, message, new
         {
-            active = snapshot.Active,
-            pending = snapshot.Pending,
+            timers = snapshot.Timers,
+            pendingEntries = snapshot.PendingEntries,
             history = snapshot.History.TakeLast(MaximumHistoryEntries).ToArray(),
         });
 

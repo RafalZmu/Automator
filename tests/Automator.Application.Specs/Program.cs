@@ -624,41 +624,47 @@ static async Task FocusSessionModuleDispatchesCoordinatorActions()
     var settings = Array.Empty<ModuleSettingsEntry>();
 
     Check.Equal(7, module.Definition.Slot);
+    Check.Equal(2, module.Definition.ContractVersion);
     Check.Equal("focus-sessions", module.Definition.ViewKind);
     Check.True(module.Definition.Actions.Select(action => action.Id)
-        .SequenceEqual(["getSnapshot", "start", "stop", "saveEntry", "updateEntry", "deleteEntry", "resumePending", "discardPending"]));
+        .SequenceEqual(["getSnapshot", "start", "pause", "resume", "end", "saveEntry", "updateEntry", "deleteEntry", "discardTimer", "discardPending"]));
     Check.True(module.Definition.Actions.All(action => action.RequiredCapabilities.Contains(
         new AutomationCapabilityRequirement(AutomationCapabilityIds.WorkTimeManagement, 1))));
 
-    foreach (var action in new[] { "getSnapshot", "start", "stop", "resumePending", "discardPending" })
+    Check.True(module.Definition.Actions.All(action => action.Version == 2));
+    foreach (var action in new[] { "getSnapshot", "start", "pause", "resume", "end", "discardTimer", "discardPending" })
     {
-        var result = await registry.DispatchAsync(module.Id, action, 1, 1, JsonDocument.Parse("{}").RootElement,
+        var result = await registry.DispatchAsync(module.Id, action, 2, 2, JsonSerializer.SerializeToElement(new { id = "timer-2", description = "Named timer" }),
             module.Id, services, settings, CancellationToken.None);
         Check.Equal(AutomationStatus.Success, result.Status);
-        Check.True(result.Data.TryGetProperty("active", out _));
+        Check.True(result.Data.TryGetProperty("timers", out _));
+        Check.True(result.Data.TryGetProperty("pendingEntries", out _));
         Check.True(result.Data.TryGetProperty("history", out _));
+        if (action == "start") Check.Equal("Named timer", coordinator.LastDescription);
+        else if (action != "getSnapshot") Check.Equal("timer-2", coordinator.LastTargetId);
     }
 
-    var blankDescription = await registry.DispatchAsync(module.Id, "saveEntry", 1, 1,
-        JsonDocument.Parse("""{"description":"  ","tags":[]}""").RootElement,
+    var blankDescription = await registry.DispatchAsync(module.Id, "saveEntry", 2, 2,
+        JsonDocument.Parse("""{"id":"entry-2","description":"  ","tags":[]}""").RootElement,
         module.Id, services, settings, CancellationToken.None);
     Check.Equal(AutomationStatus.Error, blankDescription.Status);
     Check.Equal(0, coordinator.SaveCount);
 
-    var saved = await registry.DispatchAsync(module.Id, "saveEntry", 1, 1,
-        JsonDocument.Parse("""{"description":"Review release","tags":["work","review"]}""").RootElement,
+    var saved = await registry.DispatchAsync(module.Id, "saveEntry", 2, 2,
+        JsonDocument.Parse("""{"id":"entry-2","description":"Review release","tags":["work","review"]}""").RootElement,
         module.Id, services, settings, CancellationToken.None);
     Check.Equal(AutomationStatus.Success, saved.Status);
+    Check.Equal("entry-2", coordinator.LastTargetId);
     Check.Equal("Review release", coordinator.LastDescription);
     Check.True(coordinator.LastTags.SequenceEqual(["work", "review"]));
 
-    var invalidUpdate = await registry.DispatchAsync(module.Id, "updateEntry", 1, 1,
+    var invalidUpdate = await registry.DispatchAsync(module.Id, "updateEntry", 2, 2,
         JsonDocument.Parse("""{"id":"entry-1","description":"  ","tags":[]}""").RootElement,
         module.Id, services, settings, CancellationToken.None);
     Check.Equal(AutomationStatus.Error, invalidUpdate.Status);
     Check.Equal(0, coordinator.UpdateCount);
 
-    var updated = await registry.DispatchAsync(module.Id, "updateEntry", 1, 1,
+    var updated = await registry.DispatchAsync(module.Id, "updateEntry", 2, 2,
         JsonDocument.Parse("""{"id":"entry-1","description":"Corrected work","tags":["planning"]}""").RootElement,
         module.Id, services, settings, CancellationToken.None);
     Check.Equal(AutomationStatus.Success, updated.Status);
@@ -666,16 +672,39 @@ static async Task FocusSessionModuleDispatchesCoordinatorActions()
     Check.Equal("Corrected work", coordinator.LastDescription);
     Check.True(coordinator.LastTags.SequenceEqual(["planning"]));
 
-    var invalidDelete = await registry.DispatchAsync(module.Id, "deleteEntry", 1, 1,
+    var invalidDelete = await registry.DispatchAsync(module.Id, "deleteEntry", 2, 2,
         JsonDocument.Parse("{}").RootElement, module.Id, services, settings, CancellationToken.None);
     Check.Equal(AutomationStatus.Error, invalidDelete.Status);
     Check.Equal(0, coordinator.DeleteCount);
 
-    var deleted = await registry.DispatchAsync(module.Id, "deleteEntry", 1, 1,
+    var deleted = await registry.DispatchAsync(module.Id, "deleteEntry", 2, 2,
         JsonDocument.Parse("""{"id":"entry-1"}""").RootElement, module.Id, services, settings, CancellationToken.None);
     Check.Equal(AutomationStatus.Success, deleted.Status);
     Check.Equal("entry-1", coordinator.LastDeletedId);
-    Check.True(coordinator.Calls.SequenceEqual(["getSnapshot", "start", "stop", "resumePending", "discardPending", "saveEntry", "updateEntry", "deleteEntry"]));
+    Check.True(coordinator.Calls.SequenceEqual(["getSnapshot", "start", "pause", "resume", "end", "discardTimer", "discardPending", "saveEntry", "updateEntry", "deleteEntry"]));
+    var priorCalls = coordinator.Calls.Count;
+    foreach (var action in new[] { "start", "pause", "resume", "end", "discardTimer", "discardPending", "saveEntry" })
+    {
+        var invalid = await registry.DispatchAsync(module.Id, action, 2, 2, JsonSerializer.SerializeToElement(new { }), module.Id, services, settings, CancellationToken.None);
+        Check.Equal(AutomationStatus.Error, invalid.Status);
+    }
+    foreach (var input in new object[] { new { description = "  " }, new { description = new string('x', 501) }, new { description = 5 } })
+    {
+        var invalid = await registry.DispatchAsync(module.Id, "start", 2, 2, JsonSerializer.SerializeToElement(input), module.Id, services, settings, CancellationToken.None);
+        Check.Equal(AutomationStatus.Error, invalid.Status);
+    }
+    foreach (var input in new object[] {
+        new { id = "entry-2", description = "D", tags = new[] { new string('x', 41) } },
+        new { id = "entry-2", description = "D", tags = Enumerable.Range(0,31).Select(i => i.ToString()).ToArray() },
+        new { id = "entry-2", description = "D", tags = new[] { 5 } } })
+    {
+        var invalid = await registry.DispatchAsync(module.Id, "saveEntry", 2, 2, JsonSerializer.SerializeToElement(input), module.Id, services, settings, CancellationToken.None);
+        Check.Equal(AutomationStatus.Error, invalid.Status);
+    }
+    Check.Equal(priorCalls, coordinator.Calls.Count);
+    await Check.ThrowsAsync<InvalidOperationException>(async () => await registry.DispatchAsync(module.Id, "getSnapshot", 1, 2, JsonSerializer.SerializeToElement(new { }), module.Id, services, settings, CancellationToken.None));
+    await Check.ThrowsAsync<InvalidOperationException>(async () => await registry.DispatchAsync(module.Id, "getSnapshot", 2, 1, JsonSerializer.SerializeToElement(new { }), module.Id, services, settings, CancellationToken.None));
+
 }
 
 static async Task ScriptRunnerUsesSavedProfiles()
@@ -1475,6 +1504,7 @@ sealed class RecordingWorkTimeCoordinator : IAutomationWorkTimeCoordinator
     public int SaveCount { get; private set; }
     public int UpdateCount { get; private set; }
     public int DeleteCount { get; private set; }
+    public string? LastTargetId { get; private set; }
     public string? LastDescription { get; private set; }
     public string? LastUpdatedId { get; private set; }
     public string? LastDeletedId { get; private set; }
@@ -1487,16 +1517,29 @@ sealed class RecordingWorkTimeCoordinator : IAutomationWorkTimeCoordinator
         return Task.FromResult(Snapshot());
     }
 
-    public Task<AutomationWorkTimeSnapshot> StartAsync(CancellationToken cancellationToken) => RecordAsync("start", cancellationToken);
-    public Task<AutomationWorkTimeSnapshot> StopAsync(CancellationToken cancellationToken) => RecordAsync("stop", cancellationToken);
-    public Task<AutomationWorkTimeSnapshot> ResumePendingAsync(CancellationToken cancellationToken) => RecordAsync("resumePending", cancellationToken);
-    public Task<AutomationWorkTimeSnapshot> DiscardPendingAsync(CancellationToken cancellationToken) => RecordAsync("discardPending", cancellationToken);
+    public Task<AutomationWorkTimeSnapshot> StartAsync(string description, CancellationToken cancellationToken)
+    {
+        LastDescription = description;
+        return RecordAsync("start", cancellationToken);
+    }
+    public Task<AutomationWorkTimeSnapshot> PauseAsync(string id, CancellationToken cancellationToken) => TargetAsync("pause", id, cancellationToken);
+    public Task<AutomationWorkTimeSnapshot> ResumeAsync(string id, CancellationToken cancellationToken) => TargetAsync("resume", id, cancellationToken);
+    public Task<AutomationWorkTimeSnapshot> EndAsync(string id, CancellationToken cancellationToken) => TargetAsync("end", id, cancellationToken);
+    public Task<AutomationWorkTimeSnapshot> DiscardTimerAsync(string id, CancellationToken cancellationToken) => TargetAsync("discardTimer", id, cancellationToken);
+    public Task<AutomationWorkTimeSnapshot> DiscardPendingAsync(string id, CancellationToken cancellationToken) => TargetAsync("discardPending", id, cancellationToken);
 
-    public Task<AutomationWorkTimeSnapshot> SaveEntryAsync(string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
+    private Task<AutomationWorkTimeSnapshot> TargetAsync(string action, string id, CancellationToken cancellationToken)
+    {
+        LastTargetId = id;
+        return RecordAsync(action, cancellationToken);
+    }
+
+    public Task<AutomationWorkTimeSnapshot> SaveEntryAsync(string id, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         Calls.Add("saveEntry");
         SaveCount++;
+        LastTargetId = id;
         LastDescription = description;
         LastTags = tags.ToArray();
         return Task.FromResult(Snapshot());
@@ -1529,7 +1572,7 @@ sealed class RecordingWorkTimeCoordinator : IAutomationWorkTimeCoordinator
         return Task.FromResult(Snapshot());
     }
 
-    private static AutomationWorkTimeSnapshot Snapshot() => new(null, null, []);
+    private static AutomationWorkTimeSnapshot Snapshot() => new([], [], []);
 }
 
 sealed class BlockingHttpClient : IAutomationHttpClient

@@ -12,9 +12,15 @@ var checks = new (string Name, Func<Task> Run)[]
     ("startup resumes future and paused sessions and interrupts overdue running sessions", StartupRecoveryIsExplicit),
     ("disposal stops the timer worker while preserving the active snapshot", DisposalStopsTheWorker),
     ("work time requires a description and persists optional tags to history", WorkTimeRequiresDescriptionAndStoresTags),
-    ("work time pending entry can resume accumulated time or be discarded", WorkTimePendingCanResumeAndDiscard),
+    ("paused work time resumes accumulated time and discards by ID", WorkTimePendingCanResumeAndDiscard),
     ("saved work-time entries can be edited and deleted without losing interval timing", WorkTimeEntriesCanBeEditedAndDeleted),
     ("active work time persists across backend restart", ActiveWorkTimeSurvivesRestart),
+    ("multiple named timers exclude pauses and retain independent drafts", WorkTimeMultipleTimers),
+    ("only one timer runs and ending a paused timer preserves another runner", WorkTimeOnlyOneRunner),
+    ("timers and independent drafts survive restart and targeted discard", WorkTimeDraftsSurviveRestart),
+    ("legacy active pending and history records migrate without losing elapsed time", WorkTimeLegacyMigration),
+    ("work time state writes are atomic and cancellation leaves state intact", WorkTimeFailedWritesPreserveState),
+    ("work time history is bounded and corrupt versions are rejected", WorkTimeHistoryIsBounded),
 };
 
 var failures = 0;
@@ -250,23 +256,23 @@ static async Task WorkTimeRequiresDescriptionAndStoresTags()
     var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero));
     var store = new FocusLibraryStore();
     await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
-    var coordinator = lease.Coordinator;
-
-    var started = await coordinator.StartAsync(CancellationToken.None);
+    var c = lease.Coordinator;
+    await Check.ThrowsAsync<InvalidDataException>(() => c.StartAsync("  ", CancellationToken.None));
+    await Check.ThrowsAsync<InvalidDataException>(() => c.StartAsync(new string('x', 501), CancellationToken.None));
+    var id = (await c.StartAsync(" Build release ", CancellationToken.None)).Timers.Single().Id;
     time.Advance(TimeSpan.FromMinutes(12));
-    var stopped = await coordinator.StopAsync(CancellationToken.None);
-    Check.Equal(started.Active!.Id, stopped.Pending!.Id);
-    Check.Equal(720_000L, stopped.Pending.DurationMilliseconds);
-    Check.Equal(0, stopped.History.Count);
-    await Check.ThrowsAsync<InvalidDataException>(() => coordinator.SaveEntryAsync("  ", [], CancellationToken.None));
-
-    var saved = await coordinator.SaveEntryAsync("Build release", [" feature ", "#deep", "feature"], CancellationToken.None);
-    Check.Equal(null, saved.Pending);
-    Check.Equal(1, saved.History.Count);
-    Check.Equal("Build release", saved.History[0].Description);
-    Check.True(saved.History[0].Tags.SequenceEqual(["feature", "#deep"]));
-    Check.Equal(720_000L, saved.History[0].DurationMilliseconds);
-    Check.True(store.LastRecord("focus-sessions", "work-time-history", started.Active!.Id) is not null);
+    var ended = await c.EndAsync(id, CancellationToken.None);
+    Check.Equal(id, ended.PendingEntries.Single().Id);
+    Check.Equal("Build release", ended.PendingEntries.Single().Description);
+    Check.Equal(720_000L, ended.PendingEntries.Single().DurationMilliseconds);
+    await Check.ThrowsAsync<InvalidDataException>(() => c.SaveEntryAsync(id, "  ", [], CancellationToken.None));
+    await Check.ThrowsAsync<InvalidDataException>(() => c.SaveEntryAsync(id, "x", [new string('x', 41)], CancellationToken.None));
+    await Check.ThrowsAsync<InvalidDataException>(() => c.SaveEntryAsync(id, "x", Enumerable.Range(0,31).Select(i => i.ToString()).ToArray(), CancellationToken.None));
+    var saved = await c.SaveEntryAsync(id, "Build release", [" feature ", "#deep", "feature"], CancellationToken.None);
+    Check.Equal(0, saved.PendingEntries.Count);
+    Check.True(saved.History.Single().Tags.SequenceEqual(["feature", "#deep"]));
+    Check.Equal(720_000L, saved.History.Single().DurationMilliseconds);
+    Check.Equal(2, store.LastRecord("focus-sessions", "work-time-history", id)!.SchemaVersion);
 }
 
 static async Task WorkTimePendingCanResumeAndDiscard()
@@ -274,20 +280,18 @@ static async Task WorkTimePendingCanResumeAndDiscard()
     var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero));
     var store = new FocusLibraryStore();
     await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
-    var coordinator = lease.Coordinator;
-
-    await coordinator.StartAsync(CancellationToken.None);
+    var c = lease.Coordinator;
+    var id = (await c.StartAsync("Task", CancellationToken.None)).Timers.Single().Id;
     time.Advance(TimeSpan.FromMinutes(20));
-    await coordinator.StopAsync(CancellationToken.None);
+    await c.PauseAsync(id, CancellationToken.None);
     time.Advance(TimeSpan.FromMinutes(30));
-    var resumed = await coordinator.ResumePendingAsync(CancellationToken.None);
-    Check.Equal(1_200_000L, resumed.Active!.ElapsedMilliseconds);
+    var resumed = await c.ResumeAsync(id, CancellationToken.None);
+    Check.Equal(1_200_000L, resumed.Timers.Single().ElapsedMilliseconds);
     time.Advance(TimeSpan.FromMinutes(7));
-    var stoppedAgain = await coordinator.StopAsync(CancellationToken.None);
-    Check.Equal(1_620_000L, stoppedAgain.Pending!.DurationMilliseconds);
-    var discarded = await coordinator.DiscardPendingAsync(CancellationToken.None);
-    Check.Equal(null, discarded.Pending);
-    Check.Equal(null, discarded.Active);
+    var paused = await c.PauseAsync(id, CancellationToken.None);
+    Check.Equal(1_620_000L, paused.Timers.Single().ElapsedMilliseconds);
+    var discarded = await c.DiscardTimerAsync(id, CancellationToken.None);
+    Check.Equal(0, discarded.Timers.Count);
     Check.Equal(0, discarded.History.Count);
 }
 
@@ -296,48 +300,225 @@ static async Task WorkTimeEntriesCanBeEditedAndDeleted()
     var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero));
     var store = new FocusLibraryStore();
     await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
-    var coordinator = lease.Coordinator;
-
-    var started = await coordinator.StartAsync(CancellationToken.None);
+    var c = lease.Coordinator;
+    var id = (await c.StartAsync("Original description", CancellationToken.None)).Timers.Single().Id;
     time.Advance(TimeSpan.FromSeconds(75));
-    var stopped = await coordinator.StopAsync(CancellationToken.None);
-    var saved = await coordinator.SaveEntryAsync("Original description", ["old-tag"], CancellationToken.None);
-    var original = saved.History.Single();
-    Check.Equal(75_000L, original.DurationMilliseconds);
-
-    var updated = await coordinator.UpdateEntryAsync(original.Id, "Corrected description", ["planning", "review"], CancellationToken.None);
-    var edited = updated.History.Single();
+    await c.EndAsync(id, CancellationToken.None);
+    var original = (await c.SaveEntryAsync(id, "Original description", ["old-tag"], CancellationToken.None)).History.Single();
+    var edited = (await c.UpdateEntryAsync(id, "Corrected description", ["planning", "review"], CancellationToken.None)).History.Single();
     Check.Equal("Corrected description", edited.Description);
     Check.True(edited.Tags.SequenceEqual(["planning", "review"]));
     Check.Equal(original.StartedUtc, edited.StartedUtc);
     Check.Equal(original.StoppedUtc, edited.StoppedUtc);
-    Check.Equal(original.DurationMilliseconds, edited.DurationMilliseconds);
-    var persisted = store.LastRecord("focus-sessions", "work-time-history", original.Id);
-    Check.Equal("Corrected description", persisted!.Data.GetProperty("description").GetString());
-
-    var deleted = await coordinator.DeleteEntryAsync(original.Id, CancellationToken.None);
+    Check.Equal(75_000L, edited.DurationMilliseconds);
+    Check.True(edited.Segments.SequenceEqual(original.Segments));
+    var deleted = await c.DeleteEntryAsync(id, CancellationToken.None);
     Check.Equal(0, deleted.History.Count);
-    Check.Equal(null, store.LastRecord("focus-sessions", "work-time-history", original.Id));
-    await Check.ThrowsAsync<InvalidOperationException>(() => coordinator.DeleteEntryAsync(original.Id, CancellationToken.None));
-    Check.Equal(started.Active!.Id, stopped.Pending!.Id);
+    Check.Equal(null, store.LastRecord("focus-sessions", "work-time-history", id));
+    await Check.ThrowsAsync<InvalidOperationException>(() => c.DeleteEntryAsync(id, CancellationToken.None));
 }
 
 static async Task ActiveWorkTimeSurvivesRestart()
 {
     var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero));
     var store = new FocusLibraryStore();
+    string id;
     await using (var first = await WorkTimeCoordinatorHarness.CreateAsync(store, time))
     {
-        await first.Coordinator.StartAsync(CancellationToken.None);
+        id = (await first.Coordinator.StartAsync("Task", CancellationToken.None)).Timers.Single().Id;
         time.Advance(TimeSpan.FromMinutes(2));
     }
+    await using var restarted = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    Check.Equal(120_000L, (await restarted.Coordinator.GetSnapshotAsync(CancellationToken.None)).Timers.Single().ElapsedMilliseconds);
+    time.Advance(TimeSpan.FromMinutes(3));
+    Check.Equal(300_000L, (await restarted.Coordinator.EndAsync(id, CancellationToken.None)).PendingEntries.Single().DurationMilliseconds);
+}
 
+static async Task WorkTimeOnlyOneRunner()
+{
+    var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero));
+    var store = new FocusLibraryStore();
+    await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    var c = lease.Coordinator;
+    var a = (await c.StartAsync("A", CancellationToken.None)).Timers.Single().Id;
+    await Check.ThrowsAsync<InvalidOperationException>(() => c.StartAsync("B", CancellationToken.None));
+    await Check.ThrowsAsync<InvalidOperationException>(() => c.DiscardTimerAsync(a, CancellationToken.None));
+    time.Advance(TimeSpan.FromMinutes(5));
+    await c.PauseAsync(a, CancellationToken.None);
+    var b = (await c.StartAsync("B", CancellationToken.None)).Timers.Last().Id;
+    await Check.ThrowsAsync<InvalidOperationException>(() => c.ResumeAsync(a, CancellationToken.None));
+    await Check.ThrowsAsync<InvalidOperationException>(() => c.ResumeAsync(b, CancellationToken.None));
+    time.Advance(TimeSpan.FromMinutes(10));
+    var endedA = await c.EndAsync(a, CancellationToken.None);
+    Check.Equal(b, endedA.Timers.Single().Id);
+    Check.Equal("running", endedA.Timers.Single().Status);
+    Check.Equal(600_000L, endedA.Timers.Single().ElapsedMilliseconds);
+    Check.Equal(300_000L, endedA.PendingEntries.Single().DurationMilliseconds);
+    Check.Equal(time.GetUtcNow().AddMinutes(-10), endedA.PendingEntries.Single().StoppedUtc);
+    await Check.ThrowsAsync<InvalidOperationException>(() => c.PauseAsync(a, CancellationToken.None));
+    await Check.ThrowsAsync<InvalidOperationException>(() => c.DiscardTimerAsync("missing", CancellationToken.None));
+    await c.SaveEntryAsync(a, "A", [], CancellationToken.None);
+    Check.Equal(b, (await c.GetSnapshotAsync(CancellationToken.None)).Timers.Single().Id);
+}
+
+static async Task WorkTimeDraftsSurviveRestart()
+{
+    var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero));
+    var store = new FocusLibraryStore();
+    string a, b, paused, running;
+    await using (var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time))
+    {
+        var c = lease.Coordinator;
+        a = (await c.StartAsync("A", CancellationToken.None)).Timers.Single().Id;
+        time.Advance(TimeSpan.FromSeconds(3));
+        await c.EndAsync(a, CancellationToken.None);
+        b = (await c.StartAsync("B", CancellationToken.None)).Timers.Single().Id;
+        time.Advance(TimeSpan.FromSeconds(5));
+        await c.EndAsync(b, CancellationToken.None);
+        paused = (await c.StartAsync("Paused", CancellationToken.None)).Timers.Single().Id;
+        time.Advance(TimeSpan.FromSeconds(2));
+        await c.PauseAsync(paused, CancellationToken.None);
+        running = (await c.StartAsync("Running", CancellationToken.None)).Timers.Last().Id;
+    }
+    time.Advance(TimeSpan.FromMinutes(20));
     await using var restarted = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
     var restored = await restarted.Coordinator.GetSnapshotAsync(CancellationToken.None);
-    Check.Equal(120_000L, restored.Active!.ElapsedMilliseconds);
-    time.Advance(TimeSpan.FromMinutes(3));
-    var stopped = await restarted.Coordinator.StopAsync(CancellationToken.None);
-    Check.Equal(300_000L, stopped.Pending!.DurationMilliseconds);
+    Check.Equal(2, restored.PendingEntries.Count);
+    Check.Equal(2_000L, restored.Timers.First(t => t.Id == paused).ElapsedMilliseconds);
+    Check.Equal(1_200_000L, restored.Timers.First(t => t.Id == running).ElapsedMilliseconds);
+    var discardedTimer = await restarted.Coordinator.DiscardTimerAsync(paused, CancellationToken.None);
+    Check.Equal(running, discardedTimer.Timers.Single().Id);
+    Check.Equal(2, discardedTimer.PendingEntries.Count);
+    var discardedDraft = await restarted.Coordinator.DiscardPendingAsync(a, CancellationToken.None);
+    Check.Equal(b, discardedDraft.PendingEntries.Single().Id);
+    Check.Equal(running, discardedDraft.Timers.Single().Id);
+    await restarted.Coordinator.SaveEntryAsync(b, "Renamed B", [], CancellationToken.None);
+    await Check.ThrowsAsync<InvalidOperationException>(() => restarted.Coordinator.DiscardPendingAsync(b, CancellationToken.None));
+}
+
+static async Task WorkTimeLegacyMigration()
+{
+    var origin = new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero);
+    var time = new ManualTimeProvider(origin.AddMinutes(30));
+    async Task Seed(FocusLibraryStore store, string collection, string id, object data, int version = 1) =>
+        await store.UpsertAsync(new AutomationLibraryRecord("focus-sessions", collection, id, version,
+            JsonSerializer.SerializeToElement(data), origin), CancellationToken.None);
+    var activeStore = new FocusLibraryStore();
+    await Seed(activeStore, "work-time", "current", new { active = new { id = "legacy-active", startedUtc = origin,
+        accumulatedMilliseconds = 120_000L, runningSinceUtc = origin.AddMinutes(20) }, pending = (object?)null });
+    await Seed(activeStore, "work-time-history", "legacy-history", new { id = "legacy-history", startedUtc = origin,
+        stoppedUtc = origin.AddMinutes(10), durationMilliseconds = 420_000L, description = "Saved", tags = new[] { "legacy" } });
+    await using (var lease = await WorkTimeCoordinatorHarness.CreateAsync(activeStore, time))
+    {
+        var snapshot = await lease.Coordinator.GetSnapshotAsync(CancellationToken.None);
+        var timer = snapshot.Timers.Single();
+        Check.Equal("legacy-active", timer.Id);
+        Check.Equal("Untitled timer", timer.Description);
+        Check.Equal("running", timer.Status);
+        Check.Equal(720_000L, timer.ElapsedMilliseconds);
+        Check.Equal(420_000L, snapshot.History.Single().DurationMilliseconds);
+        Check.Equal(origin, snapshot.History.Single().Segments.Single().StartedUtc);
+        Check.Equal(origin.AddMinutes(10), snapshot.History.Single().Segments.Single().StoppedUtc);
+        await lease.Coordinator.EndAsync(timer.Id, CancellationToken.None);
+        var saved = await lease.Coordinator.SaveEntryAsync(timer.Id, "Renamed legacy", [], CancellationToken.None);
+        Check.Equal("Renamed legacy", saved.History.Last().Description);
+    }
+    var pendingStore = new FocusLibraryStore();
+    await Seed(pendingStore, "work-time", "current", new { active = (object?)null, pending = new { id = "legacy-pending",
+        startedUtc = origin, stoppedUtc = origin.AddMinutes(10), durationMilliseconds = 123_456L, description = "", tags = Array.Empty<string>() } });
+    await using var pendingLease = await WorkTimeCoordinatorHarness.CreateAsync(pendingStore, time);
+    var paused = (await pendingLease.Coordinator.GetSnapshotAsync(CancellationToken.None)).Timers.Single();
+    Check.Equal("paused", paused.Status);
+    Check.Equal("Untitled timer", paused.Description);
+    Check.Equal(123_456L, paused.ElapsedMilliseconds);
+    Check.Equal(2, pendingStore.LastRecord("focus-sessions", "work-time", "current")!.SchemaVersion);
+    await pendingLease.Coordinator.ResumeAsync(paused.Id, CancellationToken.None);
+    time.Advance(TimeSpan.FromSeconds(2));
+    Check.Equal(125_456L, (await pendingLease.Coordinator.EndAsync(paused.Id, CancellationToken.None)).PendingEntries.Single().DurationMilliseconds);
+}
+
+static async Task WorkTimeFailedWritesPreserveState()
+{
+    var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero));
+    var store = new FocusLibraryStore();
+    await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    var c = lease.Coordinator;
+    var id = (await c.StartAsync("A", CancellationToken.None)).Timers.Single().Id;
+    store.FailWorkTimeWrites = true;
+    await Check.ThrowsAsync<IOException>(() => c.PauseAsync(id, CancellationToken.None));
+    Check.Equal("running", (await c.GetSnapshotAsync(CancellationToken.None)).Timers.Single().Status);
+    store.FailWorkTimeWrites = false;
+    using var canceled = new CancellationTokenSource();
+    canceled.Cancel();
+    await Check.ThrowsAsync<OperationCanceledException>(() => c.EndAsync(id, canceled.Token));
+    Check.Equal(id, (await c.GetSnapshotAsync(CancellationToken.None)).Timers.Single().Id);
+    await c.EndAsync(id, CancellationToken.None);
+    store.FailWorkTimeWrites = true;
+    await Check.ThrowsAsync<IOException>(() => c.SaveEntryAsync(id, "Saved before state failure", [], CancellationToken.None));
+    store.FailWorkTimeWrites = false;
+    await using var recovered = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    var repaired = await recovered.Coordinator.GetSnapshotAsync(CancellationToken.None);
+    Check.Equal(id, repaired.History.Single().Id);
+    Check.Equal(0, repaired.PendingEntries.Count);
+}
+
+static async Task WorkTimeHistoryIsBounded()
+{
+    var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero));
+    var store = new FocusLibraryStore();
+    for (var i = 0; i < 501; i++)
+    {
+        var start = time.GetUtcNow().AddSeconds(i);
+        await store.UpsertAsync(new AutomationLibraryRecord("focus-sessions", "work-time-history", $"entry-{i}", 1,
+            JsonSerializer.SerializeToElement(new { id = $"entry-{i}", startedUtc = start, stoppedUtc = start.AddSeconds(1),
+                durationMilliseconds = 1_000L, description = "Legacy", tags = Array.Empty<string>() }), start), CancellationToken.None);
+    }
+    await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    Check.Equal(500, (await lease.Coordinator.GetSnapshotAsync(CancellationToken.None)).History.Count);
+    Check.Equal(null, store.LastRecord("focus-sessions", "work-time-history", "entry-0"));
+    var corrupt = new FocusLibraryStore();
+    await corrupt.UpsertAsync(new AutomationLibraryRecord("focus-sessions", "work-time", "current", 99,
+        JsonSerializer.SerializeToElement(new { }), time.GetUtcNow()), CancellationToken.None);
+    await Check.ThrowsAsync<InvalidDataException>(async () => { await using var invalid = await WorkTimeCoordinatorHarness.CreateAsync(corrupt, time); });
+}
+
+static async Task WorkTimeMultipleTimers()
+{
+    var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero));
+    var store = new FocusLibraryStore();
+    await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    var capabilities = new AutomationCapabilityRegistry(workTimeCoordinatorFactory: _ => lease.Coordinator);
+    var module = new FocusSessionsModule();
+    await using var context = capabilities.CreateContext(new AutomationModuleDescriptor(module.Id, module.Definition.Capabilities));
+    async Task<JsonElement> Act(string action, object input)
+    {
+        var result = await module.ExecuteAsync(action, JsonSerializer.SerializeToElement(input), module.CreateDefaultSettings(), context, CancellationToken.None);
+        Check.Equal(Automator.Core.Plugins.AutomationStatus.Success, result.Status);
+        return result.Data;
+    }
+    var start = await Act("start", new { description = "Task A" });
+    Check.True(start.TryGetProperty("timers", out _), "The multi-timer snapshot must expose timers.");
+    var a = start.GetProperty("timers")[0].GetProperty("id").GetString()!;
+    Check.Equal("Task A", start.GetProperty("timers")[0].GetProperty("description").GetString());
+    time.Advance(TimeSpan.FromMinutes(10));
+    await Act("pause", new { id = a });
+    var bStart = await Act("start", new { description = "Task B" });
+    var b = bStart.GetProperty("timers")[1].GetProperty("id").GetString()!;
+    time.Advance(TimeSpan.FromMinutes(20));
+    await Act("end", new { id = b });
+    await Act("saveEntry", new { id = b, description = "Task B", tags = new[] { "work" } });
+    await Act("resume", new { id = a });
+    time.Advance(TimeSpan.FromMinutes(5));
+    var ended = await Act("end", new { id = a });
+    var draft = ended.GetProperty("pendingEntries")[0];
+    Check.Equal(900_000L, draft.GetProperty("durationMilliseconds").GetInt64());
+    Check.Equal(2, draft.GetProperty("segments").GetArrayLength());
+    Check.Equal(time.GetUtcNow().AddMinutes(-25), draft.GetProperty("segments")[0].GetProperty("stoppedUtc").GetDateTimeOffset());
+    Check.Equal(time.GetUtcNow().AddMinutes(-5), draft.GetProperty("segments")[1].GetProperty("startedUtc").GetDateTimeOffset());
+    var saved = await Act("saveEntry", new { id = a, description = "Task A", tags = Array.Empty<string>() });
+    Check.Equal(2, saved.GetProperty("history").GetArrayLength());
+    Check.Equal(0, saved.GetProperty("timers").GetArrayLength());
+    Check.Equal(0, saved.GetProperty("pendingEntries").GetArrayLength());
 }
 
 static class CoordinatorHarness
@@ -423,6 +604,7 @@ sealed class FocusLibraryStore : IAutomationLibraryStore
     private readonly Dictionary<(string Module, string Collection, string Id), AutomationLibraryRecord> _records = [];
     public List<string> Events { get; } = [];
     public bool FailSessionWrites { get; set; }
+    public bool FailWorkTimeWrites { get; set; }
 
     public Task<IReadOnlyList<AutomationLibraryRecord>> ListAsync(string moduleId, string collection, CancellationToken cancellationToken)
     {
@@ -448,6 +630,8 @@ sealed class FocusLibraryStore : IAutomationLibraryStore
     public Task UpsertAsync(AutomationLibraryRecord record, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (FailWorkTimeWrites && record.Collection == "work-time")
+            throw new IOException("Simulated work time state store failure.");
         if (FailSessionWrites && record.Collection == "sessions")
             throw new IOException("Simulated focus session store failure.");
         lock (_sync)

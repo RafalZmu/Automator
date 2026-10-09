@@ -170,3 +170,139 @@ Run after npm.cmd run build:desktop with node --experimental-strip-types --test 
 ## Additional backend coverage
 
 Persistence, recovery, coordinator state transitions, and notification behavior are covered by tests/Automator.Focus.Specs. Run the backend specification suites with npm.cmd run test:dotnet.
+
+## Work Time backend/API version 2
+
+The cases below are executed by `npm.cmd run test:dotnet`. The existing renderer cases above still describe the version 1 UI until its separate migration. Backend tests exercise the current version 2 contract.
+
+### work time requires a description and persists optional tags to history
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Reject blank and overlong start descriptions.
+2. Start a named timer, advance twelve minutes, and end it into a draft.
+3. Reject blank save descriptions, overlong tags, and more than thirty tags; save valid normalized tags.
+
+**Expected result:** A named draft retains 720,000 milliseconds; save removes the draft and writes schema 2 history with trimmed, deduplicated tags.
+
+### paused work time resumes accumulated time and discards by ID
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Run twenty minutes, pause, and advance thirty minutes while paused.
+2. Resume, run seven minutes, pause again, then discard that paused timer by ID.
+
+**Expected result:** The resumed timer begins at 1,200,000 milliseconds; its final 1,620,000 milliseconds exclude the pause, and discard removes it without saving history.
+
+### saved work-time entries can be edited and deleted without losing interval timing
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Run a named timer for seventy-five seconds, end it, and save an entry.
+2. Edit its description and tags, then compare timestamps, duration, and segments.
+3. Delete it and attempt to delete the same ID again.
+
+**Expected result:** Metadata changes preserve all timing and segments; deletion removes the durable record and repeating deletion fails.
+
+### active work time persists across backend restart
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Start a named timer and advance two minutes before disposing the coordinator.
+2. Recreate the coordinator from the same store, advance another three minutes, and end the recovered timer.
+
+**Expected result:** The recovered snapshot shows 120,000 milliseconds; its ended draft preserves the ID and records 300,000 milliseconds.
+
+### multiple named timers exclude pauses and retain independent drafts
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Start A through the real module API, run ten minutes, and pause it.
+2. Start B, run twenty minutes, then end and save B.
+3. Resume A, run five minutes, end A, inspect its segments, then save A.
+
+**Expected result:** A records 900,000 milliseconds with two completed segments separated by the twenty-minute pause. Both entries are saved and no timers or drafts remain.
+
+### only one timer runs and ending a paused timer preserves another runner
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Start A and reject starting another timer or discarding the running timer.
+2. Pause A after five minutes and start B; reject resuming A or B while B runs.
+3. Advance ten minutes and end paused A, then save its draft.
+4. Reject pause of ended A and discard of a missing timer.
+
+**Expected result:** A keeps 300,000 milliseconds and its actual pause timestamp. B stays running at 600,000 milliseconds through ending and saving A.
+
+### timers and independent drafts survive restart and targeted discard
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Create ended drafts A and B, a two-second paused timer, and a running timer.
+2. Dispose, advance twenty minutes, and restore the coordinator.
+3. Discard only the paused timer, discard only draft A, then save draft B.
+
+**Expected result:** Both drafts and timers recover independently; paused elapsed stays 2,000 milliseconds and running elapsed advances to 1,200,000. Each targeted removal preserves the other records.
+
+### legacy active pending and history records migrate without losing elapsed time
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Seed schema 1 active state with accumulated elapsed and schema 1 saved history.
+2. Restore, inspect the running Untitled timer and continuous legacy history span, then end and save a renamed entry.
+3. Seed schema 1 pending state, restore it as paused, resume it, and end it after two seconds.
+
+**Expected result:** Legacy IDs and elapsed values remain recoverable, missing labels become Untitled timer, migrated state is schema 2, and resumed elapsed adds only the new running time.
+
+### work time state writes are atomic and cancellation leaves state intact
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Fail a state write during pause and inspect the still-running timer.
+2. Cancel an end operation before dispatch and inspect the unchanged timer.
+3. End the timer, then fail draft removal after the history write succeeds; restart.
+
+**Expected result:** Failed or canceled state operations preserve in-memory state. Restart keeps the saved history entry and removes its duplicate draft.
+
+### work time history is bounded and corrupt versions are rejected
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Seed 501 legacy history entries with ordered timestamps and initialize the coordinator.
+2. Inspect the retained count and deletion of the oldest record.
+3. Try initializing an unsupported schema 99 state record.
+
+**Expected result:** Only the newest 500 entries remain, and unsupported persisted schemas raise InvalidDataException.
+
+### work-time log actions validate metadata and delegate to the host coordinator
+
+**Source:** tests/Automator.Application.Specs/Program.cs
+
+**Steps**
+
+1. Register the Work Time module and verify all declared version 2 action IDs.
+2. Dispatch getSnapshot, start, pause, resume, end, discardTimer, and discardPending; inspect snapshot keys and target IDs.
+3. Save, update, and delete specific entries, checking descriptions, tags, and IDs.
+4. Reject missing inputs, invalid descriptions/tags, and stale module/action version 1 requests.
+
+**Expected result:** Only valid version 2 inputs reach the coordinator. Snapshots expose timers, pendingEntries, and history; all state-changing actions target the supplied ID and the shared result envelope remains supported.
