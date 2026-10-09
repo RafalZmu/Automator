@@ -410,16 +410,37 @@ test('Work Time supports multiple named timers and Workspace-only reports with e
     const timerA = launcher.getByRole('article', { name: 'Running timer Timer A' });
     await timerA.waitFor({ state: 'visible' });
     await timerA.getByRole('button', { name: 'Pause timer' }).click();
+    const pausedA = launcher.getByRole('article', { name: 'Paused timer Timer A' });
     await launcher.getByRole('textbox', { name: 'New timer description' }).fill('Timer B');
     await launcher.getByRole('button', { name: 'Start timer' }).click();
     const timerB = launcher.getByRole('article', { name: 'Running timer Timer B' });
     await timerB.waitFor({ state: 'visible' });
+    await pausedA.getByRole('button', { name: 'End timer' }).click();
+    const draftA = launcher.getByRole('region', { name: 'Save work interval Timer A' });
+    await draftA.waitFor({ state: 'visible' });
+    await timerB.waitFor({ state: 'visible' });
     await timerB.getByRole('button', { name: 'End timer' }).click();
     const draftB = launcher.getByRole('region', { name: 'Save work interval Timer B' });
     await draftB.waitFor({ state: 'visible' });
+    assert.equal(await launcher.locator('.work-time-entry-card[aria-label^="Save work interval"]').count(), 2,
+      'both ended drafts have independent forms before either is saved');
+    await draftA.getByRole('textbox', { name: 'Work description Timer A' }).fill('   ');
+    assert.equal(await draftA.getByRole('button', { name: 'Save entry' }).isDisabled(), true,
+      'whitespace-only draft descriptions cannot be saved');
+    await draftA.locator('form').evaluate((form) => form.requestSubmit());
+    await launcher.getByText('Enter a work description before saving.').waitFor({ state: 'visible' });
+    assert.equal(await launcher.locator('.work-time-entry-card[aria-label^="Save work interval"]').count(), 2,
+      'submitting whitespace leaves both drafts intact');
+    await draftA.getByRole('textbox', { name: 'Work description Timer A' }).fill('Timer A project');
+    await draftA.getByRole('textbox', { name: 'Work tags Timer A' }).fill('reporting, priority');
     await draftB.getByRole('textbox', { name: 'Work tags Timer B' }).fill('reporting, priority');
     await draftB.getByRole('button', { name: 'Save entry' }).click();
-    await launcher.getByRole('article', { name: 'Paused timer Timer A' }).getByRole('button', { name: 'Resume timer' }).waitFor({ state: 'visible' });
+    await draftA.waitFor({ state: 'visible' });
+    assert.equal(await draftA.getByRole('textbox', { name: 'Work description Timer A' }).inputValue(), 'Timer A project',
+      'saving B preserves A draft text');
+    assert.equal(await draftA.getByRole('textbox', { name: 'Work tags Timer A' }).inputValue(), 'reporting, priority',
+      'saving B preserves A draft tags');
+    await draftA.getByRole('button', { name: 'Save entry' }).click();
 
     const workspacePromise = app.waitForEvent('window');
     await launcher.getByRole('button', { name: 'Open Workspace' }).click();
@@ -429,26 +450,14 @@ test('Work Time supports multiple named timers and Workspace-only reports with e
     const reportRegion = workspacePage.getByRole('region', { name: 'Work time reports' });
     await reportRegion.waitFor({ state: 'visible' });
 
-    const resumedA = workspacePage.getByRole('article', { name: 'Paused timer Timer A' });
-    await resumedA.getByRole('button', { name: 'Resume timer' }).click();
-    const runningA = workspacePage.getByRole('article', { name: 'Running timer Timer A' });
-    await runningA.waitFor({ state: 'visible' });
-    await workspacePage.waitForTimeout(1_200);
-    await runningA.getByRole('button', { name: 'Pause timer' }).click();
-    const pausedA = workspacePage.getByRole('article', { name: 'Paused timer Timer A' });
-    await pausedA.getByRole('button', { name: 'End timer' }).click();
-    const draftA = workspacePage.getByRole('region', { name: 'Save work interval Timer A' });
-    await draftA.getByRole('textbox', { name: 'Work description Timer A' }).fill('Sample work item');
-    await draftA.getByRole('textbox', { name: 'Work tags Timer A' }).fill('reporting, priority');
-    await draftA.getByRole('button', { name: 'Save entry' }).click();
-    let savedEntry = reportRegion.locator('.work-time-report-row').filter({ hasText: 'Sample work item' });
+    let savedEntry = reportRegion.locator('.work-time-report-row').filter({ hasText: 'Timer A project' });
     await savedEntry.waitFor({ state: 'visible' });
     const savedB = reportRegion.locator('.work-time-report-row').filter({ hasText: 'Timer B' });
     await savedB.waitFor({ state: 'visible' });
 
     await reportRegion.getByRole('combobox', { name: 'Filter work log by tag' }).selectOption('priority');
     assert.equal(await reportRegion.locator('.work-time-report-row').count(), 2, 'both matching entries are retained by the tag filter');
-    await savedEntry.getByRole('button', { name: 'Edit work log entry Sample work item' }).click();
+    await savedEntry.getByRole('button', { name: 'Edit work log entry Timer A project' }).click();
     await reportRegion.getByRole('textbox', { name: 'Edit work description' }).fill('Edited work item');
     await reportRegion.getByRole('textbox', { name: 'Edit work tags' }).fill('reporting, priority, done');
     await reportRegion.getByRole('button', { name: 'Save work entry changes' }).click();

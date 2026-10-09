@@ -12,6 +12,7 @@ import {
   filterWorkTimeEntries,
   formatWorkTimeDuration,
   getWorkTimeTags,
+  isWorkTimeDescriptionValid,
   readWorkTimeSnapshot,
   workTimeEntryDurationMilliseconds,
   type WorkTimeReportFilter,
@@ -29,6 +30,7 @@ type ViewProps = {
 export function FocusSessionsView({ tab, services, surface }: ViewProps) {
   const [snapshot, setSnapshot] = useState<WorkTimeSnapshot | null>(null);
   const [startDescription, setStartDescription] = useState('');
+  const [draftDescriptions, setDraftDescriptions] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [now, setNow] = useState(Date.now());
@@ -106,8 +108,18 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const description = String(form.get('description') ?? '').trim();
+    if (!isWorkTimeDescriptionValid(description)) {
+      setNotice('Enter a work description before saving.');
+      return;
+    }
     const tags = String(form.get('tags') ?? '').split(',').map((tag) => tag.trim()).filter(Boolean);
-    void dispatch('saveEntry', { id, description, tags });
+    void dispatch('saveEntry', { id, description, tags }).then((saved) => {
+      if (saved) setDraftDescriptions((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+    });
   };
   const reportEntries = useMemo(() => snapshot
     ? filterWorkTimeEntries(snapshot.history, reportFilter).slice().reverse()
@@ -243,13 +255,15 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
         <header><div><Check size={14} /><h2>Save {entry.description || 'Untitled timer'}</h2></div><span>{formatWorkTimeDuration(workTimeEntryDurationMilliseconds(entry, workingPeriodOnly))}</span></header>
         <form onSubmit={(event) => submitEntry(event, entry.id)}>
           <label className="work-time-field"><span>Description <b>Required</b></span>
-            <textarea name="description" aria-label={`Work description ${entry.description || entry.id}`} defaultValue={entry.description} maxLength={500} rows={2} placeholder="What did you work on?" disabled={!!busy} />
+            <textarea name="description" aria-label={`Work description ${entry.description || entry.id}`} value={draftDescriptions[entry.id] ?? entry.description}
+              onChange={(event) => setDraftDescriptions((current) => ({ ...current, [entry.id]: event.target.value }))}
+              maxLength={500} rows={2} placeholder="What did you work on?" disabled={!!busy} required />
           </label>
           <label className="work-time-field"><span>Tags <b>Optional</b></span>
             <div className="work-time-tags-input"><Tag size={13} /><input name="tags" aria-label={`Work tags ${entry.description || entry.id}`} defaultValue={entry.tags.join(', ')} maxLength={500} placeholder="planning, release, bug fix" disabled={!!busy} /><small>Separate with commas</small></div>
           </label>
           <div className="work-time-entry-actions">
-            <button className="primary-button" type="submit" disabled={!!busy}><Check size={13} /> Save entry</button>
+            <button className="primary-button" type="submit" disabled={!!busy || !isWorkTimeDescriptionValid(draftDescriptions[entry.id] ?? entry.description)}><Check size={13} /> Save entry</button>
             <button className="work-time-discard" type="button" disabled={!!busy} onClick={() => { if (window.confirm('Discard this unsaved work interval?')) void dispatch('discardPending', { id: entry.id }); }}><Trash2 size={13} /> Discard draft</button>
           </div>
         </form>

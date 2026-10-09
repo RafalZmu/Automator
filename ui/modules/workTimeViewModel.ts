@@ -45,6 +45,10 @@ function isDuration(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
+export function isWorkTimeDescriptionValid(description: string): boolean {
+  return Boolean(description.trim());
+}
+
 function readSegments(value: unknown, allowOpen: boolean): WorkTimeSegment[] | null {
   if (!Array.isArray(value) || value.length === 0) return null;
   const segments: WorkTimeSegment[] = [];

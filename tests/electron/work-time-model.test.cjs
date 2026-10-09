@@ -58,6 +58,13 @@ test('work-time display clock advances from a sampled backend duration', async (
   assert.equal(formatWorkTimeDuration(62 * 60_000), '1h 2m');
 });
 
+test('work-time descriptions reject whitespace-only values before saving', async () => {
+  const { isWorkTimeDescriptionValid } = await import(modelUrl);
+  assert.equal(isWorkTimeDescriptionValid(''), false);
+  assert.equal(isWorkTimeDescriptionValid('   \t  '), false);
+  assert.equal(isWorkTimeDescriptionValid('  timer description  '), true);
+});
+
 test('work-time working-period duration counts only running segments and excludes paused gaps', async () => {
   const { calculateWorkTimeIntervalMilliseconds } = await import(modelUrl);
   const interval = (start, stop, nextDay = false) => calculateWorkTimeIntervalMilliseconds(

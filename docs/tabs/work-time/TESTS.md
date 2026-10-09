@@ -34,6 +34,15 @@ Run focused model cases with node --experimental-strip-types --test --test-concu
 
 **Expected result:** The display advances from the sampled duration and formats seconds, minutes, and hours without rounding short intervals up.
 
+### work-time descriptions reject whitespace-only values before saving
+
+**Steps**
+
+1. Validate an empty description and a whitespace-only description.
+2. Validate a nonempty description surrounded by whitespace.
+
+**Expected result:** Empty and whitespace-only descriptions are rejected; surrounding whitespace is allowed when the description contains text.
+
 ### work-time working-period duration counts only running segments and excludes paused gaps
 
 **Steps**
@@ -146,12 +155,12 @@ The test filename and view-model module retain the old Focus Sessions name for c
 **Steps**
 
 1. Open Work Time in the compact launcher and verify that report controls are absent.
-2. Name and start timer A, pause it, then start and end timer B; save B's prefilled draft with tags.
-3. Open Workspace, resume A, pause and end it, edit its description and tags, then save it as a separate entry.
-4. Filter the saved rows, edit a saved description and tags, then export the filtered report to an isolated CSV path.
+2. Name and start timer A, pause it, then start timer B. End paused A while B is running, then end B and verify both separate draft forms are visible.
+3. Reject a whitespace-only description; save B, verify A's description and tags are unchanged, then save A.
+4. Open Workspace, filter the two saved rows, edit a saved description and tags, then export the filtered report to an isolated CSV path.
 5. Verify CSV content, confirm deletion, and check that reports remain absent from the compact launcher.
 
-**Expected result:** Named timers pause, resume, end, and save independently in both surfaces. Reporting and history editing are available in Workspace only; filtering, editing, export, and deletion work without exposing report controls in the compact launcher.
+**Expected result:** Ending paused A leaves running B intact; the two ended drafts remain independently editable and saving one preserves the other. Whitespace-only descriptions cannot be saved. Reporting and history editing are available in Workspace only; filtering, editing, export, and deletion work without exposing report controls in the compact launcher.
 
 ## Electron happy-path visibility — tests/electron/tab-happy-path-visibility.test.cjs
 
