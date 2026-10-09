@@ -329,3 +329,16 @@ The coordinator and API cases below are executed by `npm.cmd run test:dotnet`. R
 3. Advance thirty minutes, end the timer, and save it; inspect the draft and saved running segment.
 
 **Expected result:** The migrated timer preserves its 09:00 original start and 3,600,000 milliseconds of accrued work. Its only known segment starts at 15:00 and closes at 15:30. Draft/history retain 5,400,000 milliseconds total elapsed, while the recorded segment covers only 1,800,000 milliseconds; no segment fabricates the unknown period between original start and resume.
+
+### legacy pending migration preserves elapsed time without counting unknown paused gaps
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Seed a schema 1 pending timer that started at 08:00, stopped at 18:00, and stored 123,456 milliseconds of elapsed work.
+2. Restore it as paused and inspect its preserved elapsed value and zero-length segment at the known stopped time.
+3. Resume it at 18:00, run for two seconds, and end it.
+4. Inspect the resulting draft segments and elapsed duration.
+
+**Expected result:** Migration preserves 123,456 milliseconds without treating the unknown 08:00–18:00 span as work. The draft contains the zero-length legacy marker and a separate two-second segment, with 125,456 milliseconds total elapsed.

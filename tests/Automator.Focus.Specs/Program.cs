@@ -19,6 +19,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("only one timer runs and ending a paused timer preserves another runner", WorkTimeOnlyOneRunner),
     ("timers and independent drafts survive restart and targeted discard", WorkTimeDraftsSurviveRestart),
     ("legacy active pending and history records migrate without losing elapsed time", WorkTimeLegacyMigration),
+    ("legacy pending migration preserves elapsed time without counting unknown paused gaps", WorkTimeLegacyPendingSegments),
     ("resumed legacy timer preserves elapsed without fabricating paused segments", WorkTimeLegacyResumedSegments),
     ("work time state writes are atomic and cancellation leaves state intact", WorkTimeFailedWritesPreserveState),
     ("work time history is bounded and corrupt versions are rejected", WorkTimeHistoryIsBounded),
@@ -467,6 +468,36 @@ static async Task WorkTimeLegacyResumedSegments()
     Check.Equal(resumedAt, saved.Segments.Single().StartedUtc);
     Check.Equal(resumedAt.AddMinutes(30), saved.Segments.Single().StoppedUtc);
     Check.Equal(1_800_000L, (long)(saved.Segments.Single().StoppedUtc!.Value - saved.Segments.Single().StartedUtc).TotalMilliseconds);
+}
+
+static async Task WorkTimeLegacyPendingSegments()
+{
+    var started = new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero);
+    var stopped = started.AddHours(10);
+    var time = new ManualTimeProvider(stopped);
+    var store = new FocusLibraryStore();
+    await store.UpsertAsync(new AutomationLibraryRecord("focus-sessions", "work-time", "current", 1,
+        JsonSerializer.SerializeToElement(new { active = (object?)null, pending = new { id = "legacy-pending-gap",
+            startedUtc = started, stoppedUtc = stopped, durationMilliseconds = 123_456L, description = "", tags = Array.Empty<string>() } }), stopped), CancellationToken.None);
+
+    await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    var coordinator = lease.Coordinator;
+    var paused = (await coordinator.GetSnapshotAsync(CancellationToken.None)).Timers.Single();
+    Check.Equal("paused", paused.Status);
+    Check.Equal(123_456L, paused.ElapsedMilliseconds);
+    Check.Equal(1, paused.Segments.Count);
+    Check.Equal(stopped, paused.Segments.Single().StartedUtc);
+    Check.Equal(stopped, paused.Segments.Single().StoppedUtc);
+
+    await coordinator.ResumeAsync(paused.Id, CancellationToken.None);
+    time.Advance(TimeSpan.FromSeconds(2));
+    var draft = (await coordinator.EndAsync(paused.Id, CancellationToken.None)).PendingEntries.Single();
+    Check.Equal(125_456L, draft.DurationMilliseconds);
+    Check.Equal(2, draft.Segments.Count);
+    Check.Equal(stopped, draft.Segments[0].StartedUtc);
+    Check.Equal(stopped, draft.Segments[0].StoppedUtc);
+    Check.Equal(stopped, draft.Segments[1].StartedUtc);
+    Check.Equal(stopped.AddSeconds(2), draft.Segments[1].StoppedUtc);
 }
 
 static async Task WorkTimeFailedWritesPreserveState()

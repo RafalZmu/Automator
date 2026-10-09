@@ -350,8 +350,11 @@ public sealed class AutomationWorkTimeCoordinator : IAutomationWorkTimeCoordinat
         {
             var entry = MigrateEntry(pending);
             ValidateEntry(entry);
+            // Schema 1 kept accrued elapsed time but not the boundaries around earlier pauses.
+            // Anchor a zero-length closed segment at the known pause time instead of counting
+            // the whole original start-to-stop span as working time.
             return new([new(entry.Id, entry.Description, entry.StartedUtc, "paused", entry.DurationMilliseconds,
-                entry.StoppedUtc, entry.Segments)], []);
+                entry.StoppedUtc, [new(entry.StoppedUtc, entry.StoppedUtc)])], []);
         }
         return new([], []);
     }
