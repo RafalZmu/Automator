@@ -6,7 +6,7 @@ export function parseFileExplorerLaunch(args: string[]): FileExplorerLaunchReque
   if (index < 0 || args.length !== index + 4 || args[index + 2] !== '--') return null;
   const actionId = args[index + 1];
   const filePath = args[index + 3];
-  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(actionId) || !path.win32.isAbsolute(filePath) || !/^(?:[A-Za-z]:[\\/]|\\\\)/.test(filePath)
+  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(actionId) || !path.win32.isAbsolute(filePath) || !/^(?:[A-Za-z]:[\\/]|\\\\)/.test(filePath)
       || /[\x00-\x1f]/.test(filePath) || filePath.length > 4096) return null;
   return { actionId, filePath };
 }

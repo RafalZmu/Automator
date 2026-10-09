@@ -405,7 +405,7 @@ export const backendNotificationSchema = z.discriminatedUnion('method', [
 ]);
 
 export const fileExplorerLaunchRequestSchema = z.object({
-  actionId: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_-]+$/),
+  actionId: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9._-]{0,63}$/),
   filePath: absoluteWindowsPath.refine((value) => !/[\x00-\x1f]/.test(value)),
 }).strict();
 export type FileExplorerLaunchRequest = z.infer<typeof fileExplorerLaunchRequestSchema>;

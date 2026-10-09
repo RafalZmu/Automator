@@ -5,6 +5,18 @@ test('Explorer command parser preserves one Unicode path and rejects malformed c
   assert.deepEqual(parseFileExplorerLaunch(['Automator.exe', '--automator-file-action', 'backup', '--', 'C:\\Bazy danych\\żółć.fdb']), { actionId: 'backup', filePath: 'C:\\Bazy danych\\żółć.fdb' });
   for (const args of [[], ['--automator-file-action', 'backup'], ['--automator-file-action', '../evil', '--', 'C:\\a.fdb'], ['--automator-file-action', 'backup', '--', 'relative.fdb'], ['--automator-file-action', 'backup', '--', '\\rooted.fdb'], ['--automator-file-action', 'backup', '--', 'C:\\a.fdb', 'extra']]) assert.equal(parseFileExplorerLaunch(args), null);
 });
+test('Explorer action IDs use the backend profile ID contract', async () => {
+  const { parseFileExplorerLaunch } = await import('../../electron/fileExplorerLaunch.ts');
+  const { fileExplorerLaunchRequestSchema } = await import('../../contracts/rpc.ts');
+  const command = id => ['Automator.exe', '--automator-file-action', id, '--', 'C:\\database.fdb'];
+  assert.equal(parseFileExplorerLaunch(command('firebird.backup'))?.actionId, 'firebird.backup');
+  assert.equal(fileExplorerLaunchRequestSchema.safeParse({ actionId: 'firebird.backup', filePath: 'C:\\database.fdb' }).success, true);
+  assert.equal(parseFileExplorerLaunch(command('a'.repeat(64)))?.actionId, 'a'.repeat(64));
+  for (const id of ['Backup', '.backup', '-backup', '_backup', 'a'.repeat(65)]) {
+    assert.equal(parseFileExplorerLaunch(command(id)), null);
+    assert.equal(fileExplorerLaunchRequestSchema.safeParse({ actionId: id, filePath: 'C:\\database.fdb' }).success, false);
+  }
+});
 test('Explorer queue retains cold requests until ready and serializes existing-instance requests', async () => {
   const { FileExplorerLaunchQueue } = await import('../../electron/fileExplorerLaunch.ts');
   const queue = new FileExplorerLaunchQueue();
