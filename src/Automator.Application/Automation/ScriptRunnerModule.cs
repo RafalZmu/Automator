@@ -169,7 +169,7 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
     }
 
     private async Task<AutomationResult> RunProfileAsync(
-        JsonElement input, AutomationServicesContext services, CancellationToken cancellationToken, IReadOnlyList<string>? explorerArguments = null)
+        JsonElement input, AutomationServicesContext services, CancellationToken cancellationToken, IReadOnlyList<string>? explorerArguments = null, string? explorerFilePath = null)
     {
         var id = ReadId(input);
         var record = await services.Library!.GetAsync(ProfileCollection, id, cancellationToken).ConfigureAwait(false);
@@ -202,6 +202,8 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
             Validate(profile);
         }
         var runProfile = profile with { Arguments = transientArguments ?? explorerArguments ?? profile.Arguments };
+        if (explorerFilePath is not null)
+            runProfile = runProfile with { Arguments = runProfile.Arguments.Select(argument => argument.Replace(FilePathToken, explorerFilePath, StringComparison.Ordinal)).ToArray() };
         Validate(runProfile);
         var arguments = runProfile.Interpreter == ScriptRunnerInterpreter.Powershell
             ? new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", runProfile.ScriptPath }.Concat(runProfile.Arguments).ToArray()

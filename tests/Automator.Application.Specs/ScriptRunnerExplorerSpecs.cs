@@ -29,6 +29,17 @@ internal static class ScriptRunnerExplorerSpecs
             Ensure(list.Data.GetProperty("actions")[0].GetProperty("extensions").GetArrayLength() == 1, "normalize extensions");
             Ensure((await Call("runExplorerAction", new { id = "backup", filePath = file })).Status == AutomationStatus.Success, "run mapped file");
             Ensure(process.Last!.Arguments[1] == "--file=" + file, "structured file token substitution");
+            var variableFile = Path.Combine(root, "literal-{{variables.db}}.fdb"); File.WriteAllText(variableFile, "data");
+            var variableModule = new ScriptRunnerModule(new Variables());
+            var savedVariableRun = await variableModule.ExecuteAsync("runExplorerAction", JsonSerializer.SerializeToElement(new { id = "backup", filePath = variableFile }), settings, context, default);
+            Ensure(savedVariableRun.Status == AutomationStatus.Success && process.Last!.Arguments[1] == "--file=" + variableFile, "saved arguments preserve literal selected path");
+            var variableRun = await variableModule.ExecuteAsync("runExplorerAction", JsonSerializer.SerializeToElement(new { id = "backup", filePath = variableFile, arguments = new[] { "--file={{file.path}}", "{{variables.db}}" } }), settings, context, default);
+            Ensure(variableRun.Status == AutomationStatus.Success, variableRun.Message);
+            Ensure(process.Last!.Arguments[1] == "--file=" + variableFile, "selected filename variable syntax remains literal");
+            Ensure(process.Last.Arguments[2] == "expanded-db", "profile variables still expand");
+            var prefilledRun = await variableModule.ExecuteAsync("runExplorerAction", JsonSerializer.SerializeToElement(new { id = "backup", filePath = variableFile, arguments = new[] { "--file=" + variableFile, "{{variables.db}}" } }), settings, context, default);
+            Ensure(prefilledRun.Status == AutomationStatus.Success && process.Last!.Arguments[1] == "--file=" + variableFile, "prefilled transient path remains literal");
+            Ensure(process.Last!.Arguments[2] == "expanded-db", "transient argument variables still expand");
             Ensure((await Call("runExplorerAction", new { id = "backup", filePath = file, arguments = new[] { "edited", "{{file.path}}" } })).Status == AutomationStatus.Success, "transient arguments");
             Ensure(process.Last!.Arguments[1] == "edited" && process.Last.Arguments[2] == file, "transient values applied");
             var saved = await Call("listProfiles", new { });
@@ -76,6 +87,10 @@ internal static class ScriptRunnerExplorerSpecs
         finally { Directory.Delete(root, true); }
     }
     private static void Ensure(bool value, string message) { if (!value) throw new Exception(message); }
+    private sealed class Variables : IAutomationVariableProvider
+    {
+        public Task<AutomationVariableSnapshot> GetAsync(CancellationToken token) => Task.FromResult(new AutomationVariableSnapshot(1, new Dictionary<string, JsonElement> { ["db"] = JsonSerializer.SerializeToElement("expanded-db") }, []));
+    }
     private sealed class Menu : IAutomationFileExplorerMenu
     {
         public int Calls;

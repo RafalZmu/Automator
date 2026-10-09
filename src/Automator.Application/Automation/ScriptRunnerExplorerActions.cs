@@ -103,9 +103,11 @@ public sealed partial class ScriptRunnerModule
         if (input.TryGetProperty("templateValues", out _)) throw new InvalidDataException("Regular profiles do not accept template values.");
         var arguments = input.TryGetProperty("arguments", out var edited)
             ? JsonSerializer.Deserialize<string[]>(edited.GetRawText(), JsonOptions) ?? throw new InvalidDataException("Arguments are invalid.") : profile.Arguments;
-        var expanded = arguments.Select(value => value?.Replace(FilePathToken, path, StringComparison.Ordinal)!).ToArray();
-        Validate(profile with { Arguments = expanded });
-        var result = await RunProfileAsync(JsonSerializer.SerializeToElement(new { id = profile.Id }), services, token, expanded);
+        // The form can submit an already-prefilled path. Keep that exact path opaque
+        // while expanding profile variables, then insert it as literal file data.
+        var prepared = arguments.Select(value => value?.Replace(path, FilePathToken, StringComparison.Ordinal)!).ToArray();
+        Validate(profile with { Arguments = prepared });
+        var result = await RunProfileAsync(JsonSerializer.SerializeToElement(new { id = profile.Id }), services, token, prepared, path);
         return result with { Actions = [] };
     }
 }
