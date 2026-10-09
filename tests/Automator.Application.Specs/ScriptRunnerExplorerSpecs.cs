@@ -91,7 +91,11 @@ internal static class ScriptRunnerExplorerSpecs
             registrationMenu.Fail = true;
             var failedRegistration = await RegistrationCall("saveExplorerAction", map);
             Ensure(failedRegistration.Status == AutomationStatus.Success && failedRegistration.Data.GetProperty("registration").GetProperty("state").GetString() == "error", "registration failure preserves successful persistence");
-            Ensure((await RegistrationCall("listExplorerActions", new { })).Data.GetProperty("actions").GetArrayLength() == 1, "persisted mappings survive registry failure");
+            var failedListRegistration = await RegistrationCall("listExplorerActions", new { });
+            Ensure(failedListRegistration.Data.GetProperty("actions").GetArrayLength() == 1, "persisted mappings survive registry failure");
+            Ensure(failedListRegistration.Data.GetProperty("registration").GetProperty("message").GetString() == "The Explorer menu could not be updated. Reopen this section to retry.", "list registration error does not claim a save");
+            var failedDeleteRegistration = await RegistrationCall("deleteExplorerAction", new { id = "backup" });
+            Ensure(failedDeleteRegistration.Data.GetProperty("registration").GetProperty("message").GetString() == "The Explorer menu could not be updated. Reopen this section to retry.", "delete registration error does not claim a save");
             var beforeDisabled = registrationMenu.Calls;
             var disabledResult = await module.ExecuteAsync("listExplorerActions", JsonSerializer.SerializeToElement(new { }), settings, registrationContext, default);
             Ensure(registrationMenu.Calls == beforeDisabled && disabledResult.Data.GetProperty("registration").GetProperty("state").GetString() == "disabled", "disabled host never calls registry");

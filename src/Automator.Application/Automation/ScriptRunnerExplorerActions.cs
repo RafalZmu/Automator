@@ -55,8 +55,8 @@ public sealed partial class ScriptRunnerModule
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException
             or ArgumentException or System.Security.SecurityException or System.ComponentModel.Win32Exception)
         {
-            // The Library write has already succeeded. Surface a retryable registration error without losing the mapping.
-            return new("error", "The mapping was saved, but the Explorer menu could not be updated. Reopen this section to retry.");
+            // Registration is retryable and never rolls back persisted mapping changes.
+            return new("error", "The Explorer menu could not be updated. Reopen this section to retry.");
         }
     }
 

@@ -153,8 +153,7 @@ public sealed class WindowsAutomationFileExplorerMenu : IAutomationFileExplorerM
         if (Owned(command))
         {
             RemoveValue(command, "", ref changed);
-            RemoveValue(command, OwnerName, ref changed);
-            Prune(command, ref changed);
+            ReleaseEmptyOwnedKey(command, ref changed);
         }
         foreach (var name in new[] { "MUIVerb", "MultiSelectModel" }) RemoveValue(path, name, ref changed);
         ReleaseEmptyOwnedKey(path, ref changed);

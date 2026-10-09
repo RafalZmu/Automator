@@ -27,12 +27,18 @@ static class FileExplorerMenuSpecs
         Check.Equal(1, notifications);
         store.Write(fdb, "ForeignValue", "preserve");
         store.Write(fdb + @"\shell\backup", "ForeignValue", "preserve-child");
+        store.Write(fdb + @"\shell\backup\command", "ForeignValue", "preserve-command-value");
+        store.Write(fdb + @"\shell\backup\command\Foreign", "", "preserve-command-child");
         store.Write(fdb + @"\shell\Foreign", "", "preserve-key");
         adapter.ReconcileAsync([actions[1] with { Label = "ZIP updated", Extensions = [".fdb"] }], @"C:\Automator\Automator.exe", default).GetAwaiter().GetResult();
         Check.Equal("ZIP updated", store.Read(fdb + @"\shell\zip", "MUIVerb"));
         Check.False(store.Exists(txt));
         Check.Equal("preserve-child", store.Read(fdb + @"\shell\backup", "ForeignValue"));
         Check.Equal<string?>(null, store.Read(fdb + @"\shell\backup", "MUIVerb"));
+        Check.Equal<string?>(null, store.Read(fdb + @"\shell\backup\command", ""));
+        Check.Equal("preserve-command-value", store.Read(fdb + @"\shell\backup\command", "ForeignValue"));
+        Check.Equal("preserve-command-child", store.Read(fdb + @"\shell\backup\command\Foreign", ""));
+        Check.Equal("script-runner.explorer.v1", store.Read(fdb + @"\shell\backup\command", "AutomatorOwner"));
         adapter.ReconcileAsync([], @"C:\Automator\Automator.exe", default).GetAwaiter().GetResult();
         Check.Equal<string?>(null, store.Read(fdb, "MUIVerb"));
         Check.Equal("preserve", store.Read(fdb, "ForeignValue"));
@@ -43,6 +49,9 @@ static class FileExplorerMenuSpecs
         adapter.ReconcileAsync([actions[0] with { Extensions = [".fdb"] }], @"C:\Automator\Automator.exe", default).GetAwaiter().GetResult();
         Check.Equal("Backup", store.Read(fdb + @"\shell\backup", "MUIVerb"));
         Check.Equal("preserve-child", store.Read(fdb + @"\shell\backup", "ForeignValue"));
+        Check.Equal("preserve-command-value", store.Read(fdb + @"\shell\backup\command", "ForeignValue"));
+        Check.Equal("preserve-command-child", store.Read(fdb + @"\shell\backup\command\Foreign", ""));
+        Check.Equal("\"C:\\Automator\\Automator.exe\" --automator-file-action \"backup\" -- \"%1\"", store.Read(fdb + @"\shell\backup\command", ""));
         Check.Equal(4, notifications);
     }
 
@@ -51,6 +60,11 @@ static class FileExplorerMenuSpecs
         var store = new RegistryStore();
         var notifications = 0;
         ExplorerActionDefinition[] actions = [new("backup", "profile", "Backup", [".fdb"])];
+        Check.False(WindowsAutomationFileExplorerMenu.IsRegistrationEnabled(@"C:\Automator\Automator.exe", testMode: true, portable: false));
+        Check.False(WindowsAutomationFileExplorerMenu.IsRegistrationEnabled(@"C:\Automator\Automator.exe", testMode: false, portable: true));
+        Check.False(WindowsAutomationFileExplorerMenu.IsRegistrationEnabled(null, testMode: false, portable: false));
+        Check.False(WindowsAutomationFileExplorerMenu.IsRegistrationEnabled(@"C:\node\electron.exe", testMode: false, portable: false));
+        Check.True(WindowsAutomationFileExplorerMenu.IsRegistrationEnabled(@"C:\Automator\Automator.exe", testMode: false, portable: false));
         var disabled = new WindowsAutomationFileExplorerMenu(store, () => notifications++, enabled: false);
         disabled.ReconcileAsync(actions, @"C:\Automator\Automator.exe", default).GetAwaiter().GetResult();
         Check.Equal(0, store.Keys.Count);
