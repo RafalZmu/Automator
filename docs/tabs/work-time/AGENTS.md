@@ -18,7 +18,10 @@ Read the root AGENTS.md first. Slot 7 is the Work Time logger; the legacy Focus 
 - Add coordinator specs for time boundaries and renderer tests for duration/report formatting.
 - The transient “Count only working hours” checkbox is off by default and counts only local 08:00–16:00 overlap per calendar day. Apply it to timer and draft displays, saved-entry displays, report totals, and CSV duration columns without changing stored timestamps or durations.
 - Keep working-period overlap and duration derivation in `ui/modules/workTimeViewModel.ts`. The checkbox state is component-local and resets when the view is recreated; do not claim it is persisted.
-- The unmodified `S` key toggles the timer while this tab is active. Ignore it in editable controls and while a stopped interval is pending; expose the toggle in the tab command list on both surfaces.
+- The unmodified `S` key pauses the running timer, or focuses the New timer description when none is running. Never resume a paused timer implicitly. Ignore the shortcut in editable controls and expose it in the tab command list on both surfaces.
+- Keep the New timer description required and visible on both surfaces. A new timer can start only when no timer is running; users pause the current timer explicitly first.
+- Render every running/paused timer and every ended draft independently. Resume is unavailable while another timer runs. End/discard/save operations must target the selected ID; discarding a paused timer and discarding an ended draft require confirmation.
+- Prefill each ended draft's editable description and tags independently so saving one draft cannot overwrite details for another.
 
 ## Code and checks
 
@@ -26,4 +29,4 @@ UI: ui/modules/FocusSessionsView.tsx and FocusSessionsView.css (the component na
 Contracts/coordinator: src/Automator.Application/Automation/AutomationWorkTimeContracts.cs, AutomationWorkTimeCoordinator.cs, and FocusSessionsModule.cs.
 Tests: tests/electron/work-time-model.test.cjs and tests/Automator.Focus.Specs.
 
-Update the sibling README and TESTS.md when entry fields, recovery behavior, reports, precision, or automated cases change.
+Update the sibling README and TESTS.md when entry fields, recovery behavior, reports, precision, shortcut behavior, or automated cases change. Keep test titles and the described steps aligned with the test sources.

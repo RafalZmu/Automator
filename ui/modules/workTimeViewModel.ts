@@ -1,24 +1,33 @@
-export type WorkTimeActive = {
-  id: string;
+export type WorkTimeSegment = {
   startedUtc: string;
-  elapsedMilliseconds: number;
-  sampledUtc: string;
+  stoppedUtc: string | null;
 };
 
-export type WorkTimePending = {
+export type WorkTimeTimer = {
+  id: string;
+  description: string;
+  startedUtc: string;
+  status: 'running' | 'paused';
+  elapsedMilliseconds: number;
+  sampledUtc: string;
+  segments: WorkTimeSegment[];
+};
+
+export type WorkTimeEntry = {
   id: string;
   startedUtc: string;
   stoppedUtc: string;
   durationMilliseconds: number;
   description: string;
   tags: string[];
+  segments: WorkTimeSegment[];
 };
 
-export type WorkTimeEntry = WorkTimePending;
+export type WorkTimePending = WorkTimeEntry;
 
 export type WorkTimeSnapshot = {
-  active: WorkTimeActive | null;
-  pending: WorkTimePending | null;
+  timers: WorkTimeTimer[];
+  pendingEntries: WorkTimePending[];
   history: WorkTimeEntry[];
 };
 
@@ -36,11 +45,29 @@ function isDuration(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
-function readActive(value: unknown): WorkTimeActive | null | undefined {
-  if (value === null) return null;
-  if (!isObject(value) || typeof value.id !== 'string' || !value.id
-      || !isDate(value.startedUtc) || !isDate(value.sampledUtc) || !isDuration(value.elapsedMilliseconds)) return undefined;
-  return value as WorkTimeActive;
+function readSegments(value: unknown, allowOpen: boolean): WorkTimeSegment[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const segments: WorkTimeSegment[] = [];
+  for (const item of value) {
+    if (!isObject(item) || !isDate(item.startedUtc)
+        || !(item.stoppedUtc === null || isDate(item.stoppedUtc))) return null;
+    if (item.stoppedUtc !== null && Date.parse(item.stoppedUtc) < Date.parse(item.startedUtc)) return null;
+    segments.push(item as WorkTimeSegment);
+  }
+  const open = segments.filter((segment) => segment.stoppedUtc === null);
+  if ((!allowOpen && open.length) || (allowOpen && open.length > 1)
+      || (open.length === 1 && segments.at(-1)?.stoppedUtc !== null)) return null;
+  return segments;
+}
+
+function readTimer(value: unknown): WorkTimeTimer | null {
+  if (!isObject(value) || typeof value.id !== 'string' || !value.id || typeof value.description !== 'string'
+      || !value.description.trim() || !isDate(value.startedUtc) || !isDate(value.sampledUtc)
+      || !isDuration(value.elapsedMilliseconds) || (value.status !== 'running' && value.status !== 'paused')) return null;
+  const segments = readSegments(value.segments, value.status === 'running');
+  if (!segments || (value.status === 'running' && segments.at(-1)?.stoppedUtc !== null)
+      || (value.status === 'paused' && segments.at(-1)?.stoppedUtc === null)) return null;
+  return { ...value, segments } as WorkTimeTimer;
 }
 
 function readEntry(value: unknown, requireDescription = true): WorkTimeEntry | null {
@@ -49,21 +76,27 @@ function readEntry(value: unknown, requireDescription = true): WorkTimeEntry | n
       || !isDuration(value.durationMilliseconds) || typeof value.description !== 'string'
       || (requireDescription && !value.description.trim()) || !Array.isArray(value.tags)
       || !value.tags.every((tag) => typeof tag === 'string' && Boolean(tag.trim()))) return null;
-  return value as WorkTimeEntry;
+  const segments = readSegments(value.segments, false);
+  if (!segments || segments.some((segment) => Date.parse(segment.startedUtc) < Date.parse(value.startedUtc as string)
+      || Date.parse(segment.stoppedUtc!) > Date.parse(value.stoppedUtc as string))) return null;
+  return { ...value, segments } as WorkTimeEntry;
 }
 
 export function readWorkTimeSnapshot(value: unknown): WorkTimeSnapshot | null {
-  if (!isObject(value) || !Array.isArray(value.history)) return null;
-  const active = readActive(value.active);
-  const pending = value.pending === null ? null : readEntry(value.pending, false);
-  if (active === undefined || (value.pending !== null && !pending) || (active && pending)) return null;
+  if (!isObject(value) || !Array.isArray(value.timers) || !Array.isArray(value.pendingEntries) || !Array.isArray(value.history)) return null;
+  const timers = value.timers.map(readTimer);
+  const pendingEntries = value.pendingEntries.map((entry) => readEntry(entry, false));
+  if (timers.some((timer) => !timer) || pendingEntries.some((entry) => !entry)
+      || timers.filter((timer) => timer?.status === 'running').length > 1) return null;
   if (!value.history.every((entry) => readEntry(entry) !== null)) return null;
-  return { active, pending, history: value.history.map((entry) => readEntry(entry)!).slice(-500) };
+  const allIds = [...timers, ...pendingEntries, ...value.history.map((entry) => readEntry(entry)!)].map((item) => item!.id);
+  if (new Set(allIds).size !== allIds.length) return null;
+  return { timers: timers as WorkTimeTimer[], pendingEntries: pendingEntries as WorkTimePending[], history: value.history.map((entry) => readEntry(entry)!).slice(-500) };
 }
 
-export function elapsedWorkTimeMilliseconds(active: WorkTimeActive, now = Date.now()): number {
-  const sampled = Date.parse(active.sampledUtc);
-  return Math.max(0, active.elapsedMilliseconds + (Number.isFinite(sampled) ? now - sampled : 0));
+export function elapsedWorkTimeMilliseconds(timer: WorkTimeTimer, now = Date.now()): number {
+  const sampled = Date.parse(timer.sampledUtc);
+  return Math.max(0, timer.elapsedMilliseconds + (timer.status === 'running' && Number.isFinite(sampled) ? now - sampled : 0));
 }
 
 function workTimeIntervalDailyOverlaps(startedUtc: string, stoppedUtc: string): Map<string, number> {
@@ -90,9 +123,20 @@ export function calculateWorkTimeIntervalMilliseconds(startedUtc: string, stoppe
   return [...workTimeIntervalDailyOverlaps(startedUtc, stoppedUtc).values()].reduce((total, overlap) => total + overlap, 0);
 }
 
-export function workTimeEntryDurationMilliseconds(entry: Pick<WorkTimeEntry, 'startedUtc' | 'stoppedUtc' | 'durationMilliseconds'>, workingPeriodOnly = false): number {
+function workTimeSegmentOverlaps(segments: readonly WorkTimeSegment[]): Map<string, number> {
+  const overlaps = new Map<string, number>();
+  for (const segment of segments) {
+    if (!segment.stoppedUtc) continue;
+    for (const [date, duration] of workTimeIntervalDailyOverlaps(segment.startedUtc, segment.stoppedUtc)) {
+      overlaps.set(date, (overlaps.get(date) ?? 0) + duration);
+    }
+  }
+  return overlaps;
+}
+
+export function workTimeEntryDurationMilliseconds(entry: Pick<WorkTimeEntry, 'startedUtc' | 'stoppedUtc' | 'durationMilliseconds' | 'segments'>, workingPeriodOnly = false): number {
   return workingPeriodOnly
-    ? calculateWorkTimeIntervalMilliseconds(entry.startedUtc, entry.stoppedUtc)
+    ? [...workTimeSegmentOverlaps(entry.segments).values()].reduce((total, overlap) => total + overlap, 0)
     : entry.durationMilliseconds;
 }
 
@@ -134,7 +178,7 @@ export function calculateWorkTimeReportTotals(entries: readonly WorkTimeEntry[],
     if (workingPeriodOnly) {
       let entryContributesToday = false;
       let entryContributesThisWeek = false;
-      for (const [entryDate, duration] of workTimeIntervalDailyOverlaps(entry.startedUtc, entry.stoppedUtc)) {
+      for (const [entryDate, duration] of workTimeSegmentOverlaps(entry.segments)) {
         if (entryDate === today) {
           todayMilliseconds += duration;
           entryContributesToday = true;

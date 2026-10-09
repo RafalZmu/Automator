@@ -1,29 +1,29 @@
 # Work Time test coverage
 
-This file documents Work Time snapshot validation, elapsed-time and report calculations, keyboard shortcut behavior, and its Workspace reporting flow. Test titles match their node:test descriptions.
+This file documents Work Time snapshot validation, elapsed-time and report calculations, keyboard shortcut behavior, multi-timer controls, and Workspace reporting. Test titles match their node:test descriptions.
 
 Run focused model cases with node --experimental-strip-types --test --test-concurrency=1 tests/electron/work-time-model.test.cjs. Run the Electron report flow after npm.cmd run build:desktop with node --experimental-strip-types --test --test-concurrency=1 tests/electron/ui-flow.test.cjs. The complete suite is npm.cmd run verify; backend coordinator specs are included in npm.cmd run test:dotnet.
 
 ## Work Time model tests — tests/electron/work-time-model.test.cjs
 
-### work-time snapshot validates active, pending, and saved entries
+### work-time snapshot validates multiple running and paused timers, drafts, and saved entries
 
 **Steps**
 
-1. Read a snapshot with a valid active interval.
-2. Try a snapshot containing active and pending intervals together.
-3. Try a negative active duration and a saved history entry with a blank description.
+1. Read a snapshot with one valid running timer and its open segment.
+2. Try a snapshot with two running timers and a paused timer without a closed segment.
+3. Try a negative timer duration and a saved history entry with a blank description.
 
-**Expected result:** Valid state is accepted; conflicting active/pending state, negative duration, and undescribed saved history are rejected.
+**Expected result:** Multiple timers are accepted when at most one runs; inconsistent segments, negative duration, and undescribed saved history are rejected.
 
-### work-time snapshot accepts an undescribed pending interval but rejects it as saved history
+### work-time snapshot accepts undescribed ended drafts but rejects them as saved history
 
 **Steps**
 
-1. Read an undescribed stopped interval in the pending field.
+1. Read an undescribed ended interval in the pendingEntries collection.
 2. Move the same record into saved history and read again.
 
-**Expected result:** The pending interval is preserved for later completion; saved history still requires a description.
+**Expected result:** The ended draft is preserved for later completion; saved history still requires a description.
 
 ### work-time display clock advances from a sampled backend duration
 
@@ -34,15 +34,16 @@ Run focused model cases with node --experimental-strip-types --test --test-concu
 
 **Expected result:** The display advances from the sampled duration and formats seconds, minutes, and hours without rounding short intervals up.
 
-### work-time working-period duration counts only local 08:00 to 16:00 overlap across midnight
+### work-time working-period duration counts only running segments and excludes paused gaps
 
 **Steps**
 
 1. Calculate working time for an interval spanning 07:30–17:00.
 2. Calculate an interval spanning 15:30 to 09:30 the next day.
-3. Calculate an interval entirely outside working hours.
+3. Calculate two segments on the same day with a paused gap between them.
+4. Read a migrated history entry whose stored elapsed duration exceeds its one known segment, then calculate both durations.
 
-**Expected result:** Only each local day's 08:00–16:00 overlap counts, including across midnight.
+**Expected result:** Only each local day's 08:00–16:00 overlap counts, including across midnight; paused gaps and unknown legacy time are excluded from working-period totals while stored elapsed duration remains intact.
 
 ### work-time reports calculate local daily and Monday-based weekly totals
 
@@ -140,25 +141,26 @@ The test filename and view-model module retain the old Focus Sessions name for c
 
 ## Workspace end-to-end test — tests/electron/ui-flow.test.cjs
 
-### Work Time reports are Workspace-only and support editing, filtering, CSV export, and deletion
+### Work Time supports multiple named timers and Workspace-only reports with editing, filtering, CSV export, and deletion
 
 **Steps**
 
 1. Open Work Time in the compact launcher and verify that report controls are absent.
-2. Open Workspace, start and stop an interval, then save a description and tags.
-3. Filter the saved row, edit its description and tags, then export the filtered report to an isolated CSV path.
-4. Verify CSV content, confirm deletion, and check that reports remain absent from the compact launcher.
+2. Name and start timer A, pause it, then start and end timer B; save B's prefilled draft with tags.
+3. Open Workspace, resume A, pause and end it, edit its description and tags, then save it as a separate entry.
+4. Filter the saved rows, edit a saved description and tags, then export the filtered report to an isolated CSV path.
+5. Verify CSV content, confirm deletion, and check that reports remain absent from the compact launcher.
 
-**Expected result:** Reporting and history editing are available in Workspace only; filtering, editing, export, and deletion work without exposing report controls in the compact launcher.
+**Expected result:** Named timers pause, resume, end, and save independently in both surfaces. Reporting and history editing are available in Workspace only; filtering, editing, export, and deletion work without exposing report controls in the compact launcher.
 
 ## Electron happy-path visibility — tests/electron/tab-happy-path-visibility.test.cjs
 
-### Work Time entry happy path keeps timer save and report buttons within visible bounds
+### Work Time named timer and report happy path keeps controls within visible bounds
 
 **Steps**
 
 1. Open Workspace through its checked button and select Work Time.
-2. Check Start work and Stop work before using them; enter a description and tag and use checked Save entry.
+2. Enter a required timer description, check Start timer and Pause timer before using them, then end the paused timer and save its prefilled description with a tag.
 3. Check the saved entry's Edit button, change the description, and use checked Save work entry changes.
 4. Route the save dialog to isolated data, check Export filtered work log as CSV before exporting, and inspect the CSV.
 5. Check Delete and Confirm delete work entry before deleting, then verify the saved row disappears.
@@ -173,7 +175,7 @@ Persistence, recovery, coordinator state transitions, and notification behavior 
 
 ## Work Time backend/API version 2
 
-The cases below are executed by `npm.cmd run test:dotnet`. The existing renderer cases above still describe the version 1 UI until its separate migration. Backend tests exercise the current version 2 contract.
+The coordinator and API cases below are executed by `npm.cmd run test:dotnet`. Renderer model and Electron cases above exercise the current version 2 UI and API.
 
 ### work time requires a description and persists optional tags to history
 

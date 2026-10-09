@@ -6,20 +6,25 @@ const { test } = require('node:test');
 const workspace = path.resolve(__dirname, '../..');
 const modelUrl = pathToFileURL(path.join(workspace, 'ui', 'modules', 'workTimeViewModel.ts')).href;
 
-test('work-time snapshot validates active, pending, and saved entries', async () => {
+test('work-time snapshot validates multiple running and paused timers, drafts, and saved entries', async () => {
   const { readWorkTimeSnapshot } = await import(modelUrl);
+  const segment = { startedUtc: '2026-10-03T12:00:00Z', stoppedUtc: '2026-10-03T12:00:30Z' };
   const valid = {
-    active: { id: 'work-1', startedUtc: '2026-10-03T12:00:00Z', elapsedMilliseconds: 30_000, sampledUtc: '2026-10-03T12:00:30Z' },
-    pending: null,
+    timers: [{ id: 'work-1', description: 'A', startedUtc: '2026-10-03T12:00:00Z', status: 'running', elapsedMilliseconds: 30_000,
+      sampledUtc: '2026-10-03T12:00:30Z', segments: [{ ...segment, stoppedUtc: null }] }],
+    pendingEntries: [],
     history: [],
   };
-  assert.equal(readWorkTimeSnapshot(valid)?.active?.id, 'work-1');
-  assert.equal(readWorkTimeSnapshot({ ...valid, pending: { id: 'work-2' } }), null, 'active and pending cannot coexist');
-  assert.equal(readWorkTimeSnapshot({ ...valid, active: { ...valid.active, elapsedMilliseconds: -1 } }), null);
+  assert.equal(readWorkTimeSnapshot(valid)?.timers[0].id, 'work-1');
+  assert.equal(readWorkTimeSnapshot({ ...valid, timers: [valid.timers[0], { ...valid.timers[0], id: 'work-2', status: 'running' }] }), null,
+    'only one timer can be running');
+  assert.equal(readWorkTimeSnapshot({ ...valid, timers: [{ ...valid.timers[0], elapsedMilliseconds: -1 }] }), null);
+  assert.equal(readWorkTimeSnapshot({ ...valid, timers: [{ ...valid.timers[0], status: 'paused' }] }), null,
+    'paused timers cannot have an open segment');
   assert.equal(readWorkTimeSnapshot({ ...valid, history: [{ description: ' ' }] }), null);
 });
 
-test('work-time snapshot accepts an undescribed pending interval but rejects it as saved history', async () => {
+test('work-time snapshot accepts undescribed ended drafts but rejects them as saved history', async () => {
   const { readWorkTimeSnapshot } = await import(modelUrl);
   const pending = {
     id: 'work-pending',
@@ -28,19 +33,21 @@ test('work-time snapshot accepts an undescribed pending interval but rejects it 
     durationMilliseconds: 20_000,
     description: '',
     tags: [],
+    segments: [{ startedUtc: '2026-10-03T12:00:00Z', stoppedUtc: '2026-10-03T12:00:20Z' }],
   };
 
-  const snapshot = readWorkTimeSnapshot({ active: null, pending, history: [] });
-  assert.deepEqual(snapshot?.pending, pending);
-  assert.equal(readWorkTimeSnapshot({ active: null, pending: null, history: [pending] }), null,
+  const snapshot = readWorkTimeSnapshot({ timers: [], pendingEntries: [pending], history: [] });
+  assert.deepEqual(snapshot?.pendingEntries, [pending]);
+  assert.equal(readWorkTimeSnapshot({ timers: [], pendingEntries: [], history: [pending] }), null,
     'saved history still requires a description');
 });
 
 test('work-time display clock advances from a sampled backend duration', async () => {
   const { elapsedWorkTimeMilliseconds, formatWorkTimeDuration } = await import(modelUrl);
   const sample = {
-    id: 'work-1', startedUtc: '2026-10-03T12:00:00Z', elapsedMilliseconds: 120_000,
+    id: 'work-1', description: 'A', status: 'running', startedUtc: '2026-10-03T12:00:00Z', elapsedMilliseconds: 120_000,
     sampledUtc: '2026-10-03T12:02:00Z',
+    segments: [{ startedUtc: '2026-10-03T12:00:00Z', stoppedUtc: null }],
   };
   assert.equal(elapsedWorkTimeMilliseconds(sample, Date.parse('2026-10-03T12:02:10Z')), 130_000);
   assert.equal(formatWorkTimeDuration(1_000), '1s');
@@ -51,7 +58,7 @@ test('work-time display clock advances from a sampled backend duration', async (
   assert.equal(formatWorkTimeDuration(62 * 60_000), '1h 2m');
 });
 
-test('work-time working-period duration counts only local 08:00 to 16:00 overlap across midnight', async () => {
+test('work-time working-period duration counts only running segments and excludes paused gaps', async () => {
   const { calculateWorkTimeIntervalMilliseconds } = await import(modelUrl);
   const interval = (start, stop, nextDay = false) => calculateWorkTimeIntervalMilliseconds(
     new Date(2026, 9, 6, ...start).toISOString(), new Date(2026, 9, 6 + Number(nextDay), ...stop).toISOString());
@@ -59,6 +66,26 @@ test('work-time working-period duration counts only local 08:00 to 16:00 overlap
   assert.equal(interval([7, 30], [17, 0]), 8 * 60 * 60_000);
   assert.equal(interval([15, 30], [9, 30], true), 2 * 60 * 60_000);
   assert.equal(interval([17, 0], [7, 0]), 0);
+  const { readWorkTimeSnapshot, workTimeEntryDurationMilliseconds } = await import(modelUrl);
+  const split = {
+    startedUtc: new Date(2026, 9, 6, 7, 30).toISOString(), stoppedUtc: new Date(2026, 9, 6, 17).toISOString(),
+    durationMilliseconds: 2 * 60 * 60_000,
+    segments: [
+      { startedUtc: new Date(2026, 9, 6, 7, 30).toISOString(), stoppedUtc: new Date(2026, 9, 6, 9).toISOString() },
+      { startedUtc: new Date(2026, 9, 6, 15).toISOString(), stoppedUtc: new Date(2026, 9, 6, 17).toISOString() },
+    ],
+  };
+  assert.equal(workTimeEntryDurationMilliseconds(split, true), 2 * 60 * 60_000);
+  const legacyUnknownBoundary = {
+    id: 'legacy', startedUtc: new Date(2026, 9, 6, 9).toISOString(), stoppedUtc: new Date(2026, 9, 6, 15, 30).toISOString(),
+    durationMilliseconds: 90 * 60_000, description: 'legacy', tags: [],
+    segments: [{ startedUtc: new Date(2026, 9, 6, 15).toISOString(), stoppedUtc: new Date(2026, 9, 6, 15, 30).toISOString() }],
+  };
+  const migrated = readWorkTimeSnapshot({ timers: [], pendingEntries: [], history: [legacyUnknownBoundary] });
+  assert.ok(migrated, 'known segments may cover only part of a preserved legacy elapsed duration');
+  assert.equal(workTimeEntryDurationMilliseconds(migrated.history[0]), 90 * 60_000);
+  assert.equal(workTimeEntryDurationMilliseconds(migrated.history[0], true), 30 * 60_000,
+    'working-period reports count only the segment with known boundaries');
 });
 
 test('work-time reports calculate local daily and Monday-based weekly totals', async () => {
@@ -70,6 +97,7 @@ test('work-time reports calculate local daily and Monday-based weekly totals', a
     durationMilliseconds,
     description: id,
     tags,
+    segments: [{ startedUtc: started.toISOString(), stoppedUtc: new Date(started.getTime() + durationMilliseconds).toISOString() }],
   });
   const now = new Date(2026, 9, 7, 12, 0, 0);
   const entries = [
@@ -95,6 +123,7 @@ test('work-time report totals and CSV can use working-period durations while pre
     durationMilliseconds: 18 * 60 * 60_000,
     description: 'overnight',
     tags: [],
+    segments: [{ startedUtc: new Date(2026, 9, 6, 15, 30).toISOString(), stoppedUtc: new Date(2026, 9, 7, 9, 30).toISOString() }],
   };
   const totals = calculateWorkTimeReportTotals([entry], new Date(2026, 9, 7, 12), true);
   const csv = createWorkTimeCsv([entry], true);
@@ -131,6 +160,7 @@ test('work-time CSV export preserves exact milliseconds and escapes spreadsheet 
     durationMilliseconds: 1_234,
     description: '=SUM(1,"2")',
     tags: ['planning, review'],
+    segments: [{ startedUtc: '2026-10-07T07:00:00.000Z', stoppedUtc: '2026-10-07T07:00:01.234Z' }],
   };
 
   assert.equal(createWorkTimeCsv([entry]), [
