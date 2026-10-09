@@ -36,7 +36,7 @@ public sealed record ScriptRunnerProfile(
 public sealed record ScriptRunnerTemplateOrigin(string Id, int Version);
 
 /// <summary>Reusable Python, Bash, and PowerShell profiles with bounded process results.</summary>
-public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
+public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
 {
     private readonly IAutomationVariableProvider? _variables;
     private readonly ScriptRunnerTemplateInstaller _templateInstaller;
@@ -71,6 +71,10 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
             new("saveProfile", 1, [LibraryCapability]),
             new("deleteProfile", 1, [LibraryCapability]),
             new("runProfile", 1, [LibraryCapability, ProcessCapability]),
+            new("listExplorerActions", 1, [LibraryCapability]),
+            new("saveExplorerAction", 1, [LibraryCapability]),
+            new("deleteExplorerAction", 1, [LibraryCapability]),
+            new("runExplorerAction", 1, [LibraryCapability, ProcessCapability]),
         ]);
 
     public int ContractVersion => Definition.ContractVersion;
@@ -99,6 +103,10 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
         {
             return actionId switch
             {
+                "listExplorerActions" => await ListExplorerActionsAsync(services, cancellationToken),
+                "saveExplorerAction" => await SaveExplorerActionAsync(input, services, cancellationToken),
+                "deleteExplorerAction" => await DeleteExplorerActionAsync(input, services, cancellationToken),
+                "runExplorerAction" => await RunExplorerActionAsync(input, services, cancellationToken),
                 "listProfiles" => await ListProfilesAsync(services, cancellationToken).ConfigureAwait(false),
                 "listTemplates" => ListTemplates(),
                 "installTemplate" => await InstallTemplateAsync(input, moduleSettings, services, cancellationToken).ConfigureAwait(false),
@@ -154,12 +162,14 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
     {
         var id = ReadId(input);
         var deleted = await services.Library!.DeleteAsync(ProfileCollection, id, cancellationToken).ConfigureAwait(false);
+        foreach (var action in await ReadExplorerActionsAsync(services, cancellationToken))
+            if (action.ProfileId == id) await services.Library.DeleteAsync(ExplorerActionCollection, action.Id, cancellationToken);
         return Result(deleted ? AutomationStatus.Success : AutomationStatus.Information,
             deleted ? "Script profile removed." : "Script profile was already removed.", new { id, deleted });
     }
 
     private async Task<AutomationResult> RunProfileAsync(
-        JsonElement input, AutomationServicesContext services, CancellationToken cancellationToken)
+        JsonElement input, AutomationServicesContext services, CancellationToken cancellationToken, IReadOnlyList<string>? explorerArguments = null)
     {
         var id = ReadId(input);
         var record = await services.Library!.GetAsync(ProfileCollection, id, cancellationToken).ConfigureAwait(false);
@@ -187,10 +197,12 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
         if (_variables is not null)
         {
             var globals = await _variables.GetAsync(cancellationToken).ConfigureAwait(false);
-            profile = profile with { Arguments = profile.Arguments.Select(argument => AutomationVariableInterpolation.Expand(argument, globals.Values)).ToArray() };
+            profile = profile with { Arguments = (explorerArguments ?? profile.Arguments).Select(argument => AutomationVariableInterpolation.Expand(argument, globals.Values)).ToArray() };
+            explorerArguments = null;
             Validate(profile);
         }
-        var runProfile = transientArguments is null ? profile : profile with { Arguments = transientArguments };
+        var runProfile = profile with { Arguments = transientArguments ?? explorerArguments ?? profile.Arguments };
+        Validate(runProfile);
         var arguments = runProfile.Interpreter == ScriptRunnerInterpreter.Powershell
             ? new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", runProfile.ScriptPath }.Concat(runProfile.Arguments).ToArray()
             : new[] { runProfile.ScriptPath }.Concat(runProfile.Arguments).ToArray();

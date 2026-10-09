@@ -46,7 +46,7 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         IAutomationSecretManager? secrets = null, IAutomationApiProfileRunner? apiProfiles = null,
         IAutomationBrowserService? browser = null, IAutomationWorkflowRunner? workflows = null,
         IAutomationSchedulerCoordinator? scheduler = null, IAutomationFocusSessionCoordinator? focusSessions = null,
-        IAutomationWorkTimeCoordinator? workTime = null, IAutomationWebsiteLauncher? websiteLauncher = null)
+        IAutomationWorkTimeCoordinator? workTime = null, IAutomationWebsiteLauncher? websiteLauncher = null, IAutomationFileExplorerMenu? fileExplorerMenu = null)
     {
         ModuleId = moduleId;
         _lifetimeToken = _lifetime.Token;
@@ -61,6 +61,7 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         Scheduler = scheduler is null ? null : new ContextSchedulerCoordinator(this, scheduler);
         FocusSessions = focusSessions is null ? null : new ContextFocusCoordinator(this, focusSessions);
         WorkTime = workTime is null ? null : new ContextWorkTimeCoordinator(this, workTime);
+        FileExplorerMenu = fileExplorerMenu is null ? null : new ContextFileExplorerMenu(this, fileExplorerMenu);
         WebsiteLauncher = websiteLauncher is null ? null : new ContextWebsiteLauncher(this, websiteLauncher);
     }
 
@@ -76,6 +77,7 @@ public sealed class AutomationServicesContext : IAsyncDisposable
     public IAutomationSchedulerCoordinator? Scheduler { get; }
     public IAutomationFocusSessionCoordinator? FocusSessions { get; }
     public IAutomationWorkTimeCoordinator? WorkTime { get; }
+    public IAutomationFileExplorerMenu? FileExplorerMenu { get; }
     public IAutomationWebsiteLauncher? WebsiteLauncher { get; }
     public CancellationToken LifetimeToken => _lifetimeToken;
     public bool HasCapability(string capabilityId) => capabilityId switch
@@ -91,6 +93,7 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         AutomationCapabilityIds.SchedulerManagement => Scheduler is not null,
         AutomationCapabilityIds.FocusManagement => FocusSessions is not null,
         AutomationCapabilityIds.WorkTimeManagement => WorkTime is not null,
+        AutomationCapabilityIds.FileExplorerMenu => FileExplorerMenu is not null,
         AutomationCapabilityIds.WebsiteLaunch => WebsiteLauncher is not null,
         _ => false,
     };
@@ -415,6 +418,15 @@ public sealed class AutomationServicesContext : IAsyncDisposable
             ObjectDisposedException.ThrowIf(Volatile.Read(ref context._disposed) != 0, context);
             using var linked = Link(context, cancellationToken);
             await inner.LaunchAsync(groups, linked.Token).ConfigureAwait(false);
+        }
+    }
+
+    private sealed class ContextFileExplorerMenu(AutomationServicesContext context, IAutomationFileExplorerMenu inner) : IAutomationFileExplorerMenu
+    {
+        public async Task ReconcileAsync(IReadOnlyList<ExplorerActionDefinition> entries, string executablePath, CancellationToken cancellationToken)
+        {
+            using var linked = Link(context, cancellationToken);
+            await inner.ReconcileAsync(entries, executablePath, linked.Token).ConfigureAwait(false);
         }
     }
 

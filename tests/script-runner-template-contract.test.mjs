@@ -44,3 +44,12 @@ test('Script template contract rejects duplicate IDs, keys, argument mappings, a
   ]) assert.throws(() => parseScriptTemplateCatalog([{ ...firebird, ...change }]));
   assert.throws(() => parseScriptTemplateCatalog([{ ...firebird, assetId: '../other.ps1' }]));
 });
+
+test('Explorer mapping contract normalizes extensions and rejects unsafe or malformed mappings', async () => {
+  const { parseExplorerActions } = await import('../contracts/scriptRunner.ts');
+  const action = { id: 'backup', profileId: 'saved-backup', label: 'Backup', extensions: ['.FDB', '.fdb'], fileParameterKey: 'database' };
+  assert.deepEqual(parseExplorerActions([action]), [{ ...action, extensions: ['.fdb'] }]);
+  for (const change of [{ id: '../evil' }, { profileId: '' }, { label: 'x\ncommand' }, { extensions: ['.*'] }, { extensions: ['fdb'] }, { fileParameterKey: '../path' }])
+    assert.throws(() => parseExplorerActions([{ ...action, ...change }]));
+  assert.throws(() => parseExplorerActions([action, action]));
+});

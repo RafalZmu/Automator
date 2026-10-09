@@ -141,3 +141,40 @@ export function validateScriptTemplateValues(template: ScriptTemplateDescriptor,
   }
   return result;
 }
+
+export type ExplorerActionDefinition = {
+  id: string;
+  profileId: string;
+  label: string;
+  extensions: string[];
+  fileParameterKey?: string;
+};
+
+export type ExplorerActionRunInput = {
+  id: string;
+  filePath: string;
+  arguments?: string[];
+  templateValues?: Record<string, ScriptTemplateValue>;
+};
+
+export function parseExplorerActions(value: unknown): ExplorerActionDefinition[] {
+  if (!Array.isArray(value) || value.length > 1024) throw new Error('Explorer actions are invalid.');
+  const ids = new Set<string>();
+  return value.map(raw => {
+    const item = object(raw);
+    const id = bounded(item.id, 'Explorer action ID', 64);
+    const profileId = bounded(item.profileId, 'Profile ID', 64);
+    if (!templateIdPattern.test(id) || !templateIdPattern.test(profileId) || ids.has(id)) throw new Error('Explorer action IDs are invalid or duplicated.');
+    ids.add(id);
+    const label = bounded(item.label, 'Menu label', 128);
+    if (/[\x00-\x1f\x7f]/.test(label)) throw new Error('Menu label is invalid.');
+    if (!Array.isArray(item.extensions) || item.extensions.length < 1 || item.extensions.length > 32) throw new Error('File extensions are invalid.');
+    const extensions = item.extensions.map(value => {
+      if (typeof value !== 'string' || !/^\.[a-z0-9][a-z0-9_-]{0,31}$/i.test(value)) throw new Error('File extension is invalid.');
+      return value.toLowerCase();
+    });
+    const fileParameterKey = item.fileParameterKey == null ? undefined : bounded(item.fileParameterKey, 'File parameter key', 64);
+    if (fileParameterKey && !parameterKeyPattern.test(fileParameterKey)) throw new Error('File parameter key is invalid.');
+    return { id, profileId, label, extensions: [...new Set(extensions)], fileParameterKey };
+  });
+}

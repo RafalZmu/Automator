@@ -15,7 +15,8 @@ public sealed class AutomationCapabilityRegistry(
     Func<string, IAutomationSchedulerCoordinator>? schedulerCoordinatorFactory = null,
     Func<string, IAutomationFocusSessionCoordinator>? focusCoordinatorFactory = null,
     Func<string, IAutomationWorkTimeCoordinator>? workTimeCoordinatorFactory = null,
-    Func<string, IAutomationWebsiteLauncher>? websiteLauncherFactory = null)
+    Func<string, IAutomationWebsiteLauncher>? websiteLauncherFactory = null,
+    Func<string, IAutomationFileExplorerMenu>? fileExplorerMenuFactory = null)
 {
     private static readonly IReadOnlyDictionary<string, int> Supported = new Dictionary<string, int>(StringComparer.Ordinal)
     {
@@ -31,6 +32,7 @@ public sealed class AutomationCapabilityRegistry(
         [AutomationCapabilityIds.FocusManagement] = 1,
         [AutomationCapabilityIds.WorkTimeManagement] = 1,
         [AutomationCapabilityIds.WebsiteLaunch] = 1,
+        [AutomationCapabilityIds.FileExplorerMenu] = 1,
     };
 
     public AutomationServicesContext CreateContext(AutomationModuleDescriptor descriptor)
@@ -118,8 +120,13 @@ public sealed class AutomationCapabilityRegistry(
             websiteLauncher = websiteLauncherFactory?.Invoke(descriptor.ModuleId)
                 ?? throw new InvalidOperationException("The website launch capability has no host service registered.");
 
+        IAutomationFileExplorerMenu? fileExplorerMenu = null;
+        if (capabilityIds.Contains(AutomationCapabilityIds.FileExplorerMenu))
+            fileExplorerMenu = fileExplorerMenuFactory?.Invoke(descriptor.ModuleId)
+                ?? throw new InvalidOperationException("The File Explorer menu capability has no host service registered.");
+
         return new AutomationServicesContext(descriptor.ModuleId, keyboard, http, library, process,
-            secrets, apiProfiles, browser, workflows, scheduler, focusSessions, workTime, websiteLauncher);
+            secrets, apiProfiles, browser, workflows, scheduler, focusSessions, workTime, websiteLauncher, fileExplorerMenu);
     }
 
     public void ValidateRequirements(string moduleId, IReadOnlyList<AutomationCapabilityRequirement> capabilities)

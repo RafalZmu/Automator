@@ -16,5 +16,6 @@ public static class AutomationCapabilityIds
     public const string SchedulerManagement = "scheduler.manage";
     public const string FocusManagement = "focus.manage";
     public const string WorkTimeManagement = "work-time.management";
+    public const string FileExplorerMenu = "file-explorer.menu";
     public const string WebsiteLaunch = "website.launch";
 }
