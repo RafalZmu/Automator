@@ -309,6 +309,17 @@ Script Runner installation, trusted template origin, execution, and persisted pr
 
 **Expected result:** Each label resolves exactly one input on its own card and IDs are unique between instances.
 
+### stopping an Explorer template run clears sensitive inputs and preserves editable non-sensitive values
+
+**Steps**
+
+1. Install and map the Firebird Backup template, launch its Explorer form, and fill destinations, username, and a test password.
+2. Simulate an in-flight module action whose cancellation rejects the pending request.
+3. Press Run and Stop run, then inspect the still-open form.
+4. Enter a replacement password and Cancel.
+
+**Expected result:** Stop clears every sensitive template value, retains selected file and non-sensitive inputs, and leaves the form editable for another run.
+
 ## Explorer launch bridge — tests/electron/file-explorer-launch.test.cjs
 
 ### Explorer command parser preserves one Unicode path and rejects malformed commands

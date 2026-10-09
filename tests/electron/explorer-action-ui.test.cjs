@@ -193,3 +193,46 @@ test('Firebird Library card path labels address the input on each card', async (
     assert.equal(await zippedInput.evaluate(element => element.closest('.script-template-row').textContent.includes('Firebird 3 database backup and ZIP')), true);
   } finally { await app.close(); }
 });
+test('stopping an Explorer template run clears sensitive inputs and preserves editable non-sensitive values', async () => {
+  const { app, page, data, source, dispatch, launch } = await fixture();
+  try {
+    const installed = await dispatch('installTemplate', { id: 'firebird-3-backup' });
+    assert.notEqual(installed.status, 'error', installed.message);
+    const mapped = await dispatch('saveExplorerAction', { id: 'stoppable-template', profileId: installed.data.profile.id, label: 'Stoppable template', extensions: ['.fdb'], fileParameterKey: 'database' });
+    assert.notEqual(mapped.status, 'error', mapped.message);
+    await launch('stoppable-template');
+    const form = page.getByRole('region', { name: 'Run Explorer action', exact: true });
+    await form.waitFor();
+    const backup = path.join(data, 'retained backup.fbk');
+    const gbak = path.join(data, 'fixture gbak.exe');
+    await form.getByLabel('Backup file *', { exact: true }).fill(backup);
+    await form.getByLabel('gbak executable *', { exact: true }).fill(gbak);
+    await form.getByLabel('Username *', { exact: true }).fill('retained-user');
+    await form.getByLabel('Password *', { exact: true }).fill('transient-test-secret');
+    await app.evaluate(({ ipcMain }) => {
+      let rejectRun;
+      ipcMain.removeHandler('automator:module-action');
+      ipcMain.handle('automator:module-action', (_event, request) => {
+        if (request.actionId !== 'runExplorerAction') throw new Error('Unexpected mocked action.');
+        return new Promise((_resolve, reject) => { rejectRun = reject; });
+      });
+      ipcMain.removeHandler('automator:module-action-cancel');
+      ipcMain.handle('automator:module-action-cancel', () => {
+        rejectRun(new Error('The test template run was canceled.'));
+        return { canceled: true };
+      });
+    });
+    await form.getByRole('button', { name: 'Run', exact: true }).click();
+    await form.getByRole('button', { name: 'Stop run', exact: true }).click();
+    await form.getByRole('button', { name: 'Run', exact: true }).waitFor();
+    assert.equal(await form.getByLabel('Password *', { exact: true }).inputValue(), '');
+    assert.equal(await form.getByLabel('Selected file', { exact: true }).inputValue(), source);
+    assert.equal(await form.getByLabel('Backup file *', { exact: true }).inputValue(), backup);
+    assert.equal(await form.getByLabel('gbak executable *', { exact: true }).inputValue(), gbak);
+    assert.equal(await form.getByLabel('Username *', { exact: true }).inputValue(), 'retained-user');
+    assert.equal(await form.getByLabel('Password *', { exact: true }).isEditable(), true);
+    await form.getByLabel('Password *', { exact: true }).fill('replacement-test-secret');
+    assert.equal(await form.getByLabel('Password *', { exact: true }).inputValue(), 'replacement-test-secret');
+    await form.getByRole('button', { name: 'Cancel', exact: true }).click();
+  } finally { await app.close(); }
+});

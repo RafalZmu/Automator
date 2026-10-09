@@ -102,9 +102,14 @@ export function ExplorerActionsPanel({ services, profiles, templates, open, onOp
       onResult(result.data);
       setNotice(result.message);
       if (result.status === 'success') setForm(null);
-      else setForm(current => current?.template ? { ...current, values: clearSensitiveTemplateValues(current.template, current.values) } : current);
     } catch (error) { setNotice(message(error)); }
-    finally { controller.current = null; setRunning(false); onRunning(null); }
+    finally {
+      if (controller.current === abort) setForm(current => current?.template
+        ? { ...current, values: clearSensitiveTemplateValues(current.template, current.values) } : current);
+      controller.current = null;
+      setRunning(false);
+      onRunning(null);
+    }
   };
   const profile = profiles.find(item => item.id === draft?.profileId);
   const mappingTemplate = templates.find(item => item.id === profile?.templateOrigin?.id && item.version === profile.templateOrigin.version);
