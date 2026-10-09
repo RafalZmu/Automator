@@ -8,6 +8,8 @@ using Automator.Windows;
 
 var checks = new (string Name, Action Run)[]
 {
+    ("Explorer menu reconciles only owned entries", FileExplorerMenuSpecs.ReconcilesOwnedMenus),
+    ("Explorer disabled hosts and collisions do not write", FileExplorerMenuSpecs.DisabledHostsAndCollisionsDoNotWrite),
     ("keyboard normalizer emits stable key codes and modifier sides", NormalizerMapsStableKeysAndModifiers),
     ("keyboard normalizer tracks transitions repeats and system-key messages", NormalizerTracksTransitionsAndSystemKeys),
     ("hook reset clears held modifier state", NormalizerResetClearsHeldModifiers),

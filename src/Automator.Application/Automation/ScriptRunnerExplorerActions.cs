@@ -19,8 +19,8 @@ public sealed partial class ScriptRunnerModule
             JsonSerializer.Deserialize<ExplorerActionDefinition>(record.Data.GetRawText(), JsonOptions)
             ?? throw new InvalidDataException("The saved Explorer action is invalid.")).ToArray();
 
-    private static async Task<AutomationResult> ListExplorerActionsAsync(AutomationServicesContext services, CancellationToken token) =>
-        Result(AutomationStatus.Success, "Explorer actions loaded.", new { actions = await ReadExplorerActionsAsync(services, token) });
+    private async Task<AutomationResult> ListExplorerActionsAsync(AutomationServicesContext services, CancellationToken token) =>
+        Result(AutomationStatus.Success, "Explorer actions loaded.", new { actions = await ReadExplorerActionsAsync(services, token), registration = await ReconcileExplorerMenuAsync(services, token) });
 
     private async Task<AutomationResult> SaveExplorerActionAsync(JsonElement input, AutomationServicesContext services, CancellationToken token)
     {
@@ -31,14 +31,33 @@ public sealed partial class ScriptRunnerModule
         var profile = await GetExplorerProfileAsync(action, services, token);
         ValidateExplorerProfile(action, profile);
         await services.Library!.UpsertAsync(ExplorerActionCollection, action.Id, 1, JsonSerializer.SerializeToElement(action, JsonOptions), token);
-        return Result(AutomationStatus.Success, "Explorer action saved.", new { action });
+        return Result(AutomationStatus.Success, "Explorer action saved.", new { action, registration = await ReconcileExplorerMenuAsync(services, token) });
     }
 
-    private static async Task<AutomationResult> DeleteExplorerActionAsync(JsonElement input, AutomationServicesContext services, CancellationToken token)
+    private async Task<AutomationResult> DeleteExplorerActionAsync(JsonElement input, AutomationServicesContext services, CancellationToken token)
     {
         var id = ReadId(input);
         var deleted = await services.Library!.DeleteAsync(ExplorerActionCollection, id, token);
-        return Result(AutomationStatus.Success, "Explorer action removed.", new { id, deleted });
+        return Result(AutomationStatus.Success, "Explorer action removed.", new { id, deleted, registration = await ReconcileExplorerMenuAsync(services, token) });
+    }
+
+    private sealed record ExplorerMenuRegistration(string State, string? Message = null);
+
+    private async Task<ExplorerMenuRegistration> ReconcileExplorerMenuAsync(AutomationServicesContext services, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(_fileExplorerExecutable) || services.FileExplorerMenu is null)
+            return new("disabled", "Explorer menu registration is available in the installed Windows build.");
+        try
+        {
+            await services.FileExplorerMenu.ReconcileAsync(await ReadExplorerActionsAsync(services, token), _fileExplorerExecutable, token);
+            return new("updated");
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException
+            or ArgumentException or System.Security.SecurityException or System.ComponentModel.Win32Exception)
+        {
+            // The Library write has already succeeded. Surface a retryable registration error without losing the mapping.
+            return new("error", "The mapping was saved, but the Explorer menu could not be updated. Reopen this section to retry.");
+        }
     }
 
     private static async Task<ScriptRunnerProfile> GetExplorerProfileAsync(ExplorerActionDefinition action, AutomationServicesContext services, CancellationToken token)

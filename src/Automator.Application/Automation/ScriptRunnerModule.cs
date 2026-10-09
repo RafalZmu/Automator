@@ -38,10 +38,12 @@ public sealed record ScriptRunnerTemplateOrigin(string Id, int Version);
 /// <summary>Reusable Python, Bash, and PowerShell profiles with bounded process results.</summary>
 public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
 {
+    private readonly string? _fileExplorerExecutable;
     private readonly IAutomationVariableProvider? _variables;
     private readonly ScriptRunnerTemplateInstaller _templateInstaller;
-    public ScriptRunnerModule(IAutomationVariableProvider? variables = null, ScriptRunnerTemplateInstaller? templateInstaller = null)
+    public ScriptRunnerModule(IAutomationVariableProvider? variables = null, ScriptRunnerTemplateInstaller? templateInstaller = null, string? fileExplorerExecutable = null)
     {
+        _fileExplorerExecutable = fileExplorerExecutable;
         _variables = variables;
         _templateInstaller = templateInstaller ?? new();
     }
@@ -54,6 +56,8 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
     private static readonly AutomationCapabilityRequirement LibraryCapability = new(AutomationCapabilityIds.LibraryStorage, 1);
     private static readonly AutomationCapabilityRequirement ProcessCapability = new(AutomationCapabilityIds.ProcessExecution, 1);
 
+    private static readonly AutomationCapabilityRequirement ExplorerMenuCapability = new(AutomationCapabilityIds.FileExplorerMenu, 1);
+
     public AutomationModuleDefinition Definition { get; } = new(
         2,
         IdValue,
@@ -63,17 +67,17 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
         false,
         ContractVersionValue,
         SettingsVersionValue,
-        [LibraryCapability, ProcessCapability],
+        [LibraryCapability, ProcessCapability, ExplorerMenuCapability],
         [
             new("listProfiles", 1, [LibraryCapability]),
             new("listTemplates", 1, [LibraryCapability]),
             new("installTemplate", 1, [LibraryCapability]),
             new("saveProfile", 1, [LibraryCapability]),
-            new("deleteProfile", 1, [LibraryCapability]),
+            new("deleteProfile", 1, [LibraryCapability, ExplorerMenuCapability]),
             new("runProfile", 1, [LibraryCapability, ProcessCapability]),
-            new("listExplorerActions", 1, [LibraryCapability]),
-            new("saveExplorerAction", 1, [LibraryCapability]),
-            new("deleteExplorerAction", 1, [LibraryCapability]),
+            new("listExplorerActions", 1, [LibraryCapability, ExplorerMenuCapability]),
+            new("saveExplorerAction", 1, [LibraryCapability, ExplorerMenuCapability]),
+            new("deleteExplorerAction", 1, [LibraryCapability, ExplorerMenuCapability]),
             new("runExplorerAction", 1, [LibraryCapability, ProcessCapability]),
         ]);
 
@@ -157,7 +161,7 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
         return Result(AutomationStatus.Success, $"Saved {profile.Name}.", new { profile });
     }
 
-    private static async Task<AutomationResult> DeleteProfileAsync(
+    private async Task<AutomationResult> DeleteProfileAsync(
         JsonElement input, AutomationServicesContext services, CancellationToken cancellationToken)
     {
         var id = ReadId(input);
@@ -165,7 +169,7 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
         foreach (var action in await ReadExplorerActionsAsync(services, cancellationToken))
             if (action.ProfileId == id) await services.Library.DeleteAsync(ExplorerActionCollection, action.Id, cancellationToken);
         return Result(deleted ? AutomationStatus.Success : AutomationStatus.Information,
-            deleted ? "Script profile removed." : "Script profile was already removed.", new { id, deleted });
+            deleted ? "Script profile removed." : "Script profile was already removed.", new { id, deleted, registration = await ReconcileExplorerMenuAsync(services, cancellationToken) });
     }
 
     private async Task<AutomationResult> RunProfileAsync(

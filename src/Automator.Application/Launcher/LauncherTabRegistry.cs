@@ -47,8 +47,8 @@ public static class LauncherTabRegistry
     public static AutomationModuleRegistry CreateAutomationRegistry(
         AutomationCapabilityRegistry capabilities,
         IAutomationVariableProvider? variables = null,
-        string? dataDirectory = null) =>
-        new(CreateProviders(variables, dataDirectory), capabilities);
+        string? dataDirectory = null, string? fileExplorerExecutable = null) =>
+        new(CreateProviders(variables, dataDirectory, fileExplorerExecutable), capabilities);
 
     public static bool TryGetAction(string moduleId, string actionId, out LauncherModuleAction? action)
     {
@@ -78,7 +78,7 @@ public static class LauncherTabRegistry
     }
 
     private static IReadOnlyList<ILauncherTabModuleProvider> CreateProviders(IAutomationVariableProvider? variables = null,
-        string? dataDirectory = null)
+        string? dataDirectory = null, string? fileExplorerExecutable = null)
     {
         var providers = new List<ILauncherTabModuleProvider>
         {
@@ -92,7 +92,7 @@ public static class LauncherTabRegistry
                 ]),
                 new Dictionary<string, string>()),
             new ScriptRunnerModule(variables, new ScriptRunnerTemplateInstaller(
-                dataDirectory is null ? null : Path.Combine(dataDirectory, "script-templates"))),
+                dataDirectory is null ? null : Path.Combine(dataDirectory, "script-templates")), fileExplorerExecutable),
             new ApiModule(),
             new BrowserAutomationModule(variables),
             new WorkflowModule(),

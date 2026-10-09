@@ -72,8 +72,33 @@ internal static class ScriptRunnerExplorerSpecs
             Ensure(!(await TemplateCall("listProfiles", new { })).Data.GetRawText().Contains("transient-secret"), "template credentials not persisted");
             Ensure((await TemplateCall("deleteExplorerAction", new { id = "template-backup" })).Status == AutomationStatus.Success, "mapping deletion");
             Ensure((await TemplateCall("listExplorerActions", new { })).Data.GetProperty("actions").GetArrayLength() == 0, "mapping removed");
+            var registrationMenu = new Menu();
+            var registeredModule = new ScriptRunnerModule(fileExplorerExecutable: @"C:\Automator\Automator.exe");
+            var registrationRegistry = new AutomationCapabilityRegistry(libraryStoreFactory: _ => store, processServiceFactory: _ => process, fileExplorerMenuFactory: _ => registrationMenu);
+            await using var registrationContext = registrationRegistry.CreateContext(new(module.Id,
+                [new(AutomationCapabilityIds.LibraryStorage, 1), new(AutomationCapabilityIds.ProcessExecution, 1), new(AutomationCapabilityIds.FileExplorerMenu, 1)]));
+            async Task<AutomationResult> RegistrationCall(string action, object input) => await registeredModule.ExecuteAsync(action, JsonSerializer.SerializeToElement(input, options), settings, registrationContext, default);
+            await RegistrationCall("saveProfile", profile);
+            var registrationSaved = await RegistrationCall("saveExplorerAction", map);
+            Ensure(registrationMenu.Calls == 1 && registrationMenu.Last!.Count == 1, "mapping save reconciles registry");
+            Ensure(registrationSaved.Data.GetProperty("registration").GetProperty("state").GetString() == "updated", "registration outcome returned");
+            await RegistrationCall("deleteProfile", new { id = profile.Id });
+            Ensure(registrationMenu.Last!.Count == 0, "profile deletion reconciles empty menu");
+            await RegistrationCall("saveProfile", profile);
+            await RegistrationCall("saveExplorerAction", map);
+            await RegistrationCall("deleteExplorerAction", new { id = "backup" });
+            Ensure(registrationMenu.Last!.Count == 0, "last mapping deletion clears registry");
+            registrationMenu.Fail = true;
+            var failedRegistration = await RegistrationCall("saveExplorerAction", map);
+            Ensure(failedRegistration.Status == AutomationStatus.Success && failedRegistration.Data.GetProperty("registration").GetProperty("state").GetString() == "error", "registration failure preserves successful persistence");
+            Ensure((await RegistrationCall("listExplorerActions", new { })).Data.GetProperty("actions").GetArrayLength() == 1, "persisted mappings survive registry failure");
+            var beforeDisabled = registrationMenu.Calls;
+            var disabledResult = await module.ExecuteAsync("listExplorerActions", JsonSerializer.SerializeToElement(new { }), settings, registrationContext, default);
+            Ensure(registrationMenu.Calls == beforeDisabled && disabledResult.Data.GetProperty("registration").GetProperty("state").GetString() == "disabled", "disabled host never calls registry");
             var menu = new Menu();
             var menuRegistry = new AutomationCapabilityRegistry(fileExplorerMenuFactory: _ => menu);
+            try { menuRegistry.CreateContext(new("other-module", [new(AutomationCapabilityIds.FileExplorerMenu, 1)])); throw new Exception("other module received Explorer menu"); }
+            catch (InvalidOperationException) { }
             var menuContext = menuRegistry.CreateContext(new(module.Id, [new(AutomationCapabilityIds.FileExplorerMenu, 1)]));
             Ensure(menuContext.FileExplorerMenu is not null && menuContext.HasCapability(AutomationCapabilityIds.FileExplorerMenu), "declared menu capability granted");
             await menuContext.FileExplorerMenu!.ReconcileAsync([], Environment.ProcessPath!, default);
@@ -93,8 +118,8 @@ internal static class ScriptRunnerExplorerSpecs
     }
     private sealed class Menu : IAutomationFileExplorerMenu
     {
-        public int Calls;
-        public Task ReconcileAsync(IReadOnlyList<ExplorerActionDefinition> entries, string executablePath, CancellationToken token) { Calls++; return Task.CompletedTask; }
+        public int Calls; public bool Fail; public IReadOnlyList<ExplorerActionDefinition>? Last;
+        public Task ReconcileAsync(IReadOnlyList<ExplorerActionDefinition> entries, string executablePath, CancellationToken token) { Calls++; Last = entries; if (Fail) throw new UnauthorizedAccessException("injected registry denial"); return Task.CompletedTask; }
     }
     private sealed class Store : IAutomationLibraryStore
     {

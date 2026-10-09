@@ -934,6 +934,12 @@ public sealed class BackendServer : IAsyncDisposable
         var workTimeCoordinator = _workTimeCoordinator = new AutomationWorkTimeCoordinator(libraryStore);
         await workTimeCoordinator.InitializeAsync(_lifetime.Token).ConfigureAwait(false);
         await schedulerCoordinator.StartAsync(_lifetime.Token).ConfigureAwait(false);
+        var explorerExecutable = Environment.GetEnvironmentVariable("AUTOMATOR_HOST_EXECUTABLE");
+        var explorerRegistrationEnabled = WindowsAutomationFileExplorerMenu.IsRegistrationEnabled(explorerExecutable,
+            _testMode, !string.IsNullOrWhiteSpace(parameters.PortableExecutablePath))
+            && string.Equals(explorerExecutable, parameters.HostExecutablePath, StringComparison.OrdinalIgnoreCase);
+        if (!explorerRegistrationEnabled) explorerExecutable = null;
+        var explorerMenu = new WindowsAutomationFileExplorerMenu(explorerRegistrationEnabled);
         _capabilityRegistry = new AutomationCapabilityRegistry(
             moduleId => new BackendKeyboardInput(_keyboardEventHub!, moduleId),
             (moduleId, policy) => _sharedHttpService!.ForModule(moduleId, policy),
@@ -945,8 +951,21 @@ public sealed class BackendServer : IAsyncDisposable
             workflowRunnerFactory: _ => workflowEngine,
             schedulerCoordinatorFactory: _ => schedulerCoordinator,
             workTimeCoordinatorFactory: _ => workTimeCoordinator,
-            websiteLauncherFactory: _ => new WindowsAutomationWebsiteLauncher());
-        _automationModules = LauncherTabRegistry.CreateAutomationRegistry(_capabilityRegistry, _variableService, dataDirectory);
+            websiteLauncherFactory: _ => new WindowsAutomationWebsiteLauncher(),
+            fileExplorerMenuFactory: moduleId => moduleId == ScriptRunnerModule.IdValue ? explorerMenu
+                : throw new InvalidOperationException("Explorer menu registration is limited to Script Runner."));
+        _automationModules = LauncherTabRegistry.CreateAutomationRegistry(_capabilityRegistry, _variableService, dataDirectory, explorerExecutable);
+        if (explorerRegistrationEnabled)
+        {
+            await using var menuContext = _capabilityRegistry.CreateContext(new(ScriptRunnerModule.IdValue,
+                [new(AutomationCapabilityIds.LibraryStorage, 1), new(AutomationCapabilityIds.FileExplorerMenu, 1)]));
+            var menuModule = new ScriptRunnerModule(fileExplorerExecutable: explorerExecutable);
+            var reconciled = await menuModule.ExecuteAsync("listExplorerActions", JsonSerializer.SerializeToElement(new { }),
+                menuModule.CreateDefaultSettings(), menuContext, _lifetime.Token);
+            if (reconciled.Status == AutomationStatus.Error
+                || reconciled.Data.GetProperty("registration").GetProperty("state").GetString() == "error")
+                _log!.Write(ApplicationLogLevel.Warning, "ExplorerMenu.ReconcileFailed", "Explorer actions could not be registered. Open Script Runner to retry.");
+        }
         _hostMonitorTask = MonitorHostProcessAsync(_hostProcess!);
         _nativeChrome = new NativeChromeController(_log);
         _log.Write(ApplicationLogLevel.Information, "Backend.Initialize", "Backend protocol initialization was accepted.",

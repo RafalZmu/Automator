@@ -122,11 +122,20 @@ public sealed class AutomationCapabilityRegistry(
 
         IAutomationFileExplorerMenu? fileExplorerMenu = null;
         if (capabilityIds.Contains(AutomationCapabilityIds.FileExplorerMenu))
-            fileExplorerMenu = fileExplorerMenuFactory?.Invoke(descriptor.ModuleId)
-                ?? throw new InvalidOperationException("The File Explorer menu capability has no host service registered.");
+        {
+            if (descriptor.ModuleId != ScriptRunnerModule.IdValue)
+                throw new InvalidOperationException("The File Explorer menu capability is limited to Script Runner.");
+            // Registration is optional: development and isolated hosts still support mapping persistence.
+            fileExplorerMenu = fileExplorerMenuFactory?.Invoke(descriptor.ModuleId) ?? new DisabledFileExplorerMenu();
+        }
 
         return new AutomationServicesContext(descriptor.ModuleId, keyboard, http, library, process,
             secrets, apiProfiles, browser, workflows, scheduler, focusSessions, workTime, websiteLauncher, fileExplorerMenu);
+    }
+
+    private sealed class DisabledFileExplorerMenu : IAutomationFileExplorerMenu
+    {
+        public Task ReconcileAsync(IReadOnlyList<ExplorerActionDefinition> entries, string executablePath, CancellationToken token) => Task.CompletedTask;
     }
 
     public void ValidateRequirements(string moduleId, IReadOnlyList<AutomationCapabilityRequirement> capabilities)
