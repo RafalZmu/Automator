@@ -403,3 +403,9 @@ export const backendNotificationSchema = z.discriminatedUnion('method', [
   z.strictObject({ jsonrpc: z.literal('2.0'), method: z.literal('activity/changed'), params: emptyParams }),
   z.strictObject({ jsonrpc: z.literal('2.0'), method: z.literal('variables/changed'), params: emptyParams }),
 ]);
+
+export const fileExplorerLaunchRequestSchema = z.object({
+  actionId: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_-]+$/),
+  filePath: absoluteWindowsPath.refine((value) => !/[\x00-\x1f]/.test(value)),
+}).strict();
+export type FileExplorerLaunchRequest = z.infer<typeof fileExplorerLaunchRequestSchema>;

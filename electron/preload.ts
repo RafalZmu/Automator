@@ -14,6 +14,7 @@ import {
   automationResultSchema,
   globalVariableSnapshotSchema,
   backendNotificationSchema,
+  fileExplorerLaunchRequestSchema,
   settingsImportResultSchema,
   type AutomationHttpRequest,
   type BackendUiState,
@@ -159,6 +160,14 @@ const api: AutomatorBridge = Object.freeze({
     const parsed = runActivitySnapshotSchema.safeParse(result);
     if (!parsed.success) throw new Error('Automator returned invalid run activity.');
     return parsed.data;
+  },
+  onFileExplorerLaunch: (listener: Parameters<AutomatorBridge['onFileExplorerLaunch']>[0]) => {
+    const unsubscribe = listen<unknown>('automator:file-explorer-launch', (value) => {
+      const parsed = fileExplorerLaunchRequestSchema.safeParse(value);
+      if (parsed.success) listener(parsed.data);
+    });
+    void ipcRenderer.invoke('automator:file-explorer-listener-ready');
+    return () => { unsubscribe(); void ipcRenderer.invoke('automator:file-explorer-listener-closed'); };
   },
   onStateChanged: (listener: Parameters<AutomatorBridge['onStateChanged']>[0]) => listen<BackendUiState>('automator:state-changed', listener),
   onFocusPrimaryControl: (listener: Parameters<AutomatorBridge['onFocusPrimaryControl']>[0]) => listen<FocusRequest>('automator:focus-primary-control', listener),

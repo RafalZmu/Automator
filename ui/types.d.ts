@@ -12,6 +12,7 @@ import type {
   AutomationKeyboardEligibilityResult,
   AutomationKeyboardInputNotification,
   BackendUiState,
+  FileExplorerLaunchRequest,
 } from '../contracts/rpc';
 import type { RunActivitySnapshot } from '../contracts/activity';
 import type { ScriptRunnerInterpreter } from '../contracts/scriptRunner';
@@ -89,6 +90,7 @@ export interface AutomatorBridge {
   setGlobalVariables(values: GlobalVariableSnapshot['values']): Promise<GlobalVariableSnapshot>;
   onGlobalVariablesChanged(listener: () => void): () => void;
   getRunActivity(): Promise<RunActivitySnapshot>;
+  onFileExplorerLaunch(listener: (request: FileExplorerLaunchRequest) => void): () => void;
   onStateChanged(listener: (state: BackendUiState) => void): () => void;
   onFocusPrimaryControl(listener: (request: FocusRequest) => void): () => void;
   onBackendFailure(listener: (message: string) => void): () => void;

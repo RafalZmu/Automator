@@ -192,6 +192,7 @@ class BrowserPreviewBridge implements AutomatorBridge {
     return structuredClone(this.globalVariables);
   }
   async getRunActivity(): Promise<RunActivitySnapshot> { return { contractVersion: 1, entries: [] }; }
+  onFileExplorerLaunch() { return () => {}; }
   onStateChanged(listener: (state: BackendUiState) => void) { this.stateListeners.add(listener); return () => this.stateListeners.delete(listener); }
   onFocusPrimaryControl(listener: (request: FocusRequest) => void) { this.focusListeners.add(listener); return () => this.focusListeners.delete(listener); }
   onBackendFailure(listener: (message: string) => void) { this.failureListeners.add(listener); return () => this.failureListeners.delete(listener); }
