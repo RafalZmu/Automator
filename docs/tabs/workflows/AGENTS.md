@@ -1,6 +1,6 @@
 # Workflows contributor guide
 
-Read the root AGENTS.md first. Workflows compose saved Script Runner, API, and Browser Automation profiles into ordered sequences.
+Read the root AGENTS.md first. Workflows compose saved Script Runner, API, Browser Automation, and Codex-generated Playwright task profiles into ordered sequences.
 
 ## Editing and execution rules
 
@@ -8,6 +8,7 @@ Read the root AGENTS.md first. Workflows compose saved Script Runner, API, and B
 - Steps are sequential. Preserve add, remove, reorder, profile selection, JSON input mapping, validation, and stop-on-first-failure behavior. Do not turn the workflow into an implicit graph or parallel runner.
 - A step may receive a literal JSON value, workflow variables, or a JSON Pointer value from an earlier step. Preserve JSON types; do not stringify values unless the target profile requires text.
 - Only use supported saved-profile module IDs and profile IDs. Do not add arbitrary executable paths or raw shell snippets to workflow definitions.
+- `playwright-task` is a supported saved-profile module for Codex-generated Playwright work. Keep its named JSON inputs available to mappings and preserve its current source/scope/effect approval checks before calling the profile. Schedule generated Playwright work through a saved Workflow; Scheduler has no direct Playwright target.
 - Validate source and destination pointers and detect invalid/conflicting mappings before saving or running.
 - Keep workflow output/history limits and metadata-only persistence. Treat step output as potentially sensitive and do not write it to application logs.
 - Add Application specs for mapping, ordering, failure/cancellation and renderer contract tests for any new editor field.

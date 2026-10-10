@@ -44,14 +44,24 @@ public sealed class WindowsAutomationWebsiteLauncher : IAutomationWebsiteLaunche
             if (group.Length == 0) continue;
             if (browser == BrowserKind.Chromium)
             {
-                var startInfo = new ProcessStartInfo(_defaultBrowserExecutable!) { UseShellExecute = false };
+                var startInfo = new ProcessStartInfo(_defaultBrowserExecutable!)
+                {
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                };
                 startInfo.ArgumentList.Add("--new-window");
                 foreach (var url in group) startInfo.ArgumentList.Add(url.AbsoluteUri);
                 _startProcess(startInfo);
             }
             else if (browser == BrowserKind.Firefox)
             {
-                var startInfo = new ProcessStartInfo(_defaultBrowserExecutable!) { UseShellExecute = false };
+                var startInfo = new ProcessStartInfo(_defaultBrowserExecutable!)
+                {
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                };
                 startInfo.ArgumentList.Add("-new-window");
                 startInfo.ArgumentList.Add(group[0].AbsoluteUri);
                 foreach (var url in group.Skip(1))
@@ -126,7 +136,41 @@ public sealed class WindowsAutomationWebsiteLauncher : IAutomationWebsiteLaunche
 
     private static void StartProcess(ProcessStartInfo startInfo)
     {
-        using var process = Process.Start(startInfo);
+        var process = Process.Start(startInfo);
+        if (process is null) return;
+
+        if (startInfo.RedirectStandardOutput || startInfo.RedirectStandardError)
+        {
+            _ = DrainAndDiscardOutputAsync(process);
+            return;
+        }
+
+        process.Dispose();
+    }
+
+    private static async Task DrainAndDiscardOutputAsync(Process process)
+    {
+        try
+        {
+            var stdout = DrainAndDiscardAsync(process.StandardOutput);
+            var stderr = DrainAndDiscardAsync(process.StandardError);
+            var exit = process.WaitForExitAsync();
+            await Task.WhenAll(stdout, stderr, exit).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // Browser output is discarded; stream or process-lifetime errors must not escape the fire-and-forget drain.
+        }
+        finally
+        {
+            process.Dispose();
+        }
+    }
+
+    private static async Task DrainAndDiscardAsync(StreamReader reader)
+    {
+        var buffer = new char[4096];
+        while (await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false) > 0) { }
     }
 
     private enum BrowserKind { Unknown, Chromium, Firefox }

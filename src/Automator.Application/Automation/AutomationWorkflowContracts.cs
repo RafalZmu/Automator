@@ -22,6 +22,7 @@ public sealed record AutomationWorkflowProfile
     public IReadOnlyList<AutomationWorkflowStep> Steps { get; init; }
     public IReadOnlyDictionary<string, JsonElement> Variables { get; init; }
     public IReadOnlyDictionary<string, string> VariableReferences { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
+    public CodexTaskApproval? CodexApproval { get; init; }
 }
 
 public sealed record AutomationWorkflowStep(

@@ -99,13 +99,8 @@ public static class LauncherTabRegistry
             new SchedulerModule(),
             new FocusSessionsModule(),
             new WebsiteLauncherModule(),
+            new CodexTaskModule(),
         };
-
-        const int slot = 9;
-        var id = $"reserved-{slot}";
-        providers.Add(new BundledModuleProvider(
-            new AutomationModuleDefinition(slot, id, $"Tab {slot}", "grid", "reserved", false, 1, 1, [], []),
-            new Dictionary<string, string> { ["status"] = "reserved" }));
 
         return providers.AsReadOnly();
     }

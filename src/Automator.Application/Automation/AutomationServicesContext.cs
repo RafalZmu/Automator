@@ -46,7 +46,8 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         IAutomationSecretManager? secrets = null, IAutomationApiProfileRunner? apiProfiles = null,
         IAutomationBrowserService? browser = null, IAutomationWorkflowRunner? workflows = null,
         IAutomationSchedulerCoordinator? scheduler = null, IAutomationFocusSessionCoordinator? focusSessions = null,
-        IAutomationWorkTimeCoordinator? workTime = null, IAutomationWebsiteLauncher? websiteLauncher = null)
+        IAutomationWorkTimeCoordinator? workTime = null, IAutomationWebsiteLauncher? websiteLauncher = null,
+        IAutomationCodexTaskService? codexTasks = null)
     {
         ModuleId = moduleId;
         _lifetimeToken = _lifetime.Token;
@@ -62,6 +63,7 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         FocusSessions = focusSessions is null ? null : new ContextFocusCoordinator(this, focusSessions);
         WorkTime = workTime is null ? null : new ContextWorkTimeCoordinator(this, workTime);
         WebsiteLauncher = websiteLauncher is null ? null : new ContextWebsiteLauncher(this, websiteLauncher);
+        CodexTasks = moduleId == "codex" && codexTasks is not null ? new ContextCodexTaskService(this, codexTasks) : null;
     }
 
     public string ModuleId { get; }
@@ -77,6 +79,7 @@ public sealed class AutomationServicesContext : IAsyncDisposable
     public IAutomationFocusSessionCoordinator? FocusSessions { get; }
     public IAutomationWorkTimeCoordinator? WorkTime { get; }
     public IAutomationWebsiteLauncher? WebsiteLauncher { get; }
+    public IAutomationCodexTaskService? CodexTasks { get; }
     public CancellationToken LifetimeToken => _lifetimeToken;
     public bool HasCapability(string capabilityId) => capabilityId switch
     {
@@ -92,6 +95,7 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         AutomationCapabilityIds.FocusManagement => FocusSessions is not null,
         AutomationCapabilityIds.WorkTimeManagement => WorkTime is not null,
         AutomationCapabilityIds.WebsiteLaunch => WebsiteLauncher is not null,
+        AutomationCapabilityIds.CodexTaskBuilder => CodexTasks is not null,
         _ => false,
     };
 
@@ -429,5 +433,17 @@ public sealed class AutomationServicesContext : IAsyncDisposable
             try { await inner.DisposeAsync().ConfigureAwait(false); }
             finally { linked.Dispose(); }
         }
+    }
+
+    private sealed class ContextCodexTaskService(AutomationServicesContext context, IAutomationCodexTaskService inner) : IAutomationCodexTaskService
+    {
+        public async Task<CodexTaskStatus> GetStatusAsync(CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.GetStatusAsync(linked.Token).ConfigureAwait(false); }
+        public async Task<CodexTaskDraft> GenerateDraftAsync(CodexTaskGenerateRequest request, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.GenerateDraftAsync(request, linked.Token).ConfigureAwait(false); }
+        public async Task<CodexTaskDraft?> GetDraftAsync(string id, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.GetDraftAsync(id, linked.Token).ConfigureAwait(false); }
+        public async Task<IReadOnlyList<CodexTaskDraftSummary>> ListDraftsAsync(CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.ListDraftsAsync(linked.Token).ConfigureAwait(false); }
+        public async Task<CodexTaskRunResult> RunDraftAsync(string id, bool effectConfirmed, JsonElement? taskInput, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.RunDraftAsync(id, effectConfirmed, taskInput, linked.Token).ConfigureAwait(false); }
+        public async Task<CodexTaskSaveResult> SaveDraftAsync(string id, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.SaveDraftAsync(id, linked.Token).ConfigureAwait(false); }
+        public async Task<CodexTaskDraft> ApproveChangesAsync(string id, string? expectedReviewSourceHash, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.ApproveChangesAsync(id, expectedReviewSourceHash, linked.Token).ConfigureAwait(false); }
+        public async Task<string> ExportDraftAsync(string id, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.ExportDraftAsync(id, linked.Token).ConfigureAwait(false); }
     }
 }

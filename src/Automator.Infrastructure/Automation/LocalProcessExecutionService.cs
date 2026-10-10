@@ -28,6 +28,8 @@ public sealed class LocalProcessExecutionService : IAutomationProcessService
             WindowStyle = ProcessWindowStyle.Hidden,
         };
         foreach (var argument in request.Arguments) startInfo.ArgumentList.Add(argument);
+        if (request.EnvironmentVariables is { } environment)
+            foreach (var (key, value) in environment) startInfo.Environment[key] = value;
 
         using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
         var stopwatch = Stopwatch.StartNew();
@@ -112,6 +114,7 @@ public sealed class LocalProcessExecutionService : IAutomationProcessService
             && (standardInput.Length > AutomationProcessLimits.MaximumStandardInputCharacters
                 || Encoding.UTF8.GetByteCount(standardInput) > AutomationProcessLimits.MaximumStandardInputBytes))
             throw new InvalidDataException("The process standard input is too large.");
+        AutomationProcessLimits.ValidateEnvironmentVariables(request.EnvironmentVariables);
         if (request.Timeout <= TimeSpan.Zero || request.Timeout > AutomationProcessLimits.MaximumTimeout)
             throw new InvalidDataException("The process timeout must be between zero and one hour.");
     }

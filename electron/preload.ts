@@ -44,12 +44,14 @@ const api: AutomatorBridge = Object.freeze({
   addCustomApp: () => ipcRenderer.invoke('automator:add-custom-app'),
   pickScriptFile: (interpreter: Parameters<AutomatorBridge['pickScriptFile']>[0]) => ipcRenderer.invoke('automator:pick-script-file', interpreter) as Promise<string | null>,
   pickPath: (kind: Parameters<AutomatorBridge['pickPath']>[0]) => ipcRenderer.invoke('automator:pick-path', kind) as Promise<string | null>,
+  pickCodexScopePath: (kind: Parameters<AutomatorBridge['pickCodexScopePath']>[0]) => ipcRenderer.invoke('automator:pick-codex-scope-path', kind) as Promise<string | null>,
   resolveDroppedFile: (file: File) => {
     try { return Promise.resolve(webUtils.getPathForFile(file)); }
     catch { return Promise.resolve(''); }
   },
   pickWorkingDirectory: () => ipcRenderer.invoke('automator:pick-working-directory') as Promise<string | null>,
   pickBrowserProjectDirectory: () => ipcRenderer.invoke('automator:pick-browser-project-directory') as Promise<string | null>,
+  exportCodexDraft: (id: string) => ipcRenderer.invoke('automator:export-codex-draft', id) as Promise<boolean>,
   saveWorkTimeCsv: async (csvText: string) => {
     const result = await ipcRenderer.invoke('automator:save-work-time-csv', csvText);
     if (typeof result !== 'boolean') throw new Error('Automator returned an invalid Work Time CSV export result.');

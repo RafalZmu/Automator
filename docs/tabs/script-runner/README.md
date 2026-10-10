@@ -4,6 +4,8 @@ Script Runner saves reusable Python, Bash, and PowerShell profiles. A profile ha
 
 Each argument row is passed as one process argument, including values containing spaces. Text mode displays bounded stdout and stderr. JSON mode parses stdout as one JSON value and displays it as structured data. Scripts run as the signed-in Windows user and are not sandboxed.
 
+The Codex task builder can save a successfully run Python task as a normal Script Runner profile. Codex approval metadata ties the saved task to the reviewed source and scope; changed task source or declared review details must be reviewed and reapproved before manual, Workflow, or Scheduler execution. Scope is consent context and does not limit the script's Windows-user permissions. See [Codex](../codex/README.md) for the authoring and review flow.
+
 ## Test case steps
 
 See [TESTS.md](TESTS.md) for template, profile, path-field, and Electron integration cases with their steps and expected results.
@@ -30,6 +32,7 @@ Templates are bundled trusted code and run unsandboxed with the same Windows-use
 - `ui/modules/ScriptRunnerView.tsx` contains profile editing, interpreter defaults, run/cancel, and output presentation.
 - `contracts/scriptRunner.ts` validates renderer-facing profile and result shapes.
 - `src/Automator.Application/Automation/ScriptRunnerModule.cs` validates profiles, expands global variables in argument values, invokes the process capability, and interprets text/JSON output.
+- `ScriptRunnerExecution.cs` provides the shared process path used by interactive profiles and Codex-generated Python drafts.
 - `ScriptRunnerSavedProfileHandler.cs` lets Workflows and Scheduler run a saved script profile.
 - `src/Automator.Infrastructure/Automation/LocalProcessExecutionService.cs` owns process execution and bounded capture.
 - Tests include `tests/electron/script-runner.test.cjs` and .NET Application/Infrastructure specs.

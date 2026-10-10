@@ -42,48 +42,9 @@ public sealed class ScriptRunnerSavedProfileHandler(
         }
         var globals = variables is null ? null : await variables.GetAsync(cancellationToken).ConfigureAwait(false);
         if (globals is not null) profile = profile with { Arguments = profile.Arguments.Select(argument => AutomationVariableInterpolation.Expand(argument, globals.Values)).ToArray() };
-        ScriptRunnerModule.Validate(profile);
-        var arguments = profile.Interpreter == ScriptRunnerInterpreter.Powershell
-            ? new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", profile.ScriptPath }.Concat(profile.Arguments).ToArray()
-            : new[] { profile.ScriptPath }.Concat(profile.Arguments).ToArray();
-        var processResult = await processes.ExecuteAsync(new AutomationProcessRequest(
-            profile.InterpreterPath,
-            arguments,
-            profile.WorkingDirectory,
-            TimeSpan.FromSeconds(profile.TimeoutSeconds),
-            input?.GetRawText()), cancellationToken).ConfigureAwait(false);
-
-        JsonElement output;
-        var invalidJson = false;
-        if (profile.OutputMode == ScriptRunnerOutputMode.Json)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(processResult.StandardOutput)) throw new JsonException("Script output is empty.");
-                using var document = JsonDocument.Parse(processResult.StandardOutput);
-                output = document.RootElement.Clone();
-            }
-            catch (JsonException)
-            {
-                invalidJson = true;
-                output = CreateTextOutput(profile.Id, processResult);
-            }
-        }
-        else
-        {
-            output = CreateTextOutput(profile.Id, processResult);
-        }
-
-        var status = processResult.TimedOut ? AutomationStatus.Warning
-            : processResult.ExitCode != 0 ? AutomationStatus.Error
-            : invalidJson ? AutomationStatus.Warning
-            : AutomationStatus.Success;
-        var category = processResult.TimedOut ? "timed-out"
-            : processResult.ExitCode != 0 ? "nonzero-exit"
-            : invalidJson ? "invalid-json"
-            : "completed";
-        return new AutomationProfileExecutionOutput(output,
-            new AutomationExecutionSummary(status, category, (long)startedAt.Elapsed.TotalMilliseconds));
+        var execution = await ScriptRunnerExecution.RunAsync(profile, processes, input, metadata.Origin,
+            metadata.CorrelationId, cancellationToken).ConfigureAwait(false);
+        return new AutomationProfileExecutionOutput(execution.Output, execution.Summary with { DurationMilliseconds = (long)startedAt.Elapsed.TotalMilliseconds });
     }
 
     private static ScriptRunnerProfile ReadProfile(JsonElement data)
@@ -94,15 +55,4 @@ public sealed class ScriptRunnerSavedProfileHandler(
         return profile;
     }
 
-    private static JsonElement CreateTextOutput(string profileId, AutomationProcessResult processResult) =>
-        JsonSerializer.SerializeToElement(new
-        {
-            profileId,
-            exitCode = processResult.ExitCode,
-            timedOut = processResult.TimedOut,
-            stdout = processResult.StandardOutput,
-            stderr = processResult.StandardError,
-            stdoutTruncated = processResult.StandardOutputTruncated,
-            stderrTruncated = processResult.StandardErrorTruncated,
-        });
 }

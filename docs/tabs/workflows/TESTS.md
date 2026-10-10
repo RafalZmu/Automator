@@ -150,3 +150,18 @@ Run after npm.cmd run build:desktop with node --experimental-strip-types --test 
 ## Additional backend coverage
 
 Workflow execution ordering, input mapping, stop-on-failure behavior, and persisted history have Application specification coverage in tests/Automator.Workflows.Specs. Run it with npm.cmd run test:dotnet.
+
+The Workflow specification **workflow drafts run transiently using only currently saved profile IDs** covers transient Workflow validation and execution. Codex Playwright profile input validation, source integrity, and approval rechecks are listed in [Codex TESTS](../codex/TESTS.md). A saved Workflow containing a `playwright-task` step is the supported way to schedule generated Playwright work.
+
+## Shared numbered-tab icon coverage — tests/electron/tab-happy-path-visibility.test.cjs
+
+### numbered tabs show an identifying icon in the launcher and Workspace
+
+**Source:** tests/electron/tab-happy-path-visibility.test.cjs
+
+**Steps**
+
+1. Launch the isolated compact host and locate slots 1–8 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
+2. Open Workspace and verify slots 2–8 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
+
+**Expected result:** The numbered tabs retain their accessible names and show one visible icon in both windows.

@@ -44,6 +44,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("script runner rejects invalid profile paths and timeout bounds", ScriptRunnerRejectsInvalidProfiles),
     ("script runner reports timeout and invalid JSON output", ScriptRunnerReportsProcessWarnings),
     ("script template catalog validates descriptors and legacy profile metadata", ScriptRunnerTemplateSpecs.RunAsync),
+    ("Codex task builder validates capability, actions, CLI output and draft IDs", CodexTaskSpecs.RunAsync),
     ("API profiles save URL-only grants and profile default JSON", ApiProfilesSaveUrlOnlyAndDefaultInput),
     ("work-time log actions validate metadata and delegate to the host coordinator", FocusSessionModuleDispatchesCoordinatorActions),
     ("context disposal cancels active HTTP calls and rejects later calls", ContextDisposalScopesHttpCalls),
@@ -305,9 +306,9 @@ static Task TabRegistryPublishesVersionedSlots()
     Check.Equal("website-launcher", tabs[7].Id);
     Check.Equal("website-launcher", tabs[7].Kind);
     Check.True(tabs[7].Actions.Any(action => action.Id == "launchRow"));
-    Check.Equal("reserved-9", tabs[8].Id);
-    Check.Equal("reserved", tabs[8].Kind);
-    Check.Equal(0, tabs[8].Actions.Count);
+    Check.Equal("codex", tabs[8].Id);
+    Check.Equal("codex", tabs[8].Kind);
+    Check.True(tabs[8].Actions.Any(action => action.Id == "generateDraft"));
     Check.True(tabs.Take(2).SelectMany(tab => tab.Capabilities).Any(capability => capability.Id == AutomationCapabilityIds.LibraryStorage));
     Check.Equal(9, LauncherTabRegistry.States.Count);
     Check.True(LauncherTabRegistry.States.All(state => state.Version == LauncherTabRegistry.Version));
@@ -519,8 +520,9 @@ static Task ProductionModuleViewsMatchContract()
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "bundled-tab-view-kinds.json")));
     var supportedKinds = document.RootElement.GetProperty("kinds").EnumerateArray()
         .Select(item => item.GetString()!).ToHashSet(StringComparer.Ordinal);
-    Check.True(LauncherTabRegistry.Tabs.All(tab => supportedKinds.Contains(tab.Kind)));
-    Check.Equal(9, supportedKinds.Count);
+    Check.True(LauncherTabRegistry.Tabs.Where(tab => tab.Id != "codex").All(tab => supportedKinds.Contains(tab.Kind)));
+    Check.Equal("codex", LauncherTabRegistry.Tabs.Single(tab => tab.Id == "codex").Kind);
+    Check.Equal(10, supportedKinds.Count);
     return Task.CompletedTask;
 }
 

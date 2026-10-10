@@ -5,6 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { BUNDLED_TAB_VIEW_KINDS } from '../ui/viewKinds.ts';
 import {
+  codexTaskDraftSchema,
+  codexTaskRunSchema,
+  codexTaskStatusSchema,
+  codexTaskSaveSchema,
+  codexTaskGenerateInputSchema,
+} from '../contracts/codex.ts';
+import {
   automationHttpResultSchema,
   automationKeyboardEligibilityResultSchema,
   backendNotificationSchema,
@@ -29,6 +36,24 @@ const viewKindFixture = JSON.parse(await readFile(path.join(root, 'contracts/bun
 
 test('renderer component registry declares the bundled tab view kinds from the shared contract', () => {
   assert.deepEqual([...BUNDLED_TAB_VIEW_KINDS], viewKindFixture.kinds);
+  assert.ok(BUNDLED_TAB_VIEW_KINDS.includes('codex'));
+});
+
+test('Codex DTO contracts validate bounded status, draft, run, save, and requested format data', () => {
+  assert.equal(codexTaskStatusSchema.safeParse({ available: false, state: 'signedOut', message: 'Sign in', version: null }).success, true);
+  assert.equal(codexTaskStatusSchema.safeParse({ available: false, state: 'secret', message: 'x' }).success, false);
+  const draft = {
+    id: 'a'.repeat(32), plan: 'Read the selected report.', format: 'python', source: 'print(1)', scope: ['C:\\Reports'], proposedScope: ['C:\\Reports'],
+    inputs: [{ name: 'month', description: 'Report month', type: 'string', required: true }], effects: [{ kind: 'read', description: 'Read report', target: 'selected folder' }],
+    sourceHash: 'b'.repeat(64), createdAt: '2026-10-10T10:00:00Z', runSucceeded: false, saved: false, planIsHistorical: false,
+  };
+  assert.equal(codexTaskDraftSchema.safeParse(draft).success, true);
+  assert.equal(codexTaskDraftSchema.safeParse({ ...draft, source: 'x'.repeat(65537) }).success, false);
+  assert.equal(codexTaskRunSchema.safeParse({ succeeded: true, message: 'Done', status: 'success', output: { count: 1 } }).success, true);
+  assert.equal(codexTaskSaveSchema.safeParse({ saved: true, message: 'Saved' }).success, true);
+  assert.equal(codexTaskGenerateInputSchema.safeParse({ prompt: 'prepare report', scope: ['C:\\Reports'], preferredFormat: 'playwright' }).success, true);
+  assert.equal(codexTaskGenerateInputSchema.safeParse({ prompt: 'prepare report', scope: ['C:\\Reports'], preferredFormat: 'terminal' }).success, false);
+  assert.equal(codexTaskGenerateInputSchema.safeParse({ prompt: 'prepare report', scope: ['C:\\Reports'] }).success, true);
 });
 
 test('typed automation notifications accept bounded title and body only', () => {

@@ -27,6 +27,8 @@ import { authorizeAutomationServiceCall, type AutomationWindowContext } from './
 import { injectHostWindowContext } from './hostWindowContext';
 import { projectStateForWindow, WindowContextRegistry } from './windowContextRegistry';
 import { getScriptRunnerPathPickerSpec } from './scriptRunnerPathPicker';
+import { getCodexScopePathPickerSpec } from './codexScopePathPicker';
+import { authorizeCodexExport, extensionForCodexFormat, writeCodexSourceCreateNew } from './codexExport';
 
 const moduleDirectory = __dirname;
 const workspaceRoot = path.resolve(moduleDirectory, '../..');
@@ -607,6 +609,13 @@ function registerIpc(): void {
     const selected = await showDialogForCaller(event, spec);
     return selected.canceled || selected.filePaths.length === 0 ? null : selected.filePaths[0];
   });
+  ipcMain.handle('automator:pick-codex-scope-path', async (event, kind: unknown) => {
+    const context = assertMainFrame(event, ['launcher', 'workspace']);
+    const activeLauncher = context.role !== 'launcher' || Boolean(currentState?.visible && currentState.mode === 'launcher');
+    const spec = getCodexScopePathPickerSpec(kind, context.selectedTab, activeLauncher);
+    const selected = await showDialogForCaller(event, spec);
+    return selected.canceled || selected.filePaths.length === 0 ? null : selected.filePaths[0];
+  });
   ipcMain.handle('automator:pick-browser-project-directory', async (event) => {
     const context = assertMainFrame(event, ['launcher', 'workspace']);
     if (context.selectedTab !== 4 || (context.role === 'launcher' && (!currentState?.visible || currentState.mode !== 'launcher')))
@@ -616,6 +625,37 @@ function registerIpc(): void {
       properties: ['openDirectory'],
     });
     return selected.canceled || selected.filePaths.length === 0 ? null : selected.filePaths[0];
+  });
+  ipcMain.handle('automator:export-codex-draft', async (event, draftId: unknown) => {
+    const context = getWindowContext(event);
+    authorizeCodexExport(event.senderFrame === event.sender.mainFrame, context, currentState, draftId);
+    if (!context) throw new Error('Codex export requires an active Automator window.');
+    const callCodexAction = async (actionId: 'getDraft' | 'exportDraft') => {
+      const result = await invokeModuleBackend(event, 'automation/moduleAction', {
+        requestId: randomUUID(), contractVersion: 1, moduleId: 'codex', actionId, actionVersion: 1, input: { id: draftId },
+      });
+      const parsed = automationResultSchema.safeParse(result);
+      if (!parsed.success || parsed.data.status === 'error') throw new Error(parsed.success ? parsed.data.message : 'Backend returned an invalid Codex export result.');
+      return parsed.data.data;
+    };
+    const draftValue = await callCodexAction('getDraft');
+    const draft = draftValue && typeof draftValue === 'object' && !Array.isArray(draftValue) ? draftValue as Record<string, unknown> : {};
+      if (draft.saved !== true) throw new Error('Save the task successfully before exporting its source.');
+    const extension = extensionForCodexFormat(draft.format);
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    if (!owner || owner.isDestroyed()) throw new Error('The requesting Automator window is no longer available.');
+    const show = () => dialog.showSaveDialog(owner, {
+      title: 'Export Codex task source',
+      defaultPath: path.join(app.getPath('documents'), `codex-task.${extension}`),
+      filters: [{ name: `${extension.toUpperCase()} source`, extensions: [extension] }, { name: 'All files', extensions: ['*'] }],
+    });
+    const selected = context.role === 'launcher' ? await withNativeDialog(show) : await show();
+    if (selected.canceled || !selected.filePath) return false;
+    const exportedValue = await callCodexAction('exportDraft');
+    const exported = exportedValue && typeof exportedValue === 'object' && !Array.isArray(exportedValue) ? exportedValue as Record<string, unknown> : {};
+    if (typeof exported.source !== 'string') throw new Error('Backend returned invalid Codex source.');
+    await writeCodexSourceCreateNew(selected.filePath, exported.source);
+    return true;
   });
   ipcMain.handle('automator:module-settings-update', async (event, params: Record<string, unknown>) => {
     const result = await invokeModuleBackend(event, 'module/settingsUpdate', params ?? {});

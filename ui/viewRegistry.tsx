@@ -11,6 +11,7 @@ import { WorkflowsView } from './modules/WorkflowsView';
 import { SchedulerView } from './modules/SchedulerView';
 import { FocusSessionsView } from './modules/FocusSessionsView';
 import { WebsiteLauncherView } from './modules/WebsiteLauncherView';
+import { CodexView } from './modules/CodexView';
 
 type ViewProps = {
   tab: BackendUiState['tabs'][number];
@@ -63,6 +64,7 @@ export const launcherViewRegistry = Object.freeze({
   scheduler: SchedulerView,
   'focus-sessions': FocusSessionsView,
   'website-launcher': WebsiteLauncherView,
+  codex: CodexView,
   reserved: ReservedTabView,
 } satisfies Record<BundledTabViewKind, ComponentType<ViewProps>>);
 

@@ -34,8 +34,10 @@ const tabs: BackendUiState['tabs'] = [
     searchEnabled: true, contractVersion: 1, settingsVersion: 1,
     actions: [{ id: 'launchRow', version: 1, command: null, requiredCapabilities: [{ id: 'website.launch', version: 1 }] }],
     capabilities: [{ id: 'website.launch', version: 1 }] },
-  { slot: 9, id: 'reserved-9', title: 'Tab 9', iconKey: 'grid', kind: 'reserved' as const,
-    searchEnabled: false, contractVersion: 1, settingsVersion: 1, actions: [], capabilities: [] },
+  { slot: 9, id: 'codex', title: 'Codex', iconKey: 'sparkles', kind: 'codex' as const,
+    searchEnabled: false, contractVersion: 1, settingsVersion: 1,
+    actions: ['getStatus', 'generateDraft', 'getDraft', 'listDrafts', 'runDraft', 'saveDraft', 'approveChanges', 'exportDraft'].map((id) => ({ id, version: 1, command: null, requiredCapabilities: [{ id: 'codex.task-builder', version: 1 }] })),
+    capabilities: [{ id: 'codex.task-builder', version: 1 }] },
 ];
 
 const emptyBinding = (id: string, name: string, targetPath: string, alias: string): BackendUiState['bindings'][number] => ({
@@ -166,15 +168,25 @@ class BrowserPreviewBridge implements AutomatorBridge {
     };
   }
   async cancelAutomationHttpRequest(_moduleId: string, _requestId: string) { return { canceled: false }; }
-  async dispatchModuleAction(_request: AutomationModuleActionRequest): Promise<AutomationResult> {
+  async dispatchModuleAction(request: AutomationModuleActionRequest): Promise<AutomationResult> {
+    if (request.moduleId === 'codex' && request.actionId === 'getStatus') return {
+      contractVersion: 1, status: 'information',
+      message: 'The browser preview has no Codex process. Open desktop Automator to check the local Codex CLI.',
+      data: { available: false, state: 'unavailable', message: 'The browser preview has no Codex process. Open desktop Automator to check the local Codex CLI.' }, actions: [],
+    };
+    if (request.moduleId === 'codex' && request.actionId === 'listDrafts') return {
+      contractVersion: 1, status: 'information', message: 'Codex drafts are unavailable in browser preview.', data: [], actions: [],
+    };
     throw new Error('Module actions are unavailable in browser preview.');
   }
   async cancelAutomationModuleAction(_moduleId: string, _requestId: string) { return { canceled: false }; }
   async pickScriptFile(_interpreter: Parameters<AutomatorBridge['pickScriptFile']>[0]) { return null; }
   async pickPath(_kind: Parameters<AutomatorBridge['pickPath']>[0]) { return null; }
+  async pickCodexScopePath(_kind: Parameters<AutomatorBridge['pickCodexScopePath']>[0]) { return null; }
   async resolveDroppedFile(_file: File) { return ''; }
   async pickWorkingDirectory() { return null; }
   async pickBrowserProjectDirectory() { return null; }
+  async exportCodexDraft(_id: string): Promise<boolean> { throw new Error('Draft export is unavailable in browser preview.'); }
   async saveWorkTimeCsv(_csvText: string) { return false; }
   async updateModuleSettings(request: ModuleSettingsUpdateRequest): Promise<ModuleSettingsUpdateResult> {
     return { saved: true, moduleId: request.moduleId, settingsVersion: request.settingsVersion };

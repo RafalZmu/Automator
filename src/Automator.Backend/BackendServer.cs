@@ -925,6 +925,7 @@ public sealed class BackendServer : IAsyncDisposable
             new ScriptRunnerSavedProfileHandler(libraryStore, processService, _variableService),
             new ApiSavedProfileHandler(apiProfileRunner, libraryStore),
             new BrowserSavedProfileHandler(libraryStore, browserService, _variableService),
+            new PlaywrightTaskSavedProfileHandler(libraryStore, processService),
         ]);
         var workflowEngine = new AutomationWorkflowEngine(libraryStore, savedProfileExecutor, _variableService);
         var schedulerCoordinator = _schedulerCoordinator = new AutomationSchedulerCoordinator(libraryStore, workflowEngine,
@@ -945,7 +946,9 @@ public sealed class BackendServer : IAsyncDisposable
             workflowRunnerFactory: _ => workflowEngine,
             schedulerCoordinatorFactory: _ => schedulerCoordinator,
             workTimeCoordinatorFactory: _ => workTimeCoordinator,
-            websiteLauncherFactory: _ => new WindowsAutomationWebsiteLauncher());
+            websiteLauncherFactory: _ => new WindowsAutomationWebsiteLauncher(),
+            codexTaskServiceFactory: moduleId => moduleId == "codex" ? new CodexTaskService(dataDirectory, processService,
+                library: libraryStore, workflows: workflowEngine) : null);
         _automationModules = LauncherTabRegistry.CreateAutomationRegistry(_capabilityRegistry, _variableService, dataDirectory);
         _hostMonitorTask = MonitorHostProcessAsync(_hostProcess!);
         _nativeChrome = new NativeChromeController(_log);

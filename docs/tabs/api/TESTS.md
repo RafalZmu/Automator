@@ -241,3 +241,16 @@ Run after npm.cmd run build:desktop with node --experimental-strip-types --test 
 ## Coverage note
 
 The Electron suite verifies UI profile saving plus the HTTP capability and IPC boundary. API profile contracts verify request construction, parsing, validation, and response decoding. There is no live external-endpoint or credential fixture in the new UI case; request execution and secret-store behavior retain Application and Infrastructure specification coverage.
+
+## Shared numbered-tab icon coverage — tests/electron/tab-happy-path-visibility.test.cjs
+
+### numbered tabs show an identifying icon in the launcher and Workspace
+
+**Source:** tests/electron/tab-happy-path-visibility.test.cjs
+
+**Steps**
+
+1. Launch the isolated compact host and locate slots 1–8 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
+2. Open Workspace and verify slots 2–8 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
+
+**Expected result:** The numbered tabs retain their accessible names and show one visible icon in both windows.

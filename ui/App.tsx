@@ -1,8 +1,9 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Tabs from '@radix-ui/react-tabs';
 import {
-  Activity, AlertCircle, AppWindow, ArrowDownToLine, ArrowUpFromLine, Bell, Check, ChevronRight, CircleDot,
-  FolderOpen, Keyboard, Moon, Plus, Search, Settings2, Sparkles, Sun, X,
+  Activity, AlertCircle, AppWindow, ArrowDownToLine, ArrowUpFromLine, Bell, Braces, CalendarClock, Check,
+  ChevronRight, CircleDot, Clock, FolderOpen, Globe, Keyboard, MousePointerClick, Moon, Plus, Search,
+  Settings2, Sparkles, Sun, Terminal, Workflow, X,
 } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
@@ -27,6 +28,8 @@ import { rememberTransientResult } from './activity/transientResults';
 
 type Binding = BackendUiState['bindings'][number];
 type SettingsDraft = Pick<BackendUiState, 'hotkey' | 'theme' | 'startWithWindows' | 'bindings'>;
+
+const numberedTabIcons = [AppWindow, Terminal, Braces, MousePointerClick, Workflow, CalendarClock, Clock, Globe] as const;
 
 const quickActionBootstrap: readonly { scope: string; id: string; label: string; keywords: readonly string[]; category: string }[] = [
   { scope: 'script-runner', id: 'new-script-profile', label: 'Create script profile', keywords: ['python', 'powershell', 'bash', 'new'], category: 'Script Runner · action' },
@@ -797,11 +800,16 @@ export function App() {
 
       <Tabs.Root className="tab-root" value={showQuickActions ? '' : String(state.selectedTab)} onValueChange={(value) => changeTab(Number(value))}>
         <Tabs.List className="tabs" aria-label="Workspace tabs">
-          {state.tabs.filter((tab) => !isWorkspaceSurface || tab.slot > 1).map((tab) => (
-            <Tabs.Trigger key={tab.id} className="tab-button" value={String(tab.slot)} aria-label={`${tab.title}, tab ${tab.slot}`} ref={(element) => { tabRefs.current[tab.slot - 1] = element; }}>
-              <span className="tab-number">{tab.slot}</span>{tab.slot === 1 && <span className="tab-name">Launcher</span>}
-            </Tabs.Trigger>
-          ))}
+          {state.tabs.filter((tab) => !isWorkspaceSurface || tab.slot > 1).map((tab) => {
+            const TabIcon = numberedTabIcons[tab.slot - 1] ?? CircleDot;
+            return (
+              <Tabs.Trigger key={tab.id} className="tab-button" value={String(tab.slot)} aria-label={`${tab.title}, tab ${tab.slot}`} ref={(element) => { tabRefs.current[tab.slot - 1] = element; }}>
+                <span className="tab-number">{tab.slot}</span>
+                <TabIcon className="tab-icon" aria-hidden="true" size={12} strokeWidth={2.1} />
+                {tab.slot === 1 && <span className="tab-name">Launcher</span>}
+              </Tabs.Trigger>
+            );
+          })}
         </Tabs.List>
 
         {!showQuickActions && !activityOpen && activeTab && activeTab.slot !== 1 && activeTab.kind !== 'reserved' && <TabCommandBar scope={activeTab.id} />}

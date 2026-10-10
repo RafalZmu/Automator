@@ -4,7 +4,7 @@ Automator tabs are compiled into the .NET backend. The backend owns slot registr
 
 ## Register a tab
 
-Add one `IAutomationModule` provider to `LauncherTabRegistry.CreateProviders`. Its `AutomationModuleDefinition` is the source for the backend runtime registry and the metadata sent to React, so slot, ID, title, view kind, versions, actions, and capabilities do not need a second backend registration. Slots 1–7 are Launcher, Script Runner, API, Browser Automation, Workflows, Scheduler, and Work Time. Slot 8 is Website Launcher; slot 9 remains reserved.
+Add one `IAutomationModule` provider to `LauncherTabRegistry.CreateProviders`. Its `AutomationModuleDefinition` is the source for the backend runtime registry and the metadata sent to React, so slot, ID, title, view kind, versions, actions, and capabilities do not need a second backend registration. Slots 1–7 are Launcher, Script Runner, API, Browser Automation, Workflows, Scheduler, and Work Time. Slot 8 is Website Launcher; slot 9 is Codex.
 
 Module IDs use lowercase stable names such as `report-viewer`. Action IDs use stable names such as `refresh` or `open-report`. Increase an action version when its input or behavior changes incompatibly. Increase `ContractVersion` only when the shared module contract changes. Slots remain numbered 1–9.
 
@@ -12,7 +12,7 @@ Tab 1's existing command routes are marked with `LegacyCommand`. They stay on th
 
 ## Add a view
 
-Add the view kind to `contracts/bundled-tab-view-kinds.json` and `ui/viewKinds.ts`, then implement it in `ui/viewRegistry.tsx`. The TypeScript registry is typed against the shared kind union, while Application specs check all production module definitions against the shared JSON contract. A runtime state with an unrecognized kind uses the safe reserved view.
+Add the view kind to `contracts/bundled-tab-view-kinds.json` and `ui/viewKinds.ts`, then implement it in `ui/viewRegistry.tsx`. The Codex view is `ui/modules/CodexView.tsx`, registered for the `codex` view kind. Its request and result schemas are in `contracts/codex.ts`. The TypeScript registry is typed against the shared kind union, while Application specs check all production module definitions against the shared JSON contract. A runtime state with an unrecognized kind uses the safe reserved view.
 
 The renderer dispatches through the module-scoped `AutomationServices.modules` facade. It accepts only actions declared by the active tab, supplies their registered versions, creates a request ID, and exposes abort signals. The preload validates the action and cancellation requests; the Electron main process and JSON-RPC backend validate them again before dispatch. Follow-up actions returned in `AutomationResult` contain versioned JSON payloads; the active view passes those values back through the same facade.
 
@@ -31,6 +31,12 @@ The settings serializer validates payload sizes and duplicate IDs, upgrades sche
 ## Script Runner (slot 2)
 
 Profiles are persisted in the `script-runner/profiles` SQLite collection. Each profile selects Python or Bash, an interpreter executable, script path, working directory, argument values, output mode, and a 1–3600 second timeout. The service invokes the interpreter directly without shell interpolation. Script output is returned only as a bounded action result for display in the Script Runner view; it is not written to application logs. These are trusted scripts and run with the user's Windows permissions.
+
+## Codex (slot 9)
+
+`CodexTaskModule` is registered by `LauncherTabRegistry.CreateProviders` with the `codex` module ID and view kind. `CodexTaskService` and `CodexCliClient` discover and call the installed local Codex CLI to produce a structured task draft in a read-only authoring sandbox. Codex authors Python, Playwright, or Workflow source; Automator runs the approved task through its existing Script Runner, Playwright, or Workflow paths. Generated Python and Playwright execute with the signed-in Windows user's permissions. The displayed file, folder, or site scope is a review and consent boundary, not a technical sandbox.
+
+The Codex view presents the plan, source, scope, inputs, and effects before the first run. Sensitive declared effects require an additional confirmation; accepted scope expansion generates a fresh draft for review. Saving follows a successful run and an explicit save action. Python is saved as a Script Runner profile, Playwright as a `playwright-task` saved profile, and Workflow as a normal Workflow profile. Playwright profiles expose named JSON inputs to Workflows and are scheduled through a containing saved Workflow; Scheduler has no direct Playwright target. Source or review-scope changes invalidate approval before later execution.
 
 ## Adding capabilities
 

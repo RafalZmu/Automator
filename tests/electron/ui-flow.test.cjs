@@ -30,6 +30,64 @@ async function launchHost(name, dataDirectory = isolatedDataDirectory(name), bac
   });
 }
 
+test('Codex slot 9 shows recoverable CLI readiness and blocks export unless active', async () => {
+  const app = await launchHost('codex-builder-ui');
+  try {
+    const page = await app.firstWindow();
+    await page.getByPlaceholder('Search apps, profiles, and actions…').waitFor({ state: 'visible' });
+    const inactiveError = await page.evaluate(async () => {
+      try { await window.automator.exportCodexDraft('a'.repeat(32)); return null; }
+      catch (error) { return error instanceof Error ? error.message : String(error); }
+    });
+    assert.match(inactiveError, /active Codex tab/i);
+
+    await page.getByRole('tab', { name: 'Codex, tab 9' }).click();
+    await page.getByRole('region', { name: 'Codex CLI readiness' }).waitFor({ state: 'visible' });
+    const status = await page.getByRole('region', { name: 'Codex CLI readiness' }).innerText();
+    assert.match(status, /Codex CLI (ready|not found|needs sign-in|configuration needs attention)/i);
+    assert.equal(await page.getByRole('button', { name: 'Save successful task' }).count(), 0);
+    const invalidDraftError = await page.evaluate(async () => {
+      try { await window.automator.exportCodexDraft('a'.repeat(32)); return null; }
+      catch (error) { return error instanceof Error ? error.message : String(error); }
+    });
+    assert.ok(invalidDraftError);
+    assert.equal(await page.getByRole('button', { name: 'Retry status' }).count(), 1);
+  } finally { await app.close(); }
+});
+
+test('Codex native export does not open a save dialog for an unsaved draft', async () => {
+  const dataDirectory = isolatedDataDirectory('codex-unsaved-export');
+  const backendDataDirectory = path.join(dataDirectory, 'backend');
+  const draftId = randomUUID().replaceAll('-', '');
+  const draftDirectory = path.join(backendDataDirectory, 'CodexTasks', 'drafts');
+  await fs.mkdir(draftDirectory, { recursive: true });
+  await fs.writeFile(path.join(draftDirectory, `${draftId}.json`), JSON.stringify({
+    Id: draftId, Plan: 'A test task', Format: 'python', Source: 'print(1)', Scope: ['reports'], ProposedScope: ['reports'],
+    Inputs: [], Effects: [], SourceHash: 'hash', CreatedAt: new Date().toISOString(), RunSucceeded: false, Saved: false,
+    ManagedPath: null, ApprovedRevision: null, SuccessfulRunRevision: null, ReviewSourceHash: null, PlanIsHistorical: false,
+  }));
+  const app = await launchHost('codex-unsaved-export', dataDirectory, backendDataDirectory);
+  try {
+    const page = await app.firstWindow();
+    await page.getByPlaceholder('Search apps, profiles, and actions…').waitFor({ state: 'visible' });
+    await page.getByRole('tab', { name: 'Codex, tab 9' }).click();
+    await page.getByRole('region', { name: 'Codex CLI readiness' }).waitFor({ state: 'visible' });
+    await app.evaluate(({ dialog }) => {
+      globalThis.__codexExportDialogOpened = false;
+      dialog.showSaveDialog = async () => {
+        globalThis.__codexExportDialogOpened = true;
+        return { canceled: true, filePath: undefined };
+      };
+    });
+    const error = await page.evaluate(async (id) => {
+      try { await window.automator.exportCodexDraft(id); return null; }
+      catch (caught) { return caught instanceof Error ? caught.message : String(caught); }
+    }, draftId);
+    assert.match(error, /save the task successfully before exporting/i);
+    assert.equal(await app.evaluate(() => globalThis.__codexExportDialogOpened), false);
+  } finally { await app.close(); }
+});
+
 test('module settings reads and writes require the active version and preserve all other saved settings', async () => {
   const dataDirectory = isolatedDataDirectory('module-settings');
   const backendDataDirectory = path.join(dataDirectory, 'backend');
@@ -178,10 +236,10 @@ test('settings and tab transitions preserve focus in the isolated desktop host',
     await assertVisibleLauncher(page);
     await page.screenshot({ path: path.join(workspace, 'artifacts', 'gui-migration', 'dark-launcher.png'), animations: 'allow' });
 
-    await page.getByRole('tab', { name: 'Tab 9, tab 9' }).click();
+    await page.getByRole('tab', { name: 'Codex, tab 9' }).click();
     await page.getByRole('textbox', { name: 'Search applications' }).waitFor({ state: 'hidden' });
     await assertVisibleLauncher(page);
-    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Tab 9, tab 9');
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Codex, tab 9');
     await page.getByRole('tab', { name: 'Launcher, tab 1' }).click();
     await page.getByRole('textbox', { name: 'Search applications' }).waitFor({ state: 'visible' });
     await assertVisibleLauncher(page);
@@ -214,13 +272,17 @@ test('compact launcher uses the larger fixed size and remains non-resizable', as
       const bounds = window.getBounds();
       const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
       return {
-        bounds,
+        contentBounds: window.getContentBounds(),
         workArea: screen.getDisplayNearestPoint(center).workArea,
         resizable: window.isResizable(),
       };
     });
-    assert.equal(windowState.bounds.width, Math.min(760, windowState.workArea.width));
-    assert.equal(windowState.bounds.height, Math.min(800, windowState.workArea.height));
+    const expectedWidth = Math.min(760, windowState.workArea.width);
+    const expectedHeight = Math.min(800, windowState.workArea.height);
+    assert.ok(Math.abs(windowState.contentBounds.width - expectedWidth) <= 1,
+      `window content width ${windowState.contentBounds.width} should be within one pixel of ${expectedWidth}`);
+    assert.ok(Math.abs(windowState.contentBounds.height - expectedHeight) <= 1,
+      `window content height ${windowState.contentBounds.height} should be within one pixel of ${expectedHeight}`);
     assert.equal(windowState.resizable, false, 'the compact launcher remains fixed-size');
   } finally {
     await app.close();

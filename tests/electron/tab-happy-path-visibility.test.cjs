@@ -109,6 +109,18 @@ async function openWorkspace(app, launcher) {
   return page;
 }
 
+async function assertTabIcons(page, tabs) {
+  for (const { name, slot } of tabs) {
+    const tab = page.getByRole('tab', { name: `${name}, tab ${slot}`, exact: true });
+    await tab.waitFor({ state: 'visible' });
+    const icon = tab.locator('svg[aria-hidden="true"]');
+    assert.equal(await icon.count(), 1, `${name} tab must show one decorative icon`);
+    const bounds = await icon.boundingBox();
+    assert.ok(bounds && bounds.width >= 12 && bounds.height >= 12,
+      `${name} tab icon must have visible dimensions`);
+  }
+}
+
 async function saveScriptFixture(page, dataDirectory) {
   await selectTab(page, 'Script Runner', 2);
   await clickButton(page, page, 'New profile');
@@ -125,6 +137,25 @@ async function saveScriptFixture(page, dataDirectory) {
   await clickButton(page, page, 'Save profile');
   await page.getByRole('button', { name: 'Edit Visibility script', exact: true }).waitFor({ state: 'visible' });
 }
+
+test('numbered tabs show an identifying icon in the launcher and Workspace', async () => {
+  const { app, page } = await launchHost('tab-icons');
+  const tabs = [
+    { name: 'Launcher', slot: 1 },
+    { name: 'Script Runner', slot: 2 },
+    { name: 'API', slot: 3 },
+    { name: 'Browser Automation', slot: 4 },
+    { name: 'Workflows', slot: 5 },
+    { name: 'Scheduler', slot: 6 },
+    { name: 'Work Time', slot: 7 },
+    { name: 'Website Launcher', slot: 8 },
+  ];
+  try {
+    await assertTabIcons(page, tabs);
+    const workspacePage = await openWorkspace(app, page);
+    await assertTabIcons(workspacePage, tabs.slice(1));
+  } finally { await app.close(); }
+});
 
 test('happy-path visibility rejects hidden viewport-clipped and ancestor-clipped buttons', async () => {
   const { app, page } = await launchHost('visibility-guard');

@@ -170,3 +170,16 @@ Run after npm.cmd run build:desktop with node --experimental-strip-types --test 
 ## Additional backend coverage
 
 Persistence, recovery, coordinator state transitions, and notification behavior are covered by tests/Automator.Focus.Specs. Run the backend specification suites with npm.cmd run test:dotnet.
+
+## Shared numbered-tab icon coverage — tests/electron/tab-happy-path-visibility.test.cjs
+
+### numbered tabs show an identifying icon in the launcher and Workspace
+
+**Source:** tests/electron/tab-happy-path-visibility.test.cjs
+
+**Steps**
+
+1. Launch the isolated compact host and locate slots 1–8 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
+2. Open Workspace and verify slots 2–8 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
+
+**Expected result:** The numbered tabs retain their accessible names and show one visible icon in both windows.

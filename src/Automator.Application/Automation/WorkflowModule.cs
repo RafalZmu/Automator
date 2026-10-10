@@ -27,7 +27,7 @@ public sealed class WorkflowModule : ILauncherTabModuleProvider
     private static readonly Regex ProfileIdPattern = new("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex VariableKeyPattern = new("^[A-Za-z_][A-Za-z0-9_.-]{0,63}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly HashSet<string> SupportedProfileModules = new(StringComparer.Ordinal)
-        { "script-runner", "api", "browser-automation" };
+        { "script-runner", "api", "browser-automation", "playwright-task" };
     private static readonly AutomationCapabilityRequirement LibraryCapability = new(AutomationCapabilityIds.LibraryStorage, 1);
     private static readonly AutomationCapabilityRequirement WorkflowCapability = new(AutomationCapabilityIds.WorkflowExecution, 1);
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
@@ -130,6 +130,8 @@ public sealed class WorkflowModule : ILauncherTabModuleProvider
         var profile = DeserializeProfile(input)
             ?? throw new InvalidDataException("The workflow is empty or invalid.");
         profile = NormalizeProfile(profile);
+        var previous = await services.Library!.GetAsync(WorkflowCollection, profile.Id, cancellationToken).ConfigureAwait(false);
+        profile = profile with { CodexApproval = previous is null ? null : DeserializeProfile(previous.Data)?.CodexApproval };
         var validation = Validate(profile);
         if (validation is not null) throw new InvalidDataException(validation);
 

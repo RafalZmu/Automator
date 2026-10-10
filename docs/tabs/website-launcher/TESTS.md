@@ -87,3 +87,29 @@ The Electron visibility case below edits and saves a Website Launcher row withou
 **Expected result:** Required buttons are CSS-visible, fully inside viewport and ancestor content bounds, and uncovered before use. User wheel scrolling may reveal controls before assertion; click auto-scrolling cannot satisfy it. The edited shortcut persists. URL launch and additional group/site creation are not performed by this case.
 
 Run after npm.cmd run build:desktop with node --experimental-strip-types --test --test-concurrency=1 tests/electron/tab-happy-path-visibility.test.cjs.
+
+## Windows adapter specs — tests/Automator.Windows.Specs/Program.cs
+
+### website launcher redirects direct browser output
+
+**Steps**
+
+1. Launch one HTTP(S) URL through a classified Chromium executable and inspect the captured process start request.
+2. Check that stdout and stderr are redirected and shell execution remains disabled.
+
+**Expected result:** Direct browser output is redirected and drained/discarded asynchronously through child exit. Launch completion does not wait for the browser lifetime. The grouped launch specification also checks Firefox redirection, launch order, and that the unknown-browser shell fallback keeps `UseShellExecute = true` without redirected streams.
+
+Run the focused Windows specs with `dotnet run --project tests/Automator.Windows.Specs/Automator.Windows.Specs.csproj --no-restore`.
+
+## Shared numbered-tab icon coverage — tests/electron/tab-happy-path-visibility.test.cjs
+
+### numbered tabs show an identifying icon in the launcher and Workspace
+
+**Source:** tests/electron/tab-happy-path-visibility.test.cjs
+
+**Steps**
+
+1. Launch the isolated compact host and locate slots 1–8 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
+2. Open Workspace and verify slots 2–8 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
+
+**Expected result:** The numbered tabs retain their accessible names and show one visible icon in both windows.

@@ -25,7 +25,7 @@ public sealed class AutomationWorkflowEngine(
     private static readonly Regex VariableKey = new("^[A-Za-z_][A-Za-z0-9_.-]{0,63}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly HashSet<string> SupportedProfileModules = new(StringComparer.Ordinal)
     {
-        "script-runner", "api", "browser-automation"
+        "script-runner", "api", "browser-automation", "playwright-task"
     };
 
     public async Task<IReadOnlyList<AutomationSavedProfileSummary>> ListSavedProfilesAsync(
@@ -46,6 +46,29 @@ public sealed class AutomationWorkflowEngine(
         ValidateJsonSize(initialInput, AutomationSavedProfileExecutor.MaximumStructuredDataBytes, "Workflow input");
         var globals = variables is null ? null : await variables.GetAsync(cancellationToken).ConfigureAwait(false);
         var workflow = await LoadWorkflowAsync(workflowId, cancellationToken).ConfigureAwait(false);
+        await ValidateApprovalAsync(workflow, cancellationToken).ConfigureAwait(false);
+        return await RunProfileAsync(workflow, globals, initialInput, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<AutomationWorkflowRunResult> RunTransientAsync(AutomationWorkflowProfile workflow, JsonElement? initialInput, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(workflow);
+        var validation = WorkflowModule.ValidateProfile(workflow);
+        if (validation is not null) throw new InvalidDataException(validation);
+        foreach (var moduleId in workflow.Steps.Select(step => step.ModuleId).Distinct(StringComparer.Ordinal))
+        {
+            var available = await profiles.ListProfilesAsync(moduleId, cancellationToken).ConfigureAwait(false);
+            var ids = available.Select(profile => profile.ProfileId).ToHashSet(StringComparer.Ordinal);
+            if (workflow.Steps.Any(step => step.ModuleId == moduleId && !ids.Contains(step.ProfileId)))
+                throw new InvalidDataException($"Workflow refers to a profile that is not currently saved under '{moduleId}'.");
+        }
+        ValidateJsonSize(initialInput, AutomationSavedProfileExecutor.MaximumStructuredDataBytes, "Workflow input");
+        var globals = variables is null ? null : await variables.GetAsync(cancellationToken).ConfigureAwait(false);
+        return await RunProfileAsync(workflow, globals, initialInput, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<AutomationWorkflowRunResult> RunProfileAsync(AutomationWorkflowProfile workflow, AutomationVariableSnapshot? globals, JsonElement? initialInput, CancellationToken cancellationToken)
+    {
         var rootInput = BuildRootInput(workflow, globals, initialInput);
         var startedUtc = DateTimeOffset.UtcNow;
         var timer = Stopwatch.StartNew();
@@ -133,6 +156,7 @@ public sealed class AutomationWorkflowEngine(
             ValidateWorkflowId(workflowId);
             var globals = variables is null ? null : await variables.GetAsync(cancellationToken).ConfigureAwait(false);
             var workflow = await LoadWorkflowAsync(workflowId, cancellationToken).ConfigureAwait(false);
+            await ValidateApprovalAsync(workflow, cancellationToken).ConfigureAwait(false);
             var rootInput = BuildRootInput(workflow, globals, null);
             var startedUtc = DateTimeOffset.UtcNow;
             var timer = Stopwatch.StartNew();
@@ -200,6 +224,17 @@ public sealed class AutomationWorkflowEngine(
         workflow = workflow with { Variables = workflow.Variables ?? EmptyVariables() };
         ValidateWorkflow(workflow);
         return workflow;
+    }
+
+    private static async Task ValidateApprovalAsync(AutomationWorkflowProfile workflow, CancellationToken cancellationToken)
+    {
+        if (workflow.CodexApproval is not { } approval) return;
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(workflow with { CodexApproval = null }));
+        var revision = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+        if (!string.Equals(revision, approval.SourceHash, StringComparison.Ordinal) || approval.Scope is null
+            || !string.Equals(ScriptRunnerExecution.HashReview(approval.Scope, approval.Inputs, approval.Effects), approval.ScopeHash, StringComparison.Ordinal))
+            throw new InvalidDataException("This generated workflow changed after approval. Review and approve it before running.");
+        await Task.CompletedTask.ConfigureAwait(false);
     }
 
     private async Task PersistHistoryAsync(
