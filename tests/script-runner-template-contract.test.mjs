@@ -51,5 +51,17 @@ test('Explorer mapping contract normalizes extensions and rejects unsafe or malf
   assert.deepEqual(parseExplorerActions([action]), [{ ...action, extensions: ['.fdb'] }]);
   for (const change of [{ id: '../evil' }, { profileId: '' }, { label: 'x\ncommand' }, { extensions: ['.*'] }, { extensions: ['fdb'] }, { fileParameterKey: '../path' }])
     assert.throws(() => parseExplorerActions([{ ...action, ...change }]));
+  assert.throws(() => parseExplorerActions([{ ...action, id: 'register-powershell-script' }]));
   assert.throws(() => parseExplorerActions([action, action]));
+});
+
+test('PowerShell Explorer registration creates a unique prefilled profile draft', async () => {
+  const { createPowerShellProfileDraft } = await import('../ui/modules/scriptTemplateViewModel.ts');
+  const draft = createPowerShellProfileDraft('C:\\Tools\\Zażółć report.ps1', 'C:\\PowerShell\\pwsh.exe', ['script-za-report']);
+  assert.deepEqual(draft, {
+    id: 'script-za-report-2', name: 'Zażółć report', interpreter: 'powershell', interpreterPath: 'C:\\PowerShell\\pwsh.exe',
+    scriptPath: 'C:\\Tools\\Zażółć report.ps1', arguments: [], workingDirectory: 'C:\\Tools', outputMode: 'text', timeoutSeconds: 60,
+  });
+  assert.throws(() => createPowerShellProfileDraft('relative.ps1', 'C:\\PowerShell\\pwsh.exe', []));
+  assert.throws(() => createPowerShellProfileDraft('C:\\Tools\\not-a-script.txt', 'C:\\PowerShell\\pwsh.exe', []));
 });

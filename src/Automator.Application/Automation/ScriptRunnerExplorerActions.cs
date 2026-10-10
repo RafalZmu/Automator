@@ -72,7 +72,7 @@ public sealed partial class ScriptRunnerModule
 
     public static void ValidateExplorerAction(ExplorerActionDefinition action)
     {
-        if (action.Id is null || !ProfileIdPattern.IsMatch(action.Id) || action.ProfileId is null || !ProfileIdPattern.IsMatch(action.ProfileId))
+        if (action.Id is null || !ProfileIdPattern.IsMatch(action.Id) || action.Id == RegisterPowerShellScriptActionId || action.ProfileId is null || !ProfileIdPattern.IsMatch(action.ProfileId))
             throw new InvalidDataException("Explorer action and profile IDs must be valid keys.");
         if (string.IsNullOrWhiteSpace(action.Label) || action.Label.Length > 128 || action.Label.Any(char.IsControl))
             throw new InvalidDataException("Menu label is required and must be at most 128 characters.");

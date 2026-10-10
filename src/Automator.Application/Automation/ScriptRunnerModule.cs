@@ -51,6 +51,7 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
     public const int ContractVersionValue = 1;
     public const int SettingsVersionValue = 1;
     public const string ProfileCollection = "profiles";
+    public const string RegisterPowerShellScriptActionId = "register-powershell-script";
     private static readonly Regex ProfileIdPattern = new("^[a-z0-9][a-z0-9._-]{0,63}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     internal static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     private static readonly AutomationCapabilityRequirement LibraryCapability = new(AutomationCapabilityIds.LibraryStorage, 1);

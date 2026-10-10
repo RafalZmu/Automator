@@ -25,6 +25,7 @@ internal static class ScriptRunnerExplorerSpecs
             Ensure((await Call("saveProfile", profile)).Status == AutomationStatus.Success, "save regular profile");
             var map = new { id = "backup", profileId = profile.Id, label = "Backup", extensions = new[] { ".FDB", ".fdb" } };
             Ensure((await Call("saveExplorerAction", map)).Status == AutomationStatus.Success, "save mapping");
+            Ensure((await Call("saveExplorerAction", new { id = "register-powershell-script", profileId = profile.Id, label = "Collision", extensions = new[] { ".ps1" } })).Status == AutomationStatus.Error, "registration launch ID is reserved");
             var list = await Call("listExplorerActions", new { });
             Ensure(list.Data.GetProperty("actions")[0].GetProperty("extensions").GetArrayLength() == 1, "normalize extensions");
             Ensure((await Call("runExplorerAction", new { id = "backup", filePath = file })).Status == AutomationStatus.Success, "run mapped file");

@@ -299,6 +299,17 @@ Script Runner installation, trusted template origin, execution, and persisted pr
 
 **Expected result:** The request survives startup and mounting; no execution occurs before Run or on Cancel.
 
+### `.ps1` Explorer registration opens a PowerShell profile draft without saving or running it
+
+**Steps**
+
+1. Start the stable packaged host with no Explorer mappings and right-click a `.ps1` file in File Explorer.
+2. Choose **Automator → Register in Automator**.
+3. Inspect the new profile draft for the PowerShell interpreter, filename-based name, selected script path, containing folder, and saved interpreter default.
+4. Cancel and confirm the Library has no profile for that script; repeat and choose **Save profile**.
+
+**Expected result:** The registration entry exists for `.ps1` without any run mappings, while other extensions do not receive it. The draft accepts paths with spaces and Unicode, registration and Cancel do not save or execute the script, and only explicit Save adds the profile.
+
 ### Firebird Library card path labels address the input on each card
 
 **Steps**

@@ -21,6 +21,7 @@ public sealed class WindowsAutomationFileExplorerMenu : IAutomationFileExplorerM
 {
     private const string Root = @"Software\Classes\SystemFileAssociations";
     private const string MenuKey = "Automator.ScriptRunner";
+    private const string RegisterPowerShellChildKey = "@register-powershell-script";
     private const string OwnerName = "AutomatorOwner";
     private const string OwnerValue = "script-runner.explorer.v1";
     private readonly IFileExplorerRegistryStore _store;
@@ -57,6 +58,7 @@ public sealed class WindowsAutomationFileExplorerMenu : IAutomationFileExplorerM
                 .Select(extension => (Extension: extension.ToLowerInvariant(), Entry: entry)))
             .GroupBy(item => item.Extension, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Select(item => item.Entry).OrderBy(entry => entry.Id, StringComparer.Ordinal).ToArray(), StringComparer.OrdinalIgnoreCase);
+        groups.TryAdd(".ps1", []);
         lock (_gate)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -65,6 +67,11 @@ public sealed class WindowsAutomationFileExplorerMenu : IAutomationFileExplorerM
             {
                 var parent = Parent(extension);
                 RequireOwnedOrAbsent(parent);
+                if (extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase))
+                {
+                    RequireOwnedOrAbsent(parent + @"\shell\" + RegisterPowerShellChildKey);
+                    RequireOwnedOrAbsent(parent + @"\shell\" + RegisterPowerShellChildKey + @"\command");
+                }
                 foreach (var action in actions)
                 {
                     RequireOwnedOrAbsent(parent + @"\shell\" + action.Id);
@@ -87,7 +94,8 @@ public sealed class WindowsAutomationFileExplorerMenu : IAutomationFileExplorerM
                         continue;
                     }
                     foreach (var child in _store.SubKeys(parent + @"\shell"))
-                        if (!actions.Any(action => action.Id.Equals(child, StringComparison.OrdinalIgnoreCase)))
+                        if (!child.Equals(RegisterPowerShellChildKey, StringComparison.OrdinalIgnoreCase)
+                            && !actions.Any(action => action.Id.Equals(child, StringComparison.OrdinalIgnoreCase)))
                             RemoveAction(parent + @"\shell\" + child, ref changed);
                 }
                 foreach (var (extension, actions) in groups)
@@ -106,6 +114,15 @@ public sealed class WindowsAutomationFileExplorerMenu : IAutomationFileExplorerM
                         Set(child, "MultiSelectModel", "Single", ref changed);
                         Set(child + @"\command", OwnerName, OwnerValue, ref changed);
                         Set(child + @"\command", "", $"\"{executablePath}\" --automator-file-action \"{action.Id}\" -- \"%1\"", ref changed);
+                    }
+                    if (extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var child = parent + @"\shell\" + RegisterPowerShellChildKey;
+                        Set(child, OwnerName, OwnerValue, ref changed);
+                        Set(child, "MUIVerb", "Register in Automator", ref changed);
+                        Set(child, "MultiSelectModel", "Single", ref changed);
+                        Set(child + @"\command", OwnerName, OwnerValue, ref changed);
+                        Set(child + @"\command", "", $"\"{executablePath}\" --automator-file-action \"{ScriptRunnerModule.RegisterPowerShellScriptActionId}\" -- \"%1\"", ref changed);
                     }
                 }
             }

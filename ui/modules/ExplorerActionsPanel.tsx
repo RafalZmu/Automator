@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { AutomationServices } from '../automationServices';
 import { FileExplorerLaunchContext } from '../FileExplorerLaunchContext';
+import { FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID } from '../../contracts/fileExplorer';
 import { parseExplorerActions, parseScriptTemplateCatalog, validateScriptTemplateValues, type ExplorerActionDefinition, type ScriptTemplateDescriptor } from '../../contracts/scriptRunner';
 import { PathField } from '../components/PathField';
 import { clearSensitiveTemplateValues } from './scriptTemplateViewModel';
@@ -38,7 +39,15 @@ export function ExplorerActionsPanel({ services, profiles, templates, open, onOp
   }, [open, profiles, refresh]);
 
   useEffect(() => {
-    if (!launch.request || form || busy) return;
+    if (!launch.request) return;
+    if (launch.request.actionId === FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID) {
+      if (busy || running) return;
+      setForm(null);
+      setDraft(null);
+      setNotice('');
+      return;
+    }
+    if (form || busy) return;
     let disposed = false;
     const request = launch.request;
     setOpening(true);
@@ -58,7 +67,7 @@ export function ExplorerActionsPanel({ services, profiles, templates, open, onOp
       finally { if (!disposed) { setOpening(false); launch.consume(); } }
     })();
     return () => { disposed = true; };
-  }, [launch.request, launch.consume, services, refresh, form, busy, onOpen]);
+  }, [launch.request, launch.consume, services, refresh, form, busy, running, onOpen]);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();

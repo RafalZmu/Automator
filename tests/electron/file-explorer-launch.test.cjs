@@ -5,6 +5,16 @@ test('Explorer command parser preserves one Unicode path and rejects malformed c
   assert.deepEqual(parseFileExplorerLaunch(['Automator.exe', '--automator-file-action', 'backup', '--', 'C:\\Bazy danych\\żółć.fdb']), { actionId: 'backup', filePath: 'C:\\Bazy danych\\żółć.fdb' });
   for (const args of [[], ['--automator-file-action', 'backup'], ['--automator-file-action', '../evil', '--', 'C:\\a.fdb'], ['--automator-file-action', 'backup', '--', 'relative.fdb'], ['--automator-file-action', 'backup', '--', '\\rooted.fdb'], ['--automator-file-action', 'backup', '--', 'C:\\a.fdb', 'extra']]) assert.equal(parseFileExplorerLaunch(args), null);
 });
+test('PowerShell registration launch accepts only PowerShell script paths', async () => {
+  const { parseFileExplorerLaunch } = await import('../../electron/fileExplorerLaunch.ts');
+  const { fileExplorerLaunchRequestSchema } = await import('../../contracts/rpc.ts');
+  const command = filePath => ['Automator.exe', '--automator-file-action', 'register-powershell-script', '--', filePath];
+  const request = { actionId: 'register-powershell-script', filePath: 'C:\\Scripts\\Zażółć report.PS1' };
+  assert.deepEqual(parseFileExplorerLaunch(command(request.filePath)), request);
+  assert.equal(fileExplorerLaunchRequestSchema.safeParse(request).success, true);
+  assert.equal(parseFileExplorerLaunch(command('C:\\Scripts\\not-a-script.txt')), null);
+  assert.equal(fileExplorerLaunchRequestSchema.safeParse({ ...request, filePath: 'C:\\Scripts\\not-a-script.txt' }).success, false);
+});
 test('Explorer action IDs use the backend profile ID contract', async () => {
   const { parseFileExplorerLaunch } = await import('../../electron/fileExplorerLaunch.ts');
   const { fileExplorerLaunchRequestSchema } = await import('../../contracts/rpc.ts');

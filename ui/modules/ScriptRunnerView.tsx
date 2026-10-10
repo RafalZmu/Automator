@@ -2,28 +2,17 @@ import { GlobalVariableHints } from '../variables/GlobalVariables';
 import {
   Braces, Check, Clock3, FileCode2, Pencil, Play, Plus, Save, Square, Terminal, Trash2, X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AutomationServices } from '../automationServices';
 import type { BackendUiState, ModuleSettingsUpdateRequest } from '../../contracts/rpc';
+import { FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID } from '../../contracts/fileExplorer';
 import type { ScriptRunnerInterpreter } from '../../contracts/scriptRunner';
 import { parseScriptTemplateCatalog, validateScriptTemplateValues, type ScriptTemplateDescriptor, type ScriptTemplateValue } from '../../contracts/scriptRunner';
-import { clearSensitiveTemplateValues, filterScriptTemplates, resetTemplateValues, templateDetailParameters, updateScriptPath } from './scriptTemplateViewModel';
+import { clearSensitiveTemplateValues, createPowerShellProfileDraft, filterScriptTemplates, resetTemplateValues, templateDetailParameters, updateScriptPath, type ScriptProfile } from './scriptTemplateViewModel';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import { PathField } from '../components/PathField';
 import { ExplorerActionsPanel } from './ExplorerActionsPanel';
-
-type ScriptProfile = {
-  id: string;
-  name: string;
-  interpreter: ScriptRunnerInterpreter;
-  interpreterPath: string;
-  scriptPath: string;
-  arguments: string[];
-  workingDirectory: string;
-  outputMode: 'text' | 'json';
-  timeoutSeconds: number;
-  templateOrigin?: { id: string; version: number } | null;
-};
+import { FileExplorerLaunchContext } from '../FileExplorerLaunchContext';
 
 type ViewProps = {
   tab: BackendUiState['tabs'][number];
@@ -91,6 +80,7 @@ function readInterpreterDefaults(value: unknown): InterpreterDefaults {
 }
 
 export function ScriptRunnerView({ tab, services }: ViewProps) {
+  const fileExplorerLaunch = useContext(FileExplorerLaunchContext);
   const [profiles, setProfiles] = useState<ScriptProfile[]>([]);
   const [interpreterDefaults, setInterpreterDefaults] = useState<InterpreterDefaults>(emptyInterpreterDefaults);
   const [settingsReady, setSettingsReady] = useState(false);
@@ -163,6 +153,25 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     return () => runController.current?.abort();
   }, [refresh]);
 
+  useEffect(() => {
+    const request = fileExplorerLaunch.request;
+    if (!settingsReady || editing || runningId !== null || !request || request.actionId !== FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID) return;
+    try {
+      setEditing(createPowerShellProfileDraft(request.filePath, interpreterDefaults.powershell, profiles.map(profile => profile.id)));
+      setOutput(null);
+      setExplorerOpen(false);
+      setLibraryOpen(false);
+      setSelectedTemplate(null);
+      setTemplateProfile(null);
+      setTemplateValues({});
+      setNotice('');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The selected PowerShell script could not be registered.');
+    } finally {
+      fileExplorerLaunch.consume();
+    }
+  }, [fileExplorerLaunch.request, fileExplorerLaunch.consume, settingsReady, editing, runningId, interpreterDefaults.powershell, profiles]);
+
   const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editing) return;
@@ -192,8 +201,8 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
         const detail = error instanceof Error ? error.message : 'Unknown settings error.';
         settingsWarning = ` The profile was saved, but its interpreter default could not be remembered: ${detail}`;
       }
-      setEditing(null);
       await refresh();
+      setEditing(null);
       setNotice(settingsWarning ? `${result.message}${settingsWarning}` : result.message);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not save this profile.');

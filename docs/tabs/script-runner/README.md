@@ -27,7 +27,7 @@ Templates are bundled trusted code and run unsandboxed with the same Windows-use
 
 ## Code map
 
-- `ui/modules/ScriptRunnerView.tsx` contains profile editing, interpreter defaults, run/cancel, and output presentation.
+- `ui/modules/ScriptRunnerView.tsx` contains profile editing, interpreter defaults, Explorer registration handoff, run/cancel, and output presentation. `scriptTemplateViewModel.ts` creates validated PowerShell profile drafts from `.ps1` Explorer requests.
 - `contracts/scriptRunner.ts` validates renderer-facing profile and result shapes.
 - `src/Automator.Application/Automation/ScriptRunnerModule.cs` validates profiles, expands global variables in argument values, invokes the process capability, and interprets text/JSON output.
 - `ScriptRunnerSavedProfileHandler.cs` lets Workflows and Scheduler run a saved script profile.
@@ -41,6 +41,8 @@ Open **Explorer actions** in Script Runner and press **Add action**. Choose a sa
 In the stable Windows package, right-click a matching file in File Explorer and choose **Automator → your action**. Windows 11 may place the submenu under **Show more options**. The app opens Script Runner with a review form and the selected file prefilled, including paths with spaces and Unicode. Press **Run** to execute or **Cancel** to dismiss it. Regular arguments can be edited for that one run; template fields use typed inputs and transient credentials. Neither is saved to the profile. The backend checks the selected existing absolute file and extension again when Run is pressed.
 
 Mappings can be edited or removed individually. **Remove all Explorer actions** clears the mappings and owned menu entries; deleting a saved profile removes its mappings. A registration error leaves the saved mappings visible; reopen the section to retry. Registration is disabled in development, portable, and test-mode hosts. Automator only writes its owned per-user menu keys and never changes the default file association.
+
+In the stable Windows package, the `.ps1` **Automator** submenu also contains **Register in Automator**, even when no run actions are mapped. It opens a new PowerShell profile draft with the script path, filename-based name, and containing folder filled in. Review the interpreter and other fields, then choose **Save profile** to add it to Script Runner; the script is not run by registration or saving. Cancel leaves the Library unchanged.
 
 The Library includes **Firebird 3 database backup** and **Firebird 3 database backup and ZIP**. Install either template and map it yourself; neither action is enabled automatically. Both offer the target database on the Library card, with backup destinations, `gbak`, username, and password in their typed run forms. V1 handles one selected file at a time.
 

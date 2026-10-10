@@ -1,4 +1,45 @@
-import type { ScriptTemplateDescriptor, ScriptTemplateValue } from '../../contracts/scriptRunner';
+import type { ScriptRunnerInterpreter, ScriptTemplateDescriptor, ScriptTemplateValue } from '../../contracts/scriptRunner';
+
+export type ScriptProfile = {
+  id: string;
+  name: string;
+  interpreter: ScriptRunnerInterpreter;
+  interpreterPath: string;
+  scriptPath: string;
+  arguments: string[];
+  workingDirectory: string;
+  outputMode: 'text' | 'json';
+  timeoutSeconds: number;
+  templateOrigin?: { id: string; version: number } | null;
+};
+
+export function createPowerShellProfileDraft(filePath: string, interpreterPath: string, existingProfileIds: Iterable<string>): ScriptProfile {
+  if (filePath.length > 4096 || /[\x00-\x1f]/.test(filePath)
+      || !/^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+(?:[\\/]|$))/.test(filePath)
+      || !/\.ps1$/i.test(filePath)) throw new Error('Register in Automator requires an absolute .ps1 file path.');
+  const separator = Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/'));
+  const fileName = filePath.slice(separator + 1);
+  const name = fileName.replace(/\.ps1$/i, '').slice(0, 128) || 'PowerShell script';
+  const slug = name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^[^a-z0-9]+/, '').slice(0, 56) || 'powershell';
+  const baseId = `script-${slug}`;
+  const usedIds = new Set(existingProfileIds);
+  let id = baseId;
+  for (let suffix = 2; usedIds.has(id); suffix++) id = `${baseId.slice(0, 63 - String(suffix).length)}-${suffix}`;
+  const workingDirectory = /^[A-Za-z]:[\\/]/.test(filePath) && separator === 2
+    ? filePath.slice(0, 3)
+    : filePath.slice(0, separator);
+  return {
+    id,
+    name,
+    interpreter: 'powershell',
+    interpreterPath,
+    scriptPath: filePath,
+    arguments: [],
+    workingDirectory,
+    outputMode: 'text',
+    timeoutSeconds: 60,
+  };
+}
 
 export function filterScriptTemplates<T extends Pick<ScriptTemplateDescriptor, 'name' | 'description' | 'tags'>>(
   templates: T[], query: string,

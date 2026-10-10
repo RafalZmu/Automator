@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID } from './fileExplorer.ts';
 
 export const PROTOCOL_VERSION = 3 as const;
 export const MAX_RPC_REQUEST_LINE_BYTES = 7 * 1024 * 1024;
@@ -407,5 +408,9 @@ export const backendNotificationSchema = z.discriminatedUnion('method', [
 export const fileExplorerLaunchRequestSchema = z.object({
   actionId: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9._-]{0,63}$/),
   filePath: absoluteWindowsPath.refine((value) => !/[\x00-\x1f]/.test(value)),
-}).strict();
+}).strict().superRefine((request, context) => {
+  if (request.actionId === FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID && !/\.ps1$/i.test(request.filePath)) {
+    context.addIssue({ code: 'custom', path: ['filePath'], message: 'PowerShell registration requires a .ps1 file.' });
+  }
+});
 export type FileExplorerLaunchRequest = z.infer<typeof fileExplorerLaunchRequestSchema>;

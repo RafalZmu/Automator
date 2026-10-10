@@ -29,8 +29,8 @@ async function fixture() {
   await page.getByRole('region', { name: 'Launcher applications', exact: true }).waitFor();
   await page.evaluate(() => window.automator.selectTab(2));
   await page.getByRole('button', { name: 'Edit Echo file', exact: true }).waitFor();
-  const launch = async actionId => app.evaluate(({ app }, request) => app.emit('second-instance', {}, ['exe', '--automator-file-action', request.actionId, '--', request.filePath], '', { fileExplorerLaunch: request }), { actionId, filePath: source });
-  return { app, page, data, source, dispatch, launch };
+  const launch = async (actionId, filePath = source) => app.evaluate(({ app }, request) => app.emit('second-instance', {}, ['exe', '--automator-file-action', request.actionId, '--', request.filePath], '', { fileExplorerLaunch: request }), { actionId, filePath });
+  return { app, page, data, source, script, dispatch, launch };
   } catch (error) { await app.close(); throw error; }
 }
 test('Explorer mapping UI saves edits removes and clears mappings while registration stays disabled in test mode', async () => {
@@ -93,6 +93,45 @@ test('Explorer launch opens a transient Unicode file form and requires Run after
     await form.getByRole('button', { name: 'Cancel', exact: true }).click();
     await launch('stale-action');
     await page.getByRole('status').filter({ hasText: 'action no longer exists' }).waitFor();
+  } finally { await app.close(); }
+});
+test('Register in Automator opens a prefilled PowerShell profile draft without saving or running it', async () => {
+  const { app, page, data, dispatch, launch } = await fixture();
+  const registeredScript = path.join(data, 'Registered Żółć script.ps1');
+  await fs.writeFile(registeredScript, 'Write-Output "not run"');
+  try {
+    await launch('register-powershell-script', registeredScript);
+    await page.getByRole('button', { name: 'Save profile', exact: true }).waitFor();
+    assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'Registered Żółć script');
+    assert.equal(await page.locator('label').filter({ has: page.locator('span:text-is("Interpreter")') }).locator('select').inputValue(), 'powershell');
+    assert.equal(await page.getByLabel('Script file').inputValue(), registeredScript);
+    assert.equal(await page.getByLabel('Working directory').inputValue(), data);
+    assert.equal(await page.getByRole('region', { name: 'Script output' }).count(), 0);
+    assert.equal((await dispatch('listProfiles', {})).data.profiles.some(profile => profile.scriptPath === registeredScript), false);
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    assert.equal((await dispatch('listProfiles', {})).data.profiles.some(profile => profile.scriptPath === registeredScript), false);
+    assert.equal(await page.getByRole('region', { name: 'Script output' }).count(), 0);
+  } finally { await app.close(); }
+});
+test('Explorer registration waits for an active run so the Stop run control stays available', async () => {
+  const { app, page, data, dispatch, launch } = await fixture();
+  const registeredScript = path.join(data, 'Next script.ps1');
+  try {
+    const savedAction = await dispatch('saveExplorerAction', { id: 'echo-file', profileId: 'echo', label: 'Echo file', extensions: ['.fdb'] });
+    assert.notEqual(savedAction.status, 'error', savedAction.message);
+    await fs.writeFile(registeredScript, 'Write-Output "not run"');
+    await fs.writeFile(path.join(data, 'echo.ps1'), 'Start-Sleep -Seconds 30; [Console]::WriteLine("finished")');
+    await launch('echo-file');
+    const form = page.getByRole('region', { name: 'Run Explorer action', exact: true });
+    await form.waitFor();
+    await form.getByRole('button', { name: 'Run', exact: true }).click();
+    await form.getByRole('button', { name: 'Stop run', exact: true }).waitFor();
+    await launch('register-powershell-script', registeredScript);
+    await form.getByRole('button', { name: 'Stop run', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Save profile', exact: true }).count(), 0);
+    await form.getByRole('button', { name: 'Stop run', exact: true }).click();
+    await page.getByRole('button', { name: 'Save profile', exact: true }).waitFor();
+    assert.equal(await page.getByLabel('Script file', { exact: true }).inputValue(), registeredScript);
   } finally { await app.close(); }
 });
 test('Explorer template mapping prefills the typed file input and keeps credentials transient on cancel', async () => {

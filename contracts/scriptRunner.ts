@@ -1,3 +1,5 @@
+import { FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID } from './fileExplorer.ts';
+
 export type ScriptRunnerInterpreter = 'python' | 'bash' | 'powershell';
 
 export type ScriptFileFilter = {
@@ -164,7 +166,7 @@ export function parseExplorerActions(value: unknown): ExplorerActionDefinition[]
     const item = object(raw);
     const id = bounded(item.id, 'Explorer action ID', 64);
     const profileId = bounded(item.profileId, 'Profile ID', 64);
-    if (!templateIdPattern.test(id) || !templateIdPattern.test(profileId) || ids.has(id)) throw new Error('Explorer action IDs are invalid or duplicated.');
+    if (!templateIdPattern.test(id) || !templateIdPattern.test(profileId) || ids.has(id) || id === FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID) throw new Error('Explorer action IDs are invalid, reserved, or duplicated.');
     ids.add(id);
     const label = bounded(item.label, 'Menu label', 128);
     if (/[\x00-\x1f\x7f]/.test(label)) throw new Error('Menu label is invalid.');

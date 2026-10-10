@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { FileExplorerLaunchRequest } from '../contracts/rpc.ts';
+import { FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID } from '../contracts/fileExplorer.ts';
 
 export function parseFileExplorerLaunch(args: string[]): FileExplorerLaunchRequest | null {
   const index = args.indexOf('--automator-file-action');
@@ -8,6 +9,7 @@ export function parseFileExplorerLaunch(args: string[]): FileExplorerLaunchReque
   const filePath = args[index + 3];
   if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(actionId) || !path.win32.isAbsolute(filePath) || !/^(?:[A-Za-z]:[\\/]|\\\\)/.test(filePath)
       || /[\x00-\x1f]/.test(filePath) || filePath.length > 4096) return null;
+  if (actionId === FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID && path.win32.extname(filePath).toLowerCase() !== '.ps1') return null;
   return { actionId, filePath };
 }
 

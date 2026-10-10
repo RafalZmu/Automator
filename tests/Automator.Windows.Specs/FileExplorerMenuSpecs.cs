@@ -11,6 +11,8 @@ static class FileExplorerMenuSpecs
         const string root = @"Software\Classes\SystemFileAssociations";
         const string fdb = root + @"\.fdb\shell\Automator.ScriptRunner";
         const string txt = root + @"\.txt\shell\Automator.ScriptRunner";
+        const string ps1 = root + @"\.ps1\shell\Automator.ScriptRunner";
+        const string register = ps1 + @"\shell\@register-powershell-script";
         store.Write(root + @"\.fdb", "", "Existing.ProgId");
         store.Write(root + @"\.fdb\shell\Foreign", "", "foreign menu");
         ExplorerActionDefinition[] actions = [new("backup", "profile", "Backup", [".FDB", ".txt"]), new("zip", "profile", "Backup and ZIP", [".fdb"])];
@@ -22,6 +24,9 @@ static class FileExplorerMenuSpecs
         Check.Equal("Backup and ZIP", store.Read(fdb + @"\shell\zip", "MUIVerb"));
         Check.Equal("Backup", store.Read(txt + @"\shell\backup", "MUIVerb"));
         Check.Equal("\"C:\\Program Files\\Automator\\Automator.exe\" --automator-file-action \"backup\" -- \"%1\"", store.Read(fdb + @"\shell\backup\command", ""));
+        Check.Equal("Automator", store.Read(ps1, "MUIVerb"));
+        Check.Equal("Register in Automator", store.Read(register, "MUIVerb"));
+        Check.Equal("\"C:\\Program Files\\Automator\\Automator.exe\" --automator-file-action \"register-powershell-script\" -- \"%1\"", store.Read(register + @"\command", ""));
         Check.Equal(1, notifications);
         adapter.ReconcileAsync(actions, @"C:\Program Files\Automator\Automator.exe", default).GetAwaiter().GetResult();
         Check.Equal(1, notifications);
@@ -41,6 +46,7 @@ static class FileExplorerMenuSpecs
         Check.Equal("script-runner.explorer.v1", store.Read(fdb + @"\shell\backup\command", "AutomatorOwner"));
         adapter.ReconcileAsync([], @"C:\Automator\Automator.exe", default).GetAwaiter().GetResult();
         Check.Equal<string?>(null, store.Read(fdb, "MUIVerb"));
+        Check.Equal("Register in Automator", store.Read(register, "MUIVerb"));
         Check.Equal("preserve", store.Read(fdb, "ForeignValue"));
         Check.Equal("preserve-key", store.Read(fdb + @"\shell\Foreign", ""));
         Check.Equal("Existing.ProgId", store.Read(root + @"\.fdb", ""));
