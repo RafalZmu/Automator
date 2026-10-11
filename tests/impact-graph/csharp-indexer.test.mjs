@@ -37,6 +37,15 @@ test('indexes C# symbol-resolved calls, closures, and type dependencies', () => 
     assert.ok(index.diagnostics.some(x => /dynamic|unresolved/i.test(JSON.stringify(x))));
     assert.ok(index.calls.every(x => x.calleeKey && !/Missing/.test(x.calleeKey)), 'unresolved dynamic target is not fabricated');
     assert.ok(index.calls.every(x => x.line > 0 && x.path));
+
+    const sameName = index.functions.filter(x => x.qualifiedName.endsWith('.Same()'));
+    assert.equal(sameName.length, 2);
+    assert.equal(new Set(sameName.map(x => x.symbolKey)).size, 2, 'same signatures in different types retain distinct identities');
+    assert.ok(index.diagnostics.some(x => x.kind === 'unresolved-call' && /DoesNotExist/.test(x.message)));
+    const libraryMethod = index.functions.find(x => x.path.endsWith('ReferenceLib/Worker.cs') && x.qualifiedName.endsWith('.Run()'));
+    const referenceCaller = index.functions.find(x => x.qualifiedName === 'Fixture.ReferenceCaller.Use()');
+    assert.ok(libraryMethod && referenceCaller, 'referenced project documents are indexed with the caller project');
+    assert.ok(index.calls.some(x => x.callerKey === referenceCaller.symbolKey && x.calleeKey === libraryMethod.symbolKey), 'project-reference call maps to the indexed declaration');
   } finally {
     rmSync(outputDir, { recursive: true, force: true });
   }

@@ -32,27 +32,30 @@ internal static class Program
                 .Concat(Directory.GetFiles(Path.Combine(root, "tests"), "*.csproj", SearchOption.AllDirectories))
                 .Where(p => Path.GetFileName(p).EndsWith(".Specs.csproj", StringComparison.OrdinalIgnoreCase)
                          || Path.GetDirectoryName(p)!.StartsWith(Path.Combine(root, "src") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
-        var documents = new List<(SyntaxTree Tree, SemanticModel Model, string Path)>();
+        var projects = new Dictionary<ProjectId, Project>();
         foreach (var projectPath in projectPaths.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+            await LoadProjectTree(workspace, projectPath, projects);
+        var documents = new List<(SyntaxTree Tree, SemanticModel Model, string Path)>();
+        foreach (var project in projects.Values)
+        foreach (var doc in project.Documents)
         {
-            var project = await workspace.OpenProjectAsync(projectPath);
-            foreach (var doc in project.Documents)
-            {
-                if (doc.FilePath is null || !doc.FilePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-                    || doc.FilePath.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                    || doc.FilePath.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
-                var tree = await doc.GetSyntaxTreeAsync(); var model = await doc.GetSemanticModelAsync();
-                if (tree is not null && model is not null) documents.Add((tree, model, Rel(root, doc.FilePath)));
-            }
+            if (doc.FilePath is null || !doc.FilePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+                || doc.FilePath.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                || doc.FilePath.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
+            var tree = await doc.GetSyntaxTreeAsync(); var model = await doc.GetSemanticModelAsync();
+            if (tree is not null && model is not null) documents.Add((tree, model, Rel(root, doc.FilePath)));
         }
         var functions = new List<Function>();
         var keys = new Dictionary<ISymbol, string>(SymbolEqualityComparer.Default);
+        var canonicalKeys = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var d in documents)
         foreach (var node in d.Tree.GetRoot().DescendantNodesAndSelf())
         {
             var symbol = FunctionSymbol(node, d.Model);
             if (symbol is null) continue;
+            var identity = CanonicalSymbolIdentity(symbol);
             var key = StableKey(symbol, d.Path, node.SpanStart); keys[symbol] = key;
+            canonicalKeys.TryAdd(identity, key);
             var line = Line(d.Tree, node.SpanStart);
             functions.Add(new Function(d.Path, key, QualifiedName(symbol, d.Path, line), symbol.ToDisplayString(Signature), Kind(node),
                 line, Line(d.Tree, Math.Max(node.SpanStart, node.Span.End - 1))));
@@ -72,10 +75,14 @@ internal static class Program
             {
                 var target = d.Model.GetSymbolInfo(invocation).Symbol;
                 var caller = CallerKey(invocation, d.Model, keys);
-                if (target is not null && caller is not null && keys.TryGetValue(target.OriginalDefinition, out var callee))
+                if (target is not null && caller is not null && canonicalKeys.TryGetValue(CanonicalSymbolIdentity(target.OriginalDefinition), out var callee))
                     calls.Add(new Call(caller, callee, d.Path, Line(d.Tree, invocation.SpanStart)));
-                else if (target is null && invocation.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Any(id => d.Model.GetTypeInfo(id).Type?.TypeKind == TypeKind.Dynamic))
-                    diagnostics.Add(new { path = d.Path, line = Line(d.Tree, invocation.SpanStart), kind = "unresolved-dynamic-call", message = invocation.Expression.ToString() });
+                else if (target is null)
+                {
+                    var dynamic = invocation.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Any(id => d.Model.GetTypeInfo(id).Type?.TypeKind == TypeKind.Dynamic);
+                    var candidates = d.Model.GetSymbolInfo(invocation).CandidateSymbols;
+                    diagnostics.Add(new { path = d.Path, line = Line(d.Tree, invocation.SpanStart), kind = dynamic ? "unresolved-dynamic-call" : "unresolved-call", message = invocation.Expression.ToString(), candidates = candidates.Select(c => c.ToDisplayString()).ToArray() });
+                }
                 else if (target is not null && caller is not null && target.ContainingAssembly?.Name != d.Model.Compilation.AssemblyName)
                     diagnostics.Add(new { path = d.Path, line = Line(d.Tree, invocation.SpanStart), kind = "external-call", message = target.ToDisplayString() });
             }
@@ -83,7 +90,7 @@ internal static class Program
             {
                 var target = d.Model.GetSymbolInfo(creation).Symbol as IMethodSymbol;
                 var caller = CallerKey(creation, d.Model, keys);
-                if (target is not null && caller is not null && keys.TryGetValue(target.OriginalDefinition, out var callee))
+                if (target is not null && caller is not null && canonicalKeys.TryGetValue(CanonicalSymbolIdentity(target.OriginalDefinition), out var callee))
                     calls.Add(new Call(caller, callee, d.Path, Line(d.Tree, creation.SpanStart)));
             }
 
@@ -96,6 +103,21 @@ internal static class Program
         }
         return new IndexResult(documents.Select(d => d.Path).Distinct().Order().ToArray(), functions.OrderBy(x => x.path).ThenBy(x => x.startLine).ToArray(),
             calls.Distinct().OrderBy(x => x.path).ThenBy(x => x.line).ToArray(), dependencies.Distinct().OrderBy(x => x.path).ThenBy(x => x.line).ToArray(), diagnostics);
+    }
+
+    private static async Task LoadProjectTree(MSBuildWorkspace workspace, string path, Dictionary<ProjectId, Project> loaded)
+    {
+        var project = await workspace.OpenProjectAsync(path);
+        await Visit(project);
+
+        async Task Visit(Project current)
+        {
+            if (loaded.ContainsKey(current.Id)) return;
+            loaded[current.Id] = current;
+            foreach (var reference in current.ProjectReferences)
+                if (current.Solution.GetProject(reference.ProjectId) is { } referenced)
+                    await Visit(referenced);
+        }
     }
 
     private static ISymbol? FunctionSymbol(SyntaxNode n, SemanticModel m) => n switch
@@ -138,10 +160,24 @@ internal static class Program
     }
     private static string StableKey(ISymbol symbol, string path, int offset)
     {
-        var prefix = $"{symbol.ContainingAssembly?.Identity.Name}:{symbol.Kind}:{symbol.ToDisplayString(Signature)}";
-        if (symbol is IMethodSymbol { MethodKind: MethodKind.AnonymousFunction }) return $"{prefix}@{path}:{offset}";
-        if (symbol is IMethodSymbol { MethodKind: MethodKind.LocalFunction }) prefix += $" in {symbol.ContainingSymbol?.ToDisplayString(Qualified)}";
-        return $"{prefix}@{path}";
+        var identity = CanonicalSymbolIdentity(symbol);
+        return symbol is IMethodSymbol { MethodKind: MethodKind.AnonymousFunction }
+            ? $"{identity}@{path}:{offset}"
+            : $"{identity}@{path}";
+    }
+    private static string CanonicalSymbolIdentity(ISymbol symbol)
+    {
+        if (symbol is IMethodSymbol method)
+        {
+            method = method.OriginalDefinition;
+            var type = method.ContainingType?.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? "<global>";
+            var parameters = string.Join(",", method.Parameters.Select(p => $"{p.RefKind}:{p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}"));
+            var identity = $"{method.ContainingAssembly?.Identity}|method|{type}|{method.MethodKind}|{method.MetadataName}|{method.Arity}|({parameters})";
+            if (method.MethodKind == MethodKind.LocalFunction) identity += $"|in:{CanonicalSymbolIdentity(method.ContainingSymbol!)}";
+            if (method.MethodKind == MethodKind.AnonymousFunction) identity += $"|in:{CanonicalSymbolIdentity(method.ContainingSymbol!)}";
+            return identity;
+        }
+        return $"{symbol.ContainingAssembly?.Identity}|{symbol.Kind}|{symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}";
     }
     private static (string Root, string Output, string? Project) Parse(string[] args)
     {

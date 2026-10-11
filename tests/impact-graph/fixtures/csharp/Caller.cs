@@ -15,6 +15,7 @@ public class Caller
         callback();
         dynamic unknown = _dependency;
         unknown.Missing(4);
+        DoesNotExist();
     }
 }
 
