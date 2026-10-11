@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { buildImpactReport, validateGraph, writeImpactReportNote } from '../../scripts/impact-graph.mjs';
+import { buildImpactReport, renderImpactReportNote, validateGraph, writeImpactReportNote } from '../../scripts/impact-graph.mjs';
 
 function graph() {
   const nodes = [
@@ -72,6 +72,13 @@ test('--note writes a tagged owned report and refuses to overwrite a user report
     assert.throws(() => writeImpactReportNote(report.changed, report.report, data, root), /Refusing to overwrite/);
     assert.equal(await readFile(output, 'utf8'), 'human report');
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('rendered impact report notes end with exactly one newline', () => {
+  const data = graph();
+  const result = buildImpactReport(data, 'src/a.ts');
+  const note = renderImpactReportNote(result.changed, result.report, data);
+  assert.equal(note.match(/\n*$/)?.[0].length, 1);
 });
 
 test('validateGraph checks merged endpoints and generated node-note consistency without mutation', async () => {

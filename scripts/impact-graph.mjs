@@ -386,7 +386,7 @@ export function renderImpactReportNote(changed, report, graph) {
     `generated_by: ${yamlString('scripts/impact-graph.mjs')}`,
     '---',
     '',
-    report,
+    report.trimEnd(),
     ''
   ].join('\n');
 }
