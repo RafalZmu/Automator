@@ -90,6 +90,21 @@ test('validateGraph checks merged endpoints and generated node-note consistency 
       await writeFile(target, 'generated_by: "scripts/impact-graph.mjs"\n');
     }
     assert.deepEqual(await validateGraph(clean, { root, notesRoot: notes }), []);
+    const reportData = buildImpactReport(clean, 'src/a.ts');
+    const reportsRoot = path.join(root, 'docs/architecture/impact-graph/reports');
+    const reportPath = writeImpactReportNote(reportData.changed, reportData.report, clean, reportsRoot);
+    assert.deepEqual(await validateGraph(clean, { root, notesRoot: notes }), []);
+    const userReport = path.join(reportsRoot, 'user-impact.md');
+    await writeFile(userReport, 'human-owned report');
+    assert.deepEqual(await validateGraph(clean, { root, notesRoot: notes }), []);
+    assert.equal(await readFile(userReport, 'utf8'), 'human-owned report');
+    const generatedReport = await readFile(reportPath, 'utf8');
+    await writeFile(reportPath, generatedReport.replace(`graph_id: "${reportData.changed.id}-impact"`, 'graph_id: "wrong-impact"'));
+    assert.ok((await validateGraph(clean, { root, notesRoot: notes })).some((error) => error.includes('Generated impact report does not match')));
+    writeImpactReportNote(reportData.changed, reportData.report, clean, reportsRoot);
+    await writeFile(reportPath, (await readFile(reportPath, 'utf8')).replace('Graph edges indicate', 'Changed report body'));
+    assert.ok((await validateGraph(clean, { root, notesRoot: notes })).some((error) => error.includes('Generated impact report does not match')));
+    await rm(reportPath);
     const stale = path.join(notes, 'files/stale.md');
     await writeFile(stale, 'generated_by: "scripts/impact-graph.mjs"\n');
     assert.ok((await validateGraph(clean, { root, notesRoot: notes })).some((error) => error.includes('Stale generated note')));

@@ -164,6 +164,11 @@ export async function validateGraph(graph = loadGraph(), { root = repoRoot, note
     if (!contents.includes(generatorMarker)) continue;
     const id = name.slice(0, -'-impact.md'.length);
     if (!byId.has(id)) errors.push(`Stale generated impact report has no graph node: ${path.relative(root, report)}`);
+    else {
+      const expected = buildImpactReport(graph, id);
+      const expectedContents = renderImpactReportNote(expected.changed, expected.report, graph);
+      if (contents !== expectedContents) errors.push(`Generated impact report does not match the current graph: ${path.relative(root, report)}. Refresh it with 'node scripts/impact-graph.mjs impact ${id} --note'.`);
+    }
   }
   return errors;
 }
@@ -371,13 +376,8 @@ function reportTagsFor(changed, graph) {
   return [...new Set(['impact-graph', 'impact-graph/report', `impact-graph/source-layer/${changed.layer}`, `impact-graph/source-kind/${changed.kind}`, ...areas.map((area) => `impact-graph/area/${area}`)])];
 }
 
-export function writeImpactReportNote(changed, report, graph, reportsRoot = path.join(repoRoot, 'docs', 'architecture', 'impact-graph', 'reports')) {
-  mkdirSync(reportsRoot, { recursive: true });
-  const reportPath = path.join(reportsRoot, `${changed.id}-impact.md`);
-  if (existsSync(reportPath) && !readFileSync(reportPath, 'utf8').includes(generatorMarker)) {
-    throw new Error(`Refusing to overwrite a report not owned by this generator: ${reportPath}`);
-  }
-  const reportNote = [
+export function renderImpactReportNote(changed, report, graph) {
+  return [
     '---',
     `graph_id: ${yamlString(`${changed.id}-impact`)}`,
     'graph_layer: "impact-report"',
@@ -389,7 +389,15 @@ export function writeImpactReportNote(changed, report, graph, reportsRoot = path
     report,
     ''
   ].join('\n');
-  writeFileSync(reportPath, reportNote, 'utf8');
+}
+
+export function writeImpactReportNote(changed, report, graph, reportsRoot = path.join(repoRoot, 'docs', 'architecture', 'impact-graph', 'reports')) {
+  mkdirSync(reportsRoot, { recursive: true });
+  const reportPath = path.join(reportsRoot, `${changed.id}-impact.md`);
+  if (existsSync(reportPath) && !readFileSync(reportPath, 'utf8').includes(generatorMarker)) {
+    throw new Error(`Refusing to overwrite a report not owned by this generator: ${reportPath}`);
+  }
+  writeFileSync(reportPath, renderImpactReportNote(changed, report, graph), 'utf8');
   return reportPath;
 }
 
