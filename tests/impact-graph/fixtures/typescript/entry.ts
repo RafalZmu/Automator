@@ -1,4 +1,4 @@
-import { helper } from '@core/dependency';
+import { helper, select } from '@core/dependency';
 import { forwardedHelper as viaReexport } from './dependency.js';
 
 // helper();
@@ -11,6 +11,8 @@ export function entryPoint(value: string): string {
   new Service();
   missingSymbol();
   console.log(value);
+  select('text');
+  select(42);
   return helper(namedArrow(assignedArrow(mapped[0])));
 }
 

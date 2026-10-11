@@ -119,11 +119,16 @@ export function scanTypeScript({ root, paths, ts }) {
     if (declarationSymbol) keyBySymbol.set(declarationSymbol.id, constructorKey);
   }
 
-  const resolveSymbol = symbol => {
+  const resolveSymbol = (symbol, callNode) => {
     if (!symbol) return undefined;
     try {
       if (symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
     } catch { return undefined; }
+    const selectedDeclaration = checker.getResolvedSignature(callNode)?.declaration?.resolve(project);
+    if (selectedDeclaration) {
+      const selectedKey = keyByNode.get(selectedDeclaration);
+      if (selectedKey) return selectedKey;
+    }
     if (keyBySymbol.has(symbol.id)) return keyBySymbol.get(symbol.id);
     for (const handle of symbol.declarations ?? []) {
       const declaration = handle.resolve(project);
@@ -143,7 +148,7 @@ export function scanTypeScript({ root, paths, ts }) {
         const line = lineOf(source, node);
         const expression = unwrap(node.expression);
         const symbol = guards.isIdentifier(expression) || guards.isPropertyAccessExpression(expression) ? checker.getSymbolAtLocation(guards.isPropertyAccessExpression(expression) ? expression.name : expression) : undefined;
-        const calleeKey = resolveSymbol(symbol);
+        const calleeKey = resolveSymbol(symbol, node);
         if (calleeKey) calls.push({ callerKey, calleeKey, path: sourcePath, line });
         else {
           const declarations = symbol?.declarations?.map(handle => handle.resolve(project)).filter(Boolean) ?? [];

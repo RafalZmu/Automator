@@ -42,6 +42,19 @@ test('resolves internal calls by symbol identity and ignores call-like comments 
   assert.ok(!result.calls.some(call => call.path === 'entry.ts' && call.line === 4), 'comment and string references must not create calls');
 });
 
+test('resolves overloaded calls to their selected declaration signatures', () => {
+  const overloads = result.functions.filter(item => item.path === 'dependency.ts' && item.qualifiedName === 'select');
+  assert.equal(overloads.length, 3, 'both overload signatures and the implementation should be indexed');
+  const stringCall = result.calls.find(call => call.path === 'entry.ts' && call.line === 14);
+  const numberCall = result.calls.find(call => call.path === 'entry.ts' && call.line === 15);
+  assert.ok(stringCall && numberCall, 'expected both overload calls');
+  assert.notEqual(stringCall.calleeKey, numberCall.calleeKey, 'distinct overloads must retain distinct declaration targets');
+  const stringOverload = overloads.find(item => item.startLine === 5);
+  const numberOverload = overloads.find(item => item.startLine === 6);
+  assert.equal(stringCall.calleeKey, stringOverload.symbolKey);
+  assert.equal(numberCall.calleeKey, numberOverload.symbolKey);
+});
+
 test('reports unresolved and external calls without guessing graph edges', () => {
   assert.ok(result.diagnostics.some(item => item.path === 'entry.ts' && item.code === 'unresolved-call'));
   assert.ok(result.diagnostics.some(item => item.path === 'entry.ts' && item.code === 'external-call'));
