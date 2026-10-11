@@ -1,0 +1,24 @@
+---
+graph_id: "function-20437-ba81aaa1"
+graph_layer: "function"
+graph_kind: "callback"
+tags:
+  - "impact-graph"
+  - "impact-graph/function"
+  - "impact-graph/kind/callback"
+  - "impact-graph/area/browser"
+  - "impact-graph/language/tsx"
+generated_by: "scripts/impact-graph.mjs"
+---
+
+# BrowserAutomationView.callback.callback@293
+
+(event: React.ChangeEvent<HTMLInputElement, HTMLInputElement>) => void
+
+## Connections
+
+- None recorded.
+
+## Source anchors
+
+- `ui/modules/BrowserAutomationView.tsx#L293`

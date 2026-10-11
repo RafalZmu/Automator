@@ -1,0 +1,164 @@
+[
+  {
+    "graphId": "script-view",
+    "path": "ui/modules/ScriptRunnerView.tsx",
+    "qualifiedName": "ScriptRunnerView",
+    "signature": "({ tab, services }: ViewProps) => React.JSX.Element"
+  },
+  {
+    "graphId": "api-view",
+    "path": "ui/modules/ApiView.tsx",
+    "qualifiedName": "ApiView",
+    "signature": "({ services }: ViewProps) => React.JSX.Element"
+  },
+  {
+    "graphId": "workflows-view",
+    "path": "ui/modules/WorkflowsView.tsx",
+    "qualifiedName": "WorkflowsView",
+    "signature": "({ services, tab }: ViewProps) => React.JSX.Element"
+  },
+  {
+    "graphId": "scheduler-view",
+    "path": "ui/modules/SchedulerView.tsx",
+    "qualifiedName": "SchedulerView",
+    "signature": "({ services }: ViewProps) => React.JSX.Element"
+  },
+  {
+    "graphId": "work-time-view",
+    "path": "ui/modules/FocusSessionsView.tsx",
+    "qualifiedName": "FocusSessionsView",
+    "signature": "({ tab, services, surface }: ViewProps) => React.JSX.Element"
+  },
+  {
+    "graphId": "website-view",
+    "path": "ui/modules/WebsiteLauncherView.tsx",
+    "qualifiedName": "WebsiteLauncherView",
+    "signature": "({ tab, services }: ViewProps) => React.JSX.Element"
+  },
+  {
+    "graphId": "view-run",
+    "path": "ui/modules/BrowserAutomationView.tsx",
+    "qualifiedName": "BrowserAutomationView.run",
+    "signature": "(kind: 'file' | 'test' | 'tag', target: string) => Promise<void>"
+  },
+  {
+    "graphId": "service-dispatch",
+    "path": "ui/automationServices.ts",
+    "qualifiedName": "createAutomationServices.dispatch",
+    "signature": "(actionId: string, input: JSONType, options?: {}) => Promise<{ contractVersion: 1; status: \"error\" | \"information\" | \"success\" | \"warning\"; message: string; data: JSONType; actions: { ...; }[]; }>"
+  },
+  {
+    "graphId": "preload-dispatch",
+    "path": "electron/preload.ts",
+    "qualifiedName": "dispatchModuleAction",
+    "signature": "(request: Parameters<AutomatorBridge['dispatchModuleAction']>[0]) => Promise<{ contractVersion: 1; status: \"error\" | \"information\" | \"success\" | \"warning\"; message: string; data: JSONType; actions: { ...; }[]; }>"
+  },
+  {
+    "graphId": "backend-request",
+    "path": "electron/backendProcess.ts",
+    "qualifiedName": "BackendProcess.request",
+    "signature": "(method: RpcMethod, params: JsonObject) => Promise<unknown>"
+  },
+  {
+    "graphId": "backend-consume-stdout",
+    "path": "electron/backendProcess.ts",
+    "qualifiedName": "BackendProcess.consumeStdout",
+    "signature": "(chunk: string) => void"
+  },
+  {
+    "graphId": "backend-run",
+    "path": "src/Automator.Backend/BackendServer.cs",
+    "qualifiedName": "Automator.Backend.BackendServer.RunAsync()",
+    "signature": "public Task RunAsync()"
+  },
+  {
+    "graphId": "backend-handle-line",
+    "path": "src/Automator.Backend/BackendServer.cs",
+    "qualifiedName": "Automator.Backend.BackendServer.HandleLineAsync(string)",
+    "signature": "private Task HandleLineAsync(string line)"
+  },
+  {
+    "graphId": "backend-handle-core",
+    "path": "src/Automator.Backend/BackendServer.cs",
+    "qualifiedName": "Automator.Backend.BackendServer.HandleLineCoreAsync(string)",
+    "signature": "private Task HandleLineCoreAsync(string line)"
+  },
+  {
+    "graphId": "backend-dispatch",
+    "path": "src/Automator.Backend/BackendServer.cs",
+    "qualifiedName": "Automator.Backend.BackendServer.DispatchAsync(RpcRequest)",
+    "signature": "private Task DispatchAsync(RpcRequest request)"
+  },
+  {
+    "graphId": "backend-execute-module",
+    "path": "src/Automator.Backend/BackendServer.cs",
+    "qualifiedName": "Automator.Backend.BackendServer.ExecuteModuleActionAsync(RpcRequest)",
+    "signature": "private Task ExecuteModuleActionAsync(RpcRequest request)"
+  },
+  {
+    "graphId": "request-executor",
+    "path": "src/Automator.Application/Automation/AutomationRequestExecutor.cs",
+    "qualifiedName": "Automator.Application.Automation.AutomationRequestExecutor.ExecuteAsync(string,string,CancellationToken,Func<CancellationToken, Task<T>>)",
+    "signature": "public Task ExecuteAsync(string moduleId, string requestId, CancellationToken contextToken, Func operation)"
+  },
+  {
+    "graphId": "registry-dispatch",
+    "path": "src/Automator.Application/Automation/AutomationModuleRegistry.cs",
+    "qualifiedName": "Automator.Application.Automation.AutomationModuleRegistry.DispatchAsync(string,string,int,int,JsonElement,string,AutomationServicesContext,IReadOnlyList<ModuleSettingsEntry>,CancellationToken)",
+    "signature": "public Task DispatchAsync(string moduleId, string actionId, int contractVersion, int actionVersion, JsonElement input, string activeModuleId, AutomationServicesContext services, IReadOnlyList moduleSettings, CancellationToken cancellationToken)"
+  },
+  {
+    "graphId": "browser-module-execute",
+    "path": "src/Automator.Application/Automation/BrowserAutomationModule.cs",
+    "qualifiedName": "Automator.Application.Automation.BrowserAutomationModule.ExecuteAsync(string,JsonElement,JsonElement,AutomationServicesContext,CancellationToken)",
+    "signature": "public ValueTask ExecuteAsync(string actionId, JsonElement input, JsonElement moduleSettings, AutomationServicesContext services, CancellationToken cancellationToken)"
+  },
+  {
+    "graphId": "browser-create-explorer",
+    "path": "src/Automator.Application/Automation/BrowserAutomationModule.cs",
+    "qualifiedName": "Automator.Application.Automation.BrowserAutomationModule.CreateExplorer(AutomationServicesContext)",
+    "signature": "private static PlaywrightTestExplorer CreateExplorer(AutomationServicesContext services)"
+  },
+  {
+    "graphId": "explorer-run",
+    "path": "src/Automator.Application/Automation/PlaywrightTestExplorer.cs",
+    "qualifiedName": "Automator.Application.Automation.PlaywrightTestExplorer.RunAsync(JsonElement,CancellationToken)",
+    "signature": "public Task RunAsync(JsonElement input, CancellationToken cancellationToken)"
+  },
+  {
+    "graphId": "explorer-discover",
+    "path": "src/Automator.Application/Automation/PlaywrightTestExplorer.cs",
+    "qualifiedName": "Automator.Application.Automation.PlaywrightTestExplorer.DiscoverTestsAsync(string,RunnerState,CancellationToken)",
+    "signature": "private Task DiscoverTestsAsync(string root, RunnerState runner, CancellationToken cancellationToken)"
+  },
+  {
+    "graphId": "context-process",
+    "path": "src/Automator.Application/Automation/AutomationServicesContext.cs",
+    "qualifiedName": "Automator.Application.Automation.AutomationServicesContext.ContextProcessService.ExecuteAsync(AutomationProcessRequest,CancellationToken)",
+    "signature": "public Task ExecuteAsync(AutomationProcessRequest request, CancellationToken cancellationToken)"
+  },
+  {
+    "graphId": "process-execute",
+    "path": "src/Automator.Infrastructure/Automation/LocalProcessExecutionService.cs",
+    "qualifiedName": "Automator.Infrastructure.Automation.LocalProcessExecutionService.ExecuteAsync(AutomationProcessRequest,CancellationToken)",
+    "signature": "public Task ExecuteAsync(AutomationProcessRequest request, CancellationToken cancellationToken)"
+  },
+  {
+    "graphId": "process-read-bounded",
+    "path": "src/Automator.Infrastructure/Automation/LocalProcessExecutionService.cs",
+    "qualifiedName": "Automator.Infrastructure.Automation.LocalProcessExecutionService.ReadBoundedAsync(StreamReader)",
+    "signature": "private static Task ReadBoundedAsync(StreamReader reader)"
+  },
+  {
+    "graphId": "backend-write-protocol",
+    "path": "src/Automator.Backend/BackendServer.cs",
+    "qualifiedName": "Automator.Backend.BackendServer.WriteProtocolAsync(object)",
+    "signature": "private Task WriteProtocolAsync(object value)"
+  },
+  {
+    "graphId": "main-module-handler",
+    "path": "electron/main.ts",
+    "qualifiedName": "registerIpc.handle.callback@570",
+    "signature": "(event: Electron.IpcMainInvokeEvent, params: Record<string, unknown>) => Promise<{ contractVersion: 1; status: \"error\" | \"information\" | \"success\" | \"warning\"; message: string; data: JSONType; actions: { ...; }[]; }>"
+  }
+]

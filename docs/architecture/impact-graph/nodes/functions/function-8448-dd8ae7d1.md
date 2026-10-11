@@ -1,0 +1,24 @@
+---
+graph_id: "function-8448-dd8ae7d1"
+graph_layer: "function"
+graph_kind: "method"
+tags:
+  - "impact-graph"
+  - "impact-graph/function"
+  - "impact-graph/kind/method"
+  - "impact-graph/area/renderer"
+  - "impact-graph/language/typescript"
+generated_by: "scripts/impact-graph.mjs"
+---
+
+# BrowserPreviewBridge.cancelHotkeyRecording
+
+() => Promise<{ protocolVersion: 3; buildId: string; revision: number; tabRegistryVersion: number; moduleStates: { moduleId: string; version: number; values: Record<string, string>; }[]; visible: boolean; ... 20 more ...; matchedBindingId: string | null; }>
+
+## Connections
+
+- None recorded.
+
+## Source anchors
+
+- `ui/bridge.ts#L153`

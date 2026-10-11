@@ -1,0 +1,1589 @@
+{
+  "title": "Automator impact graph",
+  "direction": "An impact edge points from a changed dependency to a consumer that may be affected.",
+  "nodes": [
+    {
+      "id": "app",
+      "title": "Automator application",
+      "layer": "module",
+      "kind": "root",
+      "summary": "The desktop automation application: Electron shell, React surfaces, compiled .NET modules, and host services.",
+      "sources": [
+        "README.md"
+      ]
+    },
+    {
+      "id": "desktop",
+      "title": "Electron desktop shell",
+      "layer": "module",
+      "kind": "runtime",
+      "summary": "Owns windows, preload bridge, IPC handlers, backend process lifecycle, and desktop adapters.",
+      "sources": [
+        "electron/main.ts",
+        "electron/preload.ts",
+        "electron/backendProcess.ts"
+      ]
+    },
+    {
+      "id": "renderer",
+      "title": "React renderer",
+      "layer": "module",
+      "kind": "runtime",
+      "summary": "Composes the launcher/workspace UI, shared surfaces, and registered tab views.",
+      "sources": [
+        "ui/App.tsx",
+        "ui/viewRegistry.tsx"
+      ]
+    },
+    {
+      "id": "renderer-services",
+      "title": "Renderer action facade",
+      "layer": "module",
+      "kind": "shared-service",
+      "summary": "Creates typed, module-scoped action clients used by compiled module views.",
+      "sources": [
+        "ui/automationServices.ts"
+      ]
+    },
+    {
+      "id": "backend-context",
+      "title": "Backend capability context",
+      "layer": "module",
+      "kind": "shared-service",
+      "summary": "Wraps host-granted services with module identity, capabilities, and cancellation lifetime.",
+      "sources": [
+        "src/Automator.Application/Automation/AutomationServicesContext.cs"
+      ]
+    },
+    {
+      "id": "search",
+      "title": "Global Action Search",
+      "layer": "module",
+      "kind": "shared-surface",
+      "summary": "Routes registered commands and website aliases from the launcher search surface.",
+      "sources": [
+        "ui/commands/TabCommandRegistry.tsx",
+        "ui/commands/commandMatching.ts"
+      ]
+    },
+    {
+      "id": "options",
+      "title": "Options and Variables",
+      "layer": "module",
+      "kind": "shared-surface",
+      "summary": "Shared UI for application preferences and global variables.",
+      "sources": [
+        "docs/sections/options/README.md",
+        "ui/variables/GlobalVariables.tsx"
+      ]
+    },
+    {
+      "id": "activity",
+      "title": "Run Activity and Notifications",
+      "layer": "module",
+      "kind": "shared-surface",
+      "summary": "Displays run history, notifications, and the latest module result.",
+      "sources": [
+        "ui/activity/RunActivityView.tsx",
+        "src/Automator.Application/Automation/AutomationRunActivityService.cs"
+      ]
+    },
+    {
+      "id": "tab-registry",
+      "title": "Tab and view registries",
+      "layer": "module",
+      "kind": "registry",
+      "summary": "Maps registered tab metadata and view kinds to the renderer's compiled views.",
+      "sources": [
+        "src/Automator.Application/Launcher/LauncherTabRegistry.cs",
+        "ui/viewRegistry.tsx",
+        "ui/viewKinds.ts"
+      ]
+    },
+    {
+      "id": "launcher",
+      "title": "Launcher",
+      "layer": "module",
+      "kind": "feature",
+      "summary": "Searches and activates applications, commands, aliases, and launcher actions.",
+      "sources": [
+        "src/Automator.Application/Launcher/LauncherSession.cs",
+        "src/Automator.Windows/WindowsAppCatalog.cs",
+        "src/Automator.Windows/WindowsApplicationActivator.cs"
+      ]
+    },
+    {
+      "id": "script",
+      "title": "Script Runner",
+      "layer": "module",
+      "kind": "feature",
+      "summary": "Runs saved scripts and trusted templates through the host-granted process service.",
+      "sources": [
+        "src/Automator.Application/Automation/ScriptRunnerModule.cs",
+        "ui/modules/ScriptRunnerView.tsx"
+      ]
+    },
+    {
+      "id": "api",
+      "title": "API",
+      "layer": "module",
+      "kind": "feature",
+      "summary": "Runs saved HTTP profiles through shared network policy and secret resolution.",
+      "sources": [
+        "src/Automator.Application/Automation/ApiModule.cs",
+        "src/Automator.Infrastructure/Automation/SharedHttpService.cs",
+        "ui/modules/ApiView.tsx"
+      ]
+    },
+    {
+      "id": "browser",
+      "title": "Browser Automation",
+      "layer": "module",
+      "kind": "feature",
+      "summary": "Discovers and runs Playwright tests and browser profiles from the Browser Automation view.",
+      "sources": [
+        "src/Automator.Application/Automation/BrowserAutomationModule.cs",
+        "src/Automator.Application/Automation/PlaywrightTestExplorer.cs",
+        "ui/modules/BrowserAutomationView.tsx"
+      ]
+    },
+    {
+      "id": "workflows",
+      "title": "Workflows",
+      "layer": "module",
+      "kind": "feature",
+      "summary": "Composes saved Script, API, and Browser profiles into workflow runs.",
+      "sources": [
+        "src/Automator.Application/Automation/WorkflowModule.cs",
+        "src/Automator.Application/Automation/AutomationWorkflowEngine.cs",
+        "ui/modules/WorkflowsView.tsx"
+      ]
+    },
+    {
+      "id": "scheduler",
+      "title": "Scheduler",
+      "layer": "module",
+      "kind": "feature",
+      "summary": "Persists schedules and starts saved scripts or workflows when due.",
+      "sources": [
+        "src/Automator.Application/Automation/SchedulerModule.cs",
+        "src/Automator.Application/Automation/AutomationSchedulerCoordinator.cs",
+        "ui/modules/SchedulerView.tsx"
+      ]
+    },
+    {
+      "id": "work-time",
+      "title": "Work Time",
+      "layer": "module",
+      "kind": "feature",
+      "summary": "Records work sessions and exposes summaries and CSV export.",
+      "sources": [
+        "src/Automator.Application/Automation/FocusSessionsModule.cs",
+        "src/Automator.Application/Automation/AutomationWorkTimeCoordinator.cs",
+        "ui/modules/FocusSessionsView.tsx"
+      ]
+    },
+    {
+      "id": "website",
+      "title": "Website Launcher",
+      "layer": "module",
+      "kind": "feature",
+      "summary": "Manages website aliases and launches their configured destinations.",
+      "sources": [
+        "src/Automator.Application/Automation/WebsiteLauncherModule.cs",
+        "src/Automator.Windows/WindowsAutomationWebsiteLauncher.cs",
+        "ui/modules/WebsiteLauncherView.tsx"
+      ]
+    },
+    {
+      "id": "module-registry",
+      "title": "Automation module registry",
+      "layer": "module",
+      "kind": "runtime",
+      "summary": "Validates module/action versions and capabilities before dispatching actions to compiled modules.",
+      "sources": [
+        "src/Automator.Application/Automation/AutomationModuleRegistry.cs"
+      ]
+    },
+    {
+      "id": "workflow-engine",
+      "title": "Workflow engine",
+      "layer": "module",
+      "kind": "runtime",
+      "summary": "Resolves workflow steps and runs saved profiles through scoped services.",
+      "sources": [
+        "src/Automator.Application/Automation/AutomationWorkflowEngine.cs"
+      ]
+    },
+    {
+      "id": "scheduler-coordinator",
+      "title": "Scheduler coordinator",
+      "layer": "module",
+      "kind": "runtime",
+      "summary": "Owns schedule state and due-run coordination.",
+      "sources": [
+        "src/Automator.Application/Automation/AutomationSchedulerCoordinator.cs"
+      ]
+    },
+    {
+      "id": "worktime-coordinator",
+      "title": "Work Time coordinator",
+      "layer": "module",
+      "kind": "runtime",
+      "summary": "Owns work-time session state and persisted summaries.",
+      "sources": [
+        "src/Automator.Application/Automation/AutomationWorkTimeCoordinator.cs"
+      ]
+    },
+    {
+      "id": "backend",
+      "title": "JSON-RPC backend",
+      "layer": "module",
+      "kind": "runtime",
+      "summary": "Reads JSON-RPC requests, validates and dispatches them, writes results, and publishes notifications.",
+      "sources": [
+        "src/Automator.Backend/BackendServer.cs",
+        "src/Automator.Protocol"
+      ]
+    },
+    {
+      "id": "library",
+      "title": "Automation library store",
+      "layer": "module",
+      "kind": "adapter",
+      "summary": "Persists profiles, variables, activity records, schedules, tags, and work-time data in SQLite.",
+      "sources": [
+        "src/Automator.Infrastructure/Automation/SqliteAutomationLibraryStore.cs"
+      ]
+    },
+    {
+      "id": "http",
+      "title": "HTTP service and network policy",
+      "layer": "module",
+      "kind": "adapter",
+      "summary": "Sends profile requests while enforcing the configured network policy.",
+      "sources": [
+        "src/Automator.Infrastructure/Automation/SharedHttpService.cs",
+        "src/Automator.Infrastructure/Automation/HostAddressResolver.cs"
+      ]
+    },
+    {
+      "id": "process",
+      "title": "Local process service",
+      "layer": "module",
+      "kind": "adapter",
+      "summary": "Runs explicitly configured executables and bounds captured stdout/stderr.",
+      "sources": [
+        "src/Automator.Infrastructure/Automation/LocalProcessExecutionService.cs"
+      ]
+    },
+    {
+      "id": "playwright",
+      "title": "Playwright browser services",
+      "layer": "module",
+      "kind": "adapter",
+      "summary": "Provides Playwright runtime discovery, browser execution, and test-runner integration.",
+      "sources": [
+        "src/Automator.Infrastructure/Automation/PlaywrightAutomationBrowserService.cs",
+        "src/Automator.Application/Automation/PlaywrightTestExplorer.cs"
+      ]
+    },
+    {
+      "id": "secrets",
+      "title": "Secret manager",
+      "layer": "module",
+      "kind": "adapter",
+      "summary": "Resolves named secrets from Windows Credential Manager or the isolated test implementation.",
+      "sources": [
+        "src/Automator.Infrastructure/Automation/WindowsCredentialSecretManager.cs"
+      ]
+    },
+    {
+      "id": "windows",
+      "title": "Windows platform adapters",
+      "layer": "module",
+      "kind": "adapter",
+      "summary": "Provides application discovery, activation, keyboard hooks, foreground tracking, settings, and website launch.",
+      "sources": [
+        "src/Automator.Windows/Automator.Windows.csproj",
+        "src/Automator.Windows/WindowsApplicationActivator.cs"
+      ]
+    },
+    {
+      "id": "contracts",
+      "title": "Renderer, IPC, and RPC contracts",
+      "layer": "module",
+      "kind": "contract",
+      "summary": "Shared request/response shapes, tab view kinds, RPC methods, and validated IPC payloads.",
+      "sources": [
+        "contracts/rpc.ts",
+        "contracts/automationHttpIpc.ts",
+        "contracts/bundled-tab-view-kinds.json",
+        "ui/types.d.ts"
+      ]
+    },
+    {
+      "id": "settings",
+      "title": "Settings store",
+      "layer": "module",
+      "kind": "adapter",
+      "summary": "Stores preferences and versioned module settings separately from the automation library.",
+      "sources": [
+        "src/Automator.Windows/WindowsSettingsStore.cs",
+        "src/Automator.Backend/BackendServer.cs"
+      ]
+    },
+    {
+      "id": "script-view",
+      "title": "ScriptRunnerView",
+      "layer": "code",
+      "kind": "view",
+      "summary": "Renderer view that consumes Script Runner actions and presents run results.",
+      "sources": [
+        "ui/modules/ScriptRunnerView.tsx"
+      ]
+    },
+    {
+      "id": "api-view",
+      "title": "ApiView",
+      "layer": "code",
+      "kind": "view",
+      "summary": "Renderer view that consumes API profile actions and presents request results.",
+      "sources": [
+        "ui/modules/ApiView.tsx"
+      ]
+    },
+    {
+      "id": "workflows-view",
+      "title": "WorkflowsView",
+      "layer": "code",
+      "kind": "view",
+      "summary": "Renderer view that consumes workflow actions and run results.",
+      "sources": [
+        "ui/modules/WorkflowsView.tsx"
+      ]
+    },
+    {
+      "id": "scheduler-view",
+      "title": "SchedulerView",
+      "layer": "code",
+      "kind": "view",
+      "summary": "Renderer view that consumes schedule actions and snapshots.",
+      "sources": [
+        "ui/modules/SchedulerView.tsx"
+      ]
+    },
+    {
+      "id": "work-time-view",
+      "title": "FocusSessionsView (Work Time)",
+      "layer": "code",
+      "kind": "view",
+      "summary": "Renderer view for Work Time sessions, summaries, and CSV export.",
+      "sources": [
+        "ui/modules/FocusSessionsView.tsx"
+      ]
+    },
+    {
+      "id": "website-view",
+      "title": "WebsiteLauncherView",
+      "layer": "code",
+      "kind": "view",
+      "summary": "Renderer view that consumes website alias actions and launch results.",
+      "sources": [
+        "ui/modules/WebsiteLauncherView.tsx"
+      ]
+    },
+    {
+      "id": "view-run",
+      "title": "BrowserAutomationView.run",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Renderer entry point for a test run; dispatches runTests and consumes the returned result.",
+      "sources": [
+        "ui/modules/BrowserAutomationView.tsx#L224"
+      ]
+    },
+    {
+      "id": "service-dispatch",
+      "title": "AutomationServices.modules.dispatch",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Validates the module action request, assigns a request ID, and calls the preload bridge.",
+      "sources": [
+        "ui/automationServices.ts#L180"
+      ]
+    },
+    {
+      "id": "preload-dispatch",
+      "title": "preload api.dispatchModuleAction",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Validates the renderer request and invokes the module-action IPC channel.",
+      "sources": [
+        "electron/preload.ts#L114"
+      ]
+    },
+    {
+      "id": "main-module-handler",
+      "title": "Electron module-action IPC handler",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Checks the calling frame and forwards the module action to the backend client.",
+      "sources": [
+        "electron/main.ts#L570"
+      ]
+    },
+    {
+      "id": "backend-request",
+      "title": "BackendProcess.request",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Writes a JSON-RPC request to child stdin and returns the matching pending response.",
+      "sources": [
+        "electron/backendProcess.ts#L70"
+      ]
+    },
+    {
+      "id": "backend-consume-stdout",
+      "title": "BackendProcess.consumeStdout",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Parses backend stdout lines and resolves the matching response promise.",
+      "sources": [
+        "electron/backendProcess.ts#L115"
+      ]
+    },
+    {
+      "id": "backend-run",
+      "title": "BackendServer.RunAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Reads request lines from stdin and hands each line to request handling.",
+      "sources": [
+        "src/Automator.Backend/BackendServer.cs#L80"
+      ]
+    },
+    {
+      "id": "backend-handle-line",
+      "title": "BackendServer.HandleLineAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Queues a request line or dispatches service requests outside the command queue.",
+      "sources": [
+        "src/Automator.Backend/BackendServer.cs#L112"
+      ]
+    },
+    {
+      "id": "backend-handle-core",
+      "title": "BackendServer.HandleLineCoreAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Parses and validates a request, dispatches it, then writes a result or error.",
+      "sources": [
+        "src/Automator.Backend/BackendServer.cs#L151"
+      ]
+    },
+    {
+      "id": "backend-dispatch",
+      "title": "BackendServer.DispatchAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Routes the moduleAction protocol method to module action execution.",
+      "sources": [
+        "src/Automator.Backend/BackendServer.cs#L182"
+      ]
+    },
+    {
+      "id": "backend-execute-module",
+      "title": "BackendServer.ExecuteModuleActionAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Creates or requires a scoped module context and invokes the request executor callback.",
+      "sources": [
+        "src/Automator.Backend/BackendServer.cs#L416"
+      ]
+    },
+    {
+      "id": "request-executor",
+      "title": "AutomationRequestExecutor.ExecuteAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Tracks request lifetime/cancellation and invokes the supplied module action callback.",
+      "sources": [
+        "src/Automator.Application/Automation/AutomationRequestExecutor.cs#L29"
+      ]
+    },
+    {
+      "id": "registry-dispatch",
+      "title": "AutomationModuleRegistry.DispatchAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Checks registration, action version, active module, and capabilities before module dispatch.",
+      "sources": [
+        "src/Automator.Application/Automation/AutomationModuleRegistry.cs#L74"
+      ]
+    },
+    {
+      "id": "browser-module-execute",
+      "title": "BrowserAutomationModule.ExecuteAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Selects the Browser Automation action and delegates runTests to the explorer.",
+      "sources": [
+        "src/Automator.Application/Automation/BrowserAutomationModule.cs#L79"
+      ]
+    },
+    {
+      "id": "browser-create-explorer",
+      "title": "BrowserAutomationModule.CreateExplorer",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Builds the explorer from the scoped library and process services.",
+      "sources": [
+        "src/Automator.Application/Automation/BrowserAutomationModule.cs#L134"
+      ]
+    },
+    {
+      "id": "explorer-run",
+      "title": "PlaywrightTestExplorer.RunAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Discovers the selected tests, executes the Playwright runner, and interprets the report.",
+      "sources": [
+        "src/Automator.Application/Automation/PlaywrightTestExplorer.cs#L172"
+      ]
+    },
+    {
+      "id": "explorer-discover",
+      "title": "PlaywrightTestExplorer.DiscoverTestsAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Runs Playwright test --list and parses discovered test identities.",
+      "sources": [
+        "src/Automator.Application/Automation/PlaywrightTestExplorer.cs#L256"
+      ]
+    },
+    {
+      "id": "context-process",
+      "title": "AutomationServicesContext.ContextProcessService.ExecuteAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Applies the module lifetime/cancellation grant before delegating process execution.",
+      "sources": [
+        "src/Automator.Application/Automation/AutomationServicesContext.cs#L206"
+      ]
+    },
+    {
+      "id": "process-execute",
+      "title": "LocalProcessExecutionService.ExecuteAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Starts the configured executable and captures bounded stdout/stderr.",
+      "sources": [
+        "src/Automator.Infrastructure/Automation/LocalProcessExecutionService.cs#L11"
+      ]
+    },
+    {
+      "id": "process-read-bounded",
+      "title": "LocalProcessExecutionService.ReadBoundedAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Reads process output while limiting retained text.",
+      "sources": [
+        "src/Automator.Infrastructure/Automation/LocalProcessExecutionService.cs#L73"
+      ]
+    },
+    {
+      "id": "backend-write-protocol",
+      "title": "BackendServer.WriteProtocolAsync",
+      "layer": "code",
+      "kind": "method",
+      "summary": "Serializes a JSON-RPC result or notification and writes it to stdout.",
+      "sources": [
+        "src/Automator.Backend/BackendServer.cs#L1648"
+      ]
+    },
+    {
+      "id": "user",
+      "title": "User",
+      "layer": "module",
+      "kind": "actor",
+      "summary": "The person using Automator surfaces.",
+      "sources": [
+        "docs/architecture/impact-graph/README.md"
+      ]
+    },
+    {
+      "id": "sqlite-database",
+      "title": "SQLite database",
+      "layer": "module",
+      "kind": "database",
+      "summary": "Local SQLite persistence used by the automation library store.",
+      "sources": [
+        "src/Automator.Infrastructure/Automation/SqliteAutomationLibraryStore.cs"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "app",
+      "to": "desktop",
+      "kind": "contains",
+      "relation": "desktop host"
+    },
+    {
+      "from": "app",
+      "to": "renderer",
+      "kind": "contains",
+      "relation": "user interface"
+    },
+    {
+      "from": "app",
+      "to": "launcher",
+      "kind": "contains",
+      "relation": "surface 1"
+    },
+    {
+      "from": "app",
+      "to": "script",
+      "kind": "contains",
+      "relation": "surface 2"
+    },
+    {
+      "from": "app",
+      "to": "api",
+      "kind": "contains",
+      "relation": "surface 3"
+    },
+    {
+      "from": "app",
+      "to": "browser",
+      "kind": "contains",
+      "relation": "surface 4"
+    },
+    {
+      "from": "app",
+      "to": "workflows",
+      "kind": "contains",
+      "relation": "surface 5"
+    },
+    {
+      "from": "app",
+      "to": "scheduler",
+      "kind": "contains",
+      "relation": "surface 6"
+    },
+    {
+      "from": "app",
+      "to": "work-time",
+      "kind": "contains",
+      "relation": "surface 7"
+    },
+    {
+      "from": "app",
+      "to": "website",
+      "kind": "contains",
+      "relation": "surface 8"
+    },
+    {
+      "from": "app",
+      "to": "search",
+      "kind": "contains",
+      "relation": "shared surface"
+    },
+    {
+      "from": "app",
+      "to": "options",
+      "kind": "contains",
+      "relation": "shared surface"
+    },
+    {
+      "from": "app",
+      "to": "activity",
+      "kind": "contains",
+      "relation": "shared surface"
+    },
+    {
+      "from": "app",
+      "to": "backend",
+      "kind": "contains",
+      "relation": "backend process"
+    },
+    {
+      "from": "app",
+      "to": "renderer-services",
+      "kind": "contains",
+      "relation": "renderer action facade"
+    },
+    {
+      "from": "app",
+      "to": "backend-context",
+      "kind": "contains",
+      "relation": "backend capability context"
+    },
+    {
+      "from": "app",
+      "to": "contracts",
+      "kind": "contains",
+      "relation": "shared contracts"
+    },
+    {
+      "from": "app",
+      "to": "tab-registry",
+      "kind": "contains",
+      "relation": "compiled surface map"
+    },
+    {
+      "from": "app",
+      "to": "windows",
+      "kind": "contains",
+      "relation": "platform adapters"
+    },
+    {
+      "from": "app",
+      "to": "library",
+      "kind": "contains",
+      "relation": "persistence adapter"
+    },
+    {
+      "from": "browser",
+      "to": "browser-module-execute",
+      "kind": "contains",
+      "relation": "compiled backend action"
+    },
+    {
+      "from": "browser",
+      "to": "explorer-run",
+      "kind": "contains",
+      "relation": "test execution"
+    },
+    {
+      "from": "renderer-services",
+      "to": "service-dispatch",
+      "kind": "contains",
+      "relation": "module action facade"
+    },
+    {
+      "from": "desktop",
+      "to": "preload-dispatch",
+      "kind": "contains",
+      "relation": "preload bridge"
+    },
+    {
+      "from": "desktop",
+      "to": "main-module-handler",
+      "kind": "contains",
+      "relation": "main-process IPC handler"
+    },
+    {
+      "from": "desktop",
+      "to": "backend-request",
+      "kind": "contains",
+      "relation": "backend process client"
+    },
+    {
+      "from": "desktop",
+      "to": "backend-consume-stdout",
+      "kind": "contains",
+      "relation": "backend response reader"
+    },
+    {
+      "from": "backend",
+      "to": "backend-run",
+      "kind": "contains",
+      "relation": "stdin loop"
+    },
+    {
+      "from": "backend",
+      "to": "backend-handle-line",
+      "kind": "contains",
+      "relation": "line handling"
+    },
+    {
+      "from": "backend",
+      "to": "backend-handle-core",
+      "kind": "contains",
+      "relation": "request dispatch core"
+    },
+    {
+      "from": "backend",
+      "to": "backend-dispatch",
+      "kind": "contains",
+      "relation": "RPC route"
+    },
+    {
+      "from": "backend",
+      "to": "backend-execute-module",
+      "kind": "contains",
+      "relation": "module action route"
+    },
+    {
+      "from": "backend",
+      "to": "backend-write-protocol",
+      "kind": "contains",
+      "relation": "stdout response writer"
+    },
+    {
+      "from": "module-registry",
+      "to": "registry-dispatch",
+      "kind": "contains",
+      "relation": "module action dispatch"
+    },
+    {
+      "from": "browser",
+      "to": "browser-create-explorer",
+      "kind": "contains",
+      "relation": "explorer factory"
+    },
+    {
+      "from": "browser",
+      "to": "explorer-discover",
+      "kind": "contains",
+      "relation": "test discovery"
+    },
+    {
+      "from": "backend-context",
+      "to": "context-process",
+      "kind": "contains",
+      "relation": "scoped process wrapper"
+    },
+    {
+      "from": "process",
+      "to": "process-execute",
+      "kind": "contains",
+      "relation": "process execution"
+    },
+    {
+      "from": "process",
+      "to": "process-read-bounded",
+      "kind": "contains",
+      "relation": "output capture"
+    },
+    {
+      "from": "contracts",
+      "to": "desktop",
+      "kind": "impact",
+      "relation": "defines IPC/RPC request and response shapes",
+      "evidence": "contracts/rpc.ts; electron/preload.ts"
+    },
+    {
+      "from": "contracts",
+      "to": "renderer",
+      "kind": "impact",
+      "relation": "defines bridge and view-kind types consumed by the renderer",
+      "evidence": "contracts/bundled-tab-view-kinds.json; ui/viewKinds.ts; ui/types.d.ts"
+    },
+    {
+      "from": "contracts",
+      "to": "backend",
+      "kind": "impact",
+      "relation": "defines protocol methods and backend request shapes",
+      "evidence": "contracts/rpc.ts; src/Automator.Protocol"
+    },
+    {
+      "from": "desktop",
+      "to": "renderer",
+      "kind": "impact",
+      "relation": "renderer uses the exposed preload bridge and host context",
+      "evidence": "electron/preload.ts; ui/bridge.ts"
+    },
+    {
+      "from": "tab-registry",
+      "to": "renderer",
+      "kind": "impact",
+      "relation": "the app composes registered view kinds",
+      "evidence": "ui/App.tsx; ui/viewRegistry.tsx"
+    },
+    {
+      "from": "tab-registry",
+      "to": "launcher",
+      "kind": "impact",
+      "relation": "registered tab/view mapping includes launcher surfaces",
+      "evidence": "src/Automator.Application/Launcher/LauncherTabRegistry.cs; ui/viewRegistry.tsx"
+    },
+    {
+      "from": "tab-registry",
+      "to": "script",
+      "kind": "impact",
+      "relation": "registered tab/view mapping includes Script Runner",
+      "evidence": "src/Automator.Application/Launcher/LauncherTabRegistry.cs; ui/viewRegistry.tsx"
+    },
+    {
+      "from": "tab-registry",
+      "to": "api",
+      "kind": "impact",
+      "relation": "registered tab/view mapping includes API",
+      "evidence": "src/Automator.Application/Launcher/LauncherTabRegistry.cs; ui/viewRegistry.tsx"
+    },
+    {
+      "from": "tab-registry",
+      "to": "browser",
+      "kind": "impact",
+      "relation": "registered tab/view mapping includes Browser Automation",
+      "evidence": "src/Automator.Application/Launcher/LauncherTabRegistry.cs; ui/viewRegistry.tsx"
+    },
+    {
+      "from": "tab-registry",
+      "to": "workflows",
+      "kind": "impact",
+      "relation": "registered tab/view mapping includes Workflows",
+      "evidence": "src/Automator.Application/Launcher/LauncherTabRegistry.cs; ui/viewRegistry.tsx"
+    },
+    {
+      "from": "tab-registry",
+      "to": "scheduler",
+      "kind": "impact",
+      "relation": "registered tab/view mapping includes Scheduler",
+      "evidence": "src/Automator.Application/Launcher/LauncherTabRegistry.cs; ui/viewRegistry.tsx"
+    },
+    {
+      "from": "tab-registry",
+      "to": "work-time",
+      "kind": "impact",
+      "relation": "registered tab/view mapping includes Work Time",
+      "evidence": "src/Automator.Application/Launcher/LauncherTabRegistry.cs; ui/viewRegistry.tsx"
+    },
+    {
+      "from": "tab-registry",
+      "to": "website",
+      "kind": "impact",
+      "relation": "registered tab/view mapping includes Website Launcher",
+      "evidence": "src/Automator.Application/Launcher/LauncherTabRegistry.cs; ui/viewRegistry.tsx"
+    },
+    {
+      "from": "renderer-services",
+      "to": "script",
+      "kind": "impact",
+      "relation": "the view uses the shared module action facade",
+      "evidence": "ui/automationServices.ts; ui/modules/ScriptRunnerView.tsx"
+    },
+    {
+      "from": "renderer-services",
+      "to": "api",
+      "kind": "impact",
+      "relation": "the view uses the shared module action facade",
+      "evidence": "ui/automationServices.ts; ui/modules/ApiView.tsx"
+    },
+    {
+      "from": "renderer-services",
+      "to": "browser",
+      "kind": "impact",
+      "relation": "the view uses the shared module action facade",
+      "evidence": "ui/automationServices.ts; ui/modules/BrowserAutomationView.tsx"
+    },
+    {
+      "from": "renderer-services",
+      "to": "workflows",
+      "kind": "impact",
+      "relation": "the view uses the shared module action facade",
+      "evidence": "ui/automationServices.ts; ui/modules/WorkflowsView.tsx"
+    },
+    {
+      "from": "renderer-services",
+      "to": "scheduler",
+      "kind": "impact",
+      "relation": "the view uses the shared module action facade",
+      "evidence": "ui/automationServices.ts; ui/modules/SchedulerView.tsx"
+    },
+    {
+      "from": "renderer-services",
+      "to": "work-time",
+      "kind": "impact",
+      "relation": "the view uses the shared module action facade",
+      "evidence": "ui/automationServices.ts; ui/modules/FocusSessionsView.tsx"
+    },
+    {
+      "from": "renderer-services",
+      "to": "website",
+      "kind": "impact",
+      "relation": "the view uses the shared module action facade",
+      "evidence": "ui/automationServices.ts; ui/modules/WebsiteLauncherView.tsx"
+    },
+    {
+      "from": "script",
+      "to": "script-view",
+      "kind": "impact",
+      "relation": "the renderer consumes Script Runner actions and results",
+      "evidence": "src/Automator.Application/Automation/ScriptRunnerModule.cs; ui/modules/ScriptRunnerView.tsx"
+    },
+    {
+      "from": "api",
+      "to": "api-view",
+      "kind": "impact",
+      "relation": "the renderer consumes API actions and results",
+      "evidence": "src/Automator.Application/Automation/ApiModule.cs; ui/modules/ApiView.tsx"
+    },
+    {
+      "from": "browser",
+      "to": "view-run",
+      "kind": "impact",
+      "relation": "the run handler consumes the runTests result",
+      "evidence": "src/Automator.Application/Automation/BrowserAutomationModule.cs#L97; ui/modules/BrowserAutomationView.tsx#L235-L238"
+    },
+    {
+      "from": "workflows",
+      "to": "workflows-view",
+      "kind": "impact",
+      "relation": "the renderer consumes workflow actions and run results",
+      "evidence": "src/Automator.Application/Automation/WorkflowModule.cs; ui/modules/WorkflowsView.tsx"
+    },
+    {
+      "from": "scheduler",
+      "to": "scheduler-view",
+      "kind": "impact",
+      "relation": "the renderer consumes schedule actions and snapshots",
+      "evidence": "src/Automator.Application/Automation/SchedulerModule.cs; ui/modules/SchedulerView.tsx"
+    },
+    {
+      "from": "work-time",
+      "to": "work-time-view",
+      "kind": "impact",
+      "relation": "the renderer consumes Work Time actions and snapshots",
+      "evidence": "src/Automator.Application/Automation/FocusSessionsModule.cs; ui/modules/FocusSessionsView.tsx"
+    },
+    {
+      "from": "website",
+      "to": "website-view",
+      "kind": "impact",
+      "relation": "the renderer consumes website alias actions and launch results",
+      "evidence": "src/Automator.Application/Automation/WebsiteLauncherModule.cs; ui/modules/WebsiteLauncherView.tsx"
+    },
+    {
+      "from": "script",
+      "to": "workflow-engine",
+      "kind": "impact",
+      "relation": "workflows can execute saved Script Runner profiles as steps",
+      "evidence": "src/Automator.Application/Automation/AutomationWorkflowEngine.cs#L26-L70; src/Automator.Backend/BackendServer.cs#L923-L927"
+    },
+    {
+      "from": "api",
+      "to": "workflow-engine",
+      "kind": "impact",
+      "relation": "workflows can execute saved API profiles as steps",
+      "evidence": "src/Automator.Application/Automation/AutomationWorkflowEngine.cs#L26-L70; src/Automator.Backend/BackendServer.cs#L923-L927"
+    },
+    {
+      "from": "browser",
+      "to": "workflow-engine",
+      "kind": "impact",
+      "relation": "workflows can execute saved Browser Automation profiles as steps",
+      "evidence": "src/Automator.Application/Automation/AutomationWorkflowEngine.cs#L26-L70; src/Automator.Backend/BackendServer.cs#L923-L927"
+    },
+    {
+      "from": "script",
+      "to": "scheduler-coordinator",
+      "kind": "impact",
+      "relation": "Scheduler can list, validate, and run saved Script Runner profiles directly",
+      "evidence": "src/Automator.Application/Automation/AutomationSchedulerCoordinator.cs#L111-L114; src/Automator.Application/Automation/AutomationSchedulerCoordinator.cs#L131-L135; src/Automator.Application/Automation/AutomationSchedulerCoordinator.cs#L326-L330"
+    },
+    {
+      "from": "search",
+      "to": "website",
+      "kind": "impact",
+      "relation": "website aliases are added to global action search",
+      "evidence": "ui/commands/TabCommandRegistry.tsx; src/Automator.Application/Automation/WebsiteLauncherModule.cs"
+    },
+    {
+      "from": "module-registry",
+      "to": "script",
+      "kind": "impact",
+      "relation": "registered compiled module action dispatch",
+      "evidence": "src/Automator.Application/Automation/AutomationModuleRegistry.cs; src/Automator.Application/Automation/ScriptRunnerModule.cs"
+    },
+    {
+      "from": "module-registry",
+      "to": "api",
+      "kind": "impact",
+      "relation": "registered compiled module action dispatch",
+      "evidence": "src/Automator.Application/Automation/AutomationModuleRegistry.cs; src/Automator.Application/Automation/ApiModule.cs"
+    },
+    {
+      "from": "module-registry",
+      "to": "browser",
+      "kind": "impact",
+      "relation": "registered compiled module action dispatch",
+      "evidence": "src/Automator.Application/Automation/AutomationModuleRegistry.cs; src/Automator.Application/Automation/BrowserAutomationModule.cs"
+    },
+    {
+      "from": "module-registry",
+      "to": "workflows",
+      "kind": "impact",
+      "relation": "registered compiled module action dispatch",
+      "evidence": "src/Automator.Application/Automation/AutomationModuleRegistry.cs; src/Automator.Application/Automation/WorkflowModule.cs"
+    },
+    {
+      "from": "module-registry",
+      "to": "scheduler",
+      "kind": "impact",
+      "relation": "registered compiled module action dispatch",
+      "evidence": "src/Automator.Application/Automation/AutomationModuleRegistry.cs; src/Automator.Application/Automation/SchedulerModule.cs"
+    },
+    {
+      "from": "module-registry",
+      "to": "work-time",
+      "kind": "impact",
+      "relation": "registered compiled module action dispatch",
+      "evidence": "src/Automator.Application/Automation/AutomationModuleRegistry.cs; src/Automator.Application/Automation/FocusSessionsModule.cs"
+    },
+    {
+      "from": "module-registry",
+      "to": "website",
+      "kind": "impact",
+      "relation": "registered compiled module action dispatch",
+      "evidence": "src/Automator.Application/Automation/AutomationModuleRegistry.cs; src/Automator.Application/Automation/WebsiteLauncherModule.cs"
+    },
+    {
+      "from": "backend-context",
+      "to": "script",
+      "kind": "impact",
+      "relation": "active module actions receive a scoped service context",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L731; src/Automator.Application/Automation/AutomationServicesContext.cs"
+    },
+    {
+      "from": "backend-context",
+      "to": "api",
+      "kind": "impact",
+      "relation": "active module actions receive a scoped service context",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L731; src/Automator.Application/Automation/AutomationServicesContext.cs"
+    },
+    {
+      "from": "backend-context",
+      "to": "browser",
+      "kind": "impact",
+      "relation": "active module actions receive a scoped service context",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L731; src/Automator.Application/Automation/AutomationServicesContext.cs"
+    },
+    {
+      "from": "backend-context",
+      "to": "workflows",
+      "kind": "impact",
+      "relation": "active module actions receive a scoped service context",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L731; src/Automator.Application/Automation/AutomationServicesContext.cs"
+    },
+    {
+      "from": "backend-context",
+      "to": "scheduler",
+      "kind": "impact",
+      "relation": "active module actions receive a scoped service context",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L731; src/Automator.Application/Automation/AutomationServicesContext.cs"
+    },
+    {
+      "from": "backend-context",
+      "to": "work-time",
+      "kind": "impact",
+      "relation": "active module actions receive a scoped service context",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L731; src/Automator.Application/Automation/AutomationServicesContext.cs"
+    },
+    {
+      "from": "backend-context",
+      "to": "website",
+      "kind": "impact",
+      "relation": "active module actions receive a scoped service context",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L731; src/Automator.Application/Automation/AutomationServicesContext.cs"
+    },
+    {
+      "from": "process",
+      "to": "script",
+      "kind": "impact",
+      "relation": "Script Runner uses the scoped process capability",
+      "evidence": "src/Automator.Application/Automation/ScriptRunnerModule.cs; src/Automator.Application/Automation/AutomationServicesContext.cs"
+    },
+    {
+      "from": "process",
+      "to": "browser",
+      "kind": "impact",
+      "relation": "Playwright test runs execute through the process capability",
+      "evidence": "src/Automator.Application/Automation/PlaywrightTestExplorer.cs; src/Automator.Infrastructure/Automation/LocalProcessExecutionService.cs"
+    },
+    {
+      "from": "http",
+      "to": "api",
+      "kind": "impact",
+      "relation": "API profiles use the shared HTTP client",
+      "evidence": "src/Automator.Application/Automation/ApiModule.cs; src/Automator.Infrastructure/Automation/SharedHttpService.cs"
+    },
+    {
+      "from": "secrets",
+      "to": "http",
+      "kind": "impact",
+      "relation": "named profile secrets are resolved by the HTTP path",
+      "evidence": "src/Automator.Infrastructure/Automation/SharedHttpService.cs; src/Automator.Infrastructure/Automation/WindowsCredentialSecretManager.cs"
+    },
+    {
+      "from": "playwright",
+      "to": "browser",
+      "kind": "impact",
+      "relation": "Browser Automation uses the Playwright explorer/runtime",
+      "evidence": "src/Automator.Application/Automation/BrowserAutomationModule.cs; src/Automator.Infrastructure/Automation/PlaywrightAutomationBrowserService.cs"
+    },
+    {
+      "from": "workflow-engine",
+      "to": "workflows",
+      "kind": "impact",
+      "relation": "the Workflows module starts engine runs",
+      "evidence": "src/Automator.Application/Automation/WorkflowModule.cs; src/Automator.Application/Automation/AutomationWorkflowEngine.cs"
+    },
+    {
+      "from": "workflow-engine",
+      "to": "scheduler",
+      "kind": "impact",
+      "relation": "scheduled workflow runs use the workflow runner",
+      "evidence": "src/Automator.Application/Automation/AutomationSchedulerCoordinator.cs; src/Automator.Application/Automation/AutomationWorkflowEngine.cs"
+    },
+    {
+      "from": "scheduler-coordinator",
+      "to": "scheduler",
+      "kind": "impact",
+      "relation": "Scheduler actions read and update coordinator state",
+      "evidence": "src/Automator.Application/Automation/SchedulerModule.cs; src/Automator.Application/Automation/AutomationSchedulerCoordinator.cs"
+    },
+    {
+      "from": "worktime-coordinator",
+      "to": "work-time",
+      "kind": "impact",
+      "relation": "Work Time actions read and update coordinator state",
+      "evidence": "src/Automator.Application/Automation/FocusSessionsModule.cs; src/Automator.Application/Automation/AutomationWorkTimeCoordinator.cs"
+    },
+    {
+      "from": "windows",
+      "to": "launcher",
+      "kind": "impact",
+      "relation": "launcher discovery and activation use Windows adapters",
+      "evidence": "src/Automator.Windows/WindowsAppCatalog.cs; src/Automator.Windows/WindowsApplicationActivator.cs"
+    },
+    {
+      "from": "windows",
+      "to": "website",
+      "kind": "impact",
+      "relation": "website destinations are activated through the Windows adapter",
+      "evidence": "src/Automator.Windows/WindowsAutomationWebsiteLauncher.cs"
+    },
+    {
+      "from": "library",
+      "to": "activity",
+      "kind": "impact",
+      "relation": "run activity records are persisted in the shared SQLite library",
+      "evidence": "src/Automator.Application/Automation/AutomationRunActivityService.cs; src/Automator.Infrastructure/Automation/SqliteAutomationLibraryStore.cs"
+    },
+    {
+      "from": "library",
+      "to": "script",
+      "kind": "impact",
+      "relation": "saved scripts and profile metadata use library storage",
+      "evidence": "src/Automator.Application/Automation/ScriptRunnerModule.cs; src/Automator.Infrastructure/Automation/SqliteAutomationLibraryStore.cs"
+    },
+    {
+      "from": "library",
+      "to": "api",
+      "kind": "impact",
+      "relation": "API profiles use library storage",
+      "evidence": "src/Automator.Application/Automation/ApiModule.cs; src/Automator.Infrastructure/Automation/SqliteAutomationLibraryStore.cs"
+    },
+    {
+      "from": "library",
+      "to": "browser",
+      "kind": "impact",
+      "relation": "Browser Automation tags and project metadata use scoped library storage",
+      "evidence": "src/Automator.Application/Automation/BrowserAutomationModule.cs; src/Automator.Application/Automation/PlaywrightTestExplorer.cs"
+    },
+    {
+      "from": "library",
+      "to": "workflows",
+      "kind": "impact",
+      "relation": "workflow profiles and run metadata use library storage",
+      "evidence": "src/Automator.Application/Automation/AutomationWorkflowEngine.cs"
+    },
+    {
+      "from": "library",
+      "to": "scheduler",
+      "kind": "impact",
+      "relation": "schedules and run metadata use library storage",
+      "evidence": "src/Automator.Application/Automation/AutomationSchedulerCoordinator.cs"
+    },
+    {
+      "from": "library",
+      "to": "work-time",
+      "kind": "impact",
+      "relation": "work-time entries are persisted in the shared library",
+      "evidence": "src/Automator.Application/Automation/AutomationWorkTimeCoordinator.cs"
+    },
+    {
+      "from": "settings",
+      "to": "options",
+      "kind": "impact",
+      "relation": "preferences and variables expose settings-backed state",
+      "evidence": "src/Automator.Backend/BackendServer.cs; ui/variables/GlobalVariables.tsx"
+    },
+    {
+      "from": "settings",
+      "to": "script",
+      "kind": "impact",
+      "relation": "module settings configure Script Runner behavior",
+      "evidence": "src/Automator.Application/Automation/ScriptRunnerModule.cs; src/Automator.Backend/BackendServer.cs"
+    },
+    {
+      "from": "settings",
+      "to": "api",
+      "kind": "impact",
+      "relation": "module settings configure API behavior",
+      "evidence": "src/Automator.Application/Automation/ApiModule.cs; src/Automator.Backend/BackendServer.cs"
+    },
+    {
+      "from": "settings",
+      "to": "browser",
+      "kind": "impact",
+      "relation": "module settings configure Browser Automation behavior",
+      "evidence": "src/Automator.Application/Automation/BrowserAutomationModule.cs; src/Automator.Backend/BackendServer.cs"
+    },
+    {
+      "from": "settings",
+      "to": "workflows",
+      "kind": "impact",
+      "relation": "module settings configure workflow behavior",
+      "evidence": "src/Automator.Application/Automation/WorkflowModule.cs; src/Automator.Backend/BackendServer.cs"
+    },
+    {
+      "from": "settings",
+      "to": "scheduler",
+      "kind": "impact",
+      "relation": "module settings configure scheduler behavior",
+      "evidence": "src/Automator.Application/Automation/SchedulerModule.cs; src/Automator.Backend/BackendServer.cs"
+    },
+    {
+      "from": "settings",
+      "to": "work-time",
+      "kind": "impact",
+      "relation": "module settings configure Work Time behavior",
+      "evidence": "src/Automator.Application/Automation/FocusSessionsModule.cs; src/Automator.Backend/BackendServer.cs"
+    },
+    {
+      "from": "settings",
+      "to": "website",
+      "kind": "impact",
+      "relation": "module settings configure Website Launcher behavior",
+      "evidence": "src/Automator.Application/Automation/WebsiteLauncherModule.cs; src/Automator.Backend/BackendServer.cs"
+    },
+    {
+      "from": "process-read-bounded",
+      "to": "process-execute",
+      "kind": "impact",
+      "relation": "process output capture is used by process execution",
+      "evidence": "src/Automator.Infrastructure/Automation/LocalProcessExecutionService.cs#L37"
+    },
+    {
+      "from": "process-execute",
+      "to": "context-process",
+      "kind": "impact",
+      "relation": "the scoped wrapper delegates to the concrete process service",
+      "evidence": "src/Automator.Application/Automation/AutomationServicesContext.cs#L206"
+    },
+    {
+      "from": "context-process",
+      "to": "explorer-discover",
+      "kind": "impact",
+      "relation": "test discovery runs the process capability",
+      "evidence": "src/Automator.Application/Automation/PlaywrightTestExplorer.cs#L259"
+    },
+    {
+      "from": "context-process",
+      "to": "explorer-run",
+      "kind": "impact",
+      "relation": "test execution runs the process capability",
+      "evidence": "src/Automator.Application/Automation/PlaywrightTestExplorer.cs#L228"
+    },
+    {
+      "from": "explorer-discover",
+      "to": "explorer-run",
+      "kind": "impact",
+      "relation": "RunAsync discovers tests before choosing the run target",
+      "evidence": "src/Automator.Application/Automation/PlaywrightTestExplorer.cs#L177"
+    },
+    {
+      "from": "explorer-run",
+      "to": "browser-module-execute",
+      "kind": "impact",
+      "relation": "the runTests action delegates to explorer RunAsync",
+      "evidence": "src/Automator.Application/Automation/BrowserAutomationModule.cs#L97"
+    },
+    {
+      "from": "browser-create-explorer",
+      "to": "browser-module-execute",
+      "kind": "impact",
+      "relation": "module actions construct an explorer from scoped services",
+      "evidence": "src/Automator.Application/Automation/BrowserAutomationModule.cs#L90-L97"
+    },
+    {
+      "from": "browser-module-execute",
+      "to": "registry-dispatch",
+      "kind": "impact",
+      "relation": "the module action implementation is called by registry dispatch",
+      "evidence": "src/Automator.Application/Automation/AutomationModuleRegistry.cs#L111"
+    },
+    {
+      "from": "registry-dispatch",
+      "to": "backend-execute-module",
+      "kind": "impact",
+      "relation": "the backend callback invokes module registry dispatch",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L437"
+    },
+    {
+      "from": "request-executor",
+      "to": "backend-execute-module",
+      "kind": "impact",
+      "relation": "module action execution runs inside the request executor callback",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L428-L439"
+    },
+    {
+      "from": "backend-execute-module",
+      "to": "backend-dispatch",
+      "kind": "impact",
+      "relation": "the module action result is returned to moduleAction routing",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L316"
+    },
+    {
+      "from": "backend-execute-module",
+      "to": "backend-write-protocol",
+      "kind": "impact",
+      "relation": "the action result is serialized into the JSON-RPC response",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L158-L159"
+    },
+    {
+      "from": "backend-dispatch",
+      "to": "backend-handle-core",
+      "kind": "impact",
+      "relation": "the request handler consumes the dispatch result",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L158"
+    },
+    {
+      "from": "backend-write-protocol",
+      "to": "backend-handle-core",
+      "kind": "impact",
+      "relation": "request handling writes the serialized result",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L158-L159"
+    },
+    {
+      "from": "backend-handle-core",
+      "to": "backend-handle-line",
+      "kind": "impact",
+      "relation": "queued or direct line handling awaits the core request path",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L122-L136"
+    },
+    {
+      "from": "backend-handle-line",
+      "to": "backend-run",
+      "kind": "impact",
+      "relation": "the stdin loop hands each request line to HandleLineAsync",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L88-L92"
+    },
+    {
+      "from": "backend-write-protocol",
+      "to": "backend-consume-stdout",
+      "kind": "impact",
+      "relation": "the host parses protocol lines emitted by backend stdout",
+      "evidence": "src/Automator.Backend/BackendServer.cs#L1648-L1654; electron/backendProcess.ts#L49"
+    },
+    {
+      "from": "backend-consume-stdout",
+      "to": "backend-request",
+      "kind": "impact",
+      "relation": "stdout parsing resolves a pending request promise",
+      "evidence": "electron/backendProcess.ts#L70-L115"
+    },
+    {
+      "from": "backend-request",
+      "to": "main-module-handler",
+      "kind": "impact",
+      "relation": "the main IPC handler awaits the backend request result",
+      "evidence": "electron/main.ts#L570-L572"
+    },
+    {
+      "from": "main-module-handler",
+      "to": "preload-dispatch",
+      "kind": "impact",
+      "relation": "the preload invocation resolves from the main IPC handler",
+      "evidence": "electron/preload.ts#L114-L117; electron/main.ts#L570-L572"
+    },
+    {
+      "from": "preload-dispatch",
+      "to": "service-dispatch",
+      "kind": "impact",
+      "relation": "the module action facade awaits the exposed bridge method",
+      "evidence": "ui/automationServices.ts#L189; electron/preload.ts#L114-L117"
+    },
+    {
+      "from": "service-dispatch",
+      "to": "view-run",
+      "kind": "impact",
+      "relation": "the view awaits and parses the returned action result",
+      "evidence": "ui/modules/BrowserAutomationView.tsx#L235-L238"
+    },
+    {
+      "from": "user",
+      "to": "launcher",
+      "kind": "interaction",
+      "relation": "user interaction"
+    },
+    {
+      "from": "user",
+      "to": "script",
+      "kind": "interaction",
+      "relation": "user interaction"
+    },
+    {
+      "from": "user",
+      "to": "api",
+      "kind": "interaction",
+      "relation": "user interaction"
+    },
+    {
+      "from": "user",
+      "to": "browser",
+      "kind": "interaction",
+      "relation": "user interaction"
+    },
+    {
+      "from": "user",
+      "to": "workflows",
+      "kind": "interaction",
+      "relation": "user interaction"
+    },
+    {
+      "from": "user",
+      "to": "scheduler",
+      "kind": "interaction",
+      "relation": "user interaction"
+    },
+    {
+      "from": "user",
+      "to": "work-time",
+      "kind": "interaction",
+      "relation": "user interaction"
+    },
+    {
+      "from": "user",
+      "to": "website",
+      "kind": "interaction",
+      "relation": "user interaction"
+    },
+    {
+      "from": "user",
+      "to": "search",
+      "kind": "interaction",
+      "relation": "user interaction"
+    },
+    {
+      "from": "user",
+      "to": "options",
+      "kind": "interaction",
+      "relation": "user interaction"
+    },
+    {
+      "from": "sqlite-database",
+      "to": "library",
+      "kind": "impact",
+      "relation": "SQLite persistence",
+      "evidence": "src/Automator.Infrastructure/Automation/SqliteAutomationLibraryStore.cs",
+      "confidence": "manual"
+    }
+  ]
+}
