@@ -82,9 +82,16 @@ export async function generateNotes({ graph = loadGraph(), notesRoot = path.join
   return {written:created,removed,warnings:graph.diagnostics??[]};
 }
 
-function validateReference(reference, label, errors) {
-  const [sourcePath, fragment] = reference.split('#', 2);
-  const absolutePath = path.join(repoRoot, sourcePath);
+function validateReference(reference, label, errors, root = repoRoot) {
+  let [sourcePath, fragment] = reference.split('#', 2);
+  if (!fragment) {
+    const lineAnchor = sourcePath.match(/:(\d+)(?::(\d+))?$/);
+    if (lineAnchor) {
+      fragment = `L${lineAnchor[1]}${lineAnchor[2] ? `-L${lineAnchor[2]}` : ''}`;
+      sourcePath = sourcePath.slice(0, -lineAnchor[0].length);
+    }
+  }
+  const absolutePath = path.join(root, sourcePath);
   if (!existsSync(absolutePath)) {
     errors.push(`Missing ${label}: ${sourcePath}`);
     return;
@@ -121,13 +128,54 @@ function validateModel() {
   if (errors.length > 0) throw new Error(errors.join('\n'));
 }
 
+export async function validateGraph(graph = loadGraph(), { root = repoRoot, notesRoot = path.join(root, 'docs/architecture/impact-graph/nodes') } = {}) {
+  const errors = [];
+  const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+  if (byId.size !== graph.nodes.length) errors.push('Merged graph node IDs must be unique.');
+  for (const node of graph.nodes) for (const source of node.sources ?? []) validateReference(source, `source for ${node.id}`, errors, root);
+  for (const edge of graph.edges) {
+    if (!byId.has(edge.from)) errors.push(`Unknown edge source: ${edge.from}`);
+    if (!byId.has(edge.to)) errors.push(`Unknown edge target: ${edge.to}`);
+    for (const evidence of (edge.evidence ?? '').split(';').map((part) => part.trim()).filter(Boolean)) validateReference(evidence, `edge evidence for ${edge.from} -> ${edge.to}`, errors, root);
+  }
+
+  const folderFor = (node) => node.layer === 'file' ? 'files' : node.layer === 'function' ? 'functions' : '';
+  const wanted = new Set();
+  for (const node of graph.nodes) {
+    const output = path.join(notesRoot, folderFor(node), `${node.id}.md`);
+    wanted.add(path.resolve(output));
+    if (!existsSync(output)) errors.push(`Missing generated note for ${node.id}: ${path.relative(root, output)}`);
+    else if (!readFileSync(output, 'utf8').includes(generatorMarker)) errors.push(`Generated note is not generator-owned: ${path.relative(root, output)}`);
+  }
+  for (const folder of ['', 'files', 'functions']) {
+    const dir = path.join(notesRoot, folder);
+    if (!existsSync(dir)) continue;
+    for (const name of await readdir(dir)) {
+      const output = path.resolve(dir, name);
+      if (!name.endsWith('.md') || wanted.has(output)) continue;
+      if (readFileSync(output, 'utf8').includes(generatorMarker)) errors.push(`Stale generated note has no graph node: ${path.relative(root, output)}`);
+    }
+  }
+  const reportsRoot = path.join(root, 'docs/architecture/impact-graph/reports');
+  if (existsSync(reportsRoot)) for (const name of await readdir(reportsRoot)) {
+    if (!name.endsWith('-impact.md')) continue;
+    const report = path.join(reportsRoot, name);
+    const contents = readFileSync(report, 'utf8');
+    if (!contents.includes(generatorMarker)) continue;
+    const id = name.slice(0, -'-impact.md'.length);
+    if (!byId.has(id)) errors.push(`Stale generated impact report has no graph node: ${path.relative(root, report)}`);
+  }
+  return errors;
+}
+
 function yamlString(value) {
   return JSON.stringify(String(value));
 }
 
-function wikiLink(id) {
-  const node = nodeById.get(id);
-  return `[[${vaultRelativeNotesRoot}/${id}|${node.title}]]`;
+function wikiLink(id, graphNodes = nodeById) {
+  const node = graphNodes.get(id);
+  const folder = node.layer === 'file' ? '/files' : node.layer === 'function' ? '/functions' : '';
+  return `[[${vaultRelativeNotesRoot}${folder}/${id}|${node.title}]]`;
 }
 
 function areaTagForModule(node) {
@@ -161,17 +209,6 @@ function graphTagsFor(node, extraTags = []) {
     `impact-graph/kind/${node.kind}`,
     ...uniqueAreas.map((area) => `impact-graph/area/${area}`),
     ...extraTags
-  ])];
-}
-
-function reportTagsFor(changed) {
-  const areaTags = graphTagsFor(changed).filter((tag) => tag.startsWith('impact-graph/area/'));
-  return [...new Set([
-    'impact-graph',
-    'impact-graph/report',
-    `impact-graph/source-layer/${changed.layer}`,
-    `impact-graph/source-kind/${changed.kind}`,
-    ...areaTags
   ])];
 }
 
@@ -232,41 +269,51 @@ function generateModuleNotes() {
   console.log(`Generated ${model.nodes.length} Obsidian graph nodes under docs/architecture/impact-graph/nodes.`);
 }
 
-function findNode(query) {
+export function findNode(query, graph = { nodes: model.nodes }) {
+  const nodeMap = new Map(graph.nodes.map((node) => [node.id, node]));
   const normalized = query.trim().toLocaleLowerCase();
-  const exactId = nodeById.get(query);
+  const exactId = nodeMap.get(query);
   if (exactId) return exactId;
-  const matches = model.nodes.filter((node) => node.title.toLocaleLowerCase() === normalized);
-  if (matches.length === 1) return matches[0];
-  const pathMatches = model.nodes.filter((node) => (node.sources ?? []).some((source) =>
+  const pathMatches = graph.nodes.filter((node) => node.layer === 'file' && (node.sources ?? []).some((source) =>
     source.split('#', 1)[0].toLocaleLowerCase() === normalized));
   if (pathMatches.length === 1) return pathMatches[0];
-  if (matches.length > 1 || pathMatches.length > 1) {
-    throw new Error(`Ambiguous node '${query}'. Use one of: ${[...matches, ...pathMatches].map((node) => node.id).join(', ')}`);
+  if (pathMatches.length > 1) throw new Error(`Ambiguous file path '${query}'. Use one of: ${pathMatches.map((node) => node.id).join(', ')}`);
+  const functions = graph.nodes.filter((node) => node.layer === 'function' && node.title.toLocaleLowerCase() === normalized);
+  if (functions.length === 1) return functions[0];
+  if (functions.length > 1) throw new Error(`Ambiguous function '${query}'. Use one of: ${functions.map((node) => node.id).join(', ')}`);
+  const matches = graph.nodes.filter((node) => node.layer === 'module' && node.title.toLocaleLowerCase() === normalized);
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) {
+    throw new Error(`Ambiguous node '${query}'. Use one of: ${matches.map((node) => node.id).join(', ')}`);
   }
   throw new Error(`No graph node matches '${query}'. Use 'list' to see IDs.`);
 }
 
-function impactReport(query, writeNote) {
-  const changed = findNode(query);
-  const impactEdges = model.edges.filter((edge) => {
-    if (edge.kind !== 'impact') return false;
-    const from = nodeById.get(edge.from);
-    const to = nodeById.get(edge.to);
-    if (changed.layer === 'module') {
-      return from.layer === 'module' && (to.layer === 'module' || to.layer === 'code');
+export function buildImpactReport(graph, query) {
+  const graphNodes = new Map(graph.nodes.map((node) => [node.id, node]));
+  const changed = findNode(query, graph);
+  const ownership = new Map();
+  for (const edge of graph.edges) if (edge.kind === 'contains') {
+    if (!ownership.has(edge.from)) ownership.set(edge.from, []);
+    ownership.get(edge.from).push(edge.to);
+  }
+  const seeds = new Set([changed.id]);
+  if (changed.layer === 'module' || changed.layer === 'file') {
+    const queue = [changed.id];
+    for (let i = 0; i < queue.length; i += 1) for (const id of ownership.get(queue[i]) ?? []) {
+      if (!seeds.has(id)) { seeds.add(id); queue.push(id); }
     }
-    return from.layer === 'code' && to.layer === 'code';
-  });
+  }
+  const impactEdges = graph.edges.filter((edge) => edge.kind === 'impact');
   const outgoing = new Map();
   for (const edge of impactEdges) {
     if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
     outgoing.get(edge.from).push(edge);
   }
 
-  const distance = new Map([[changed.id, 0]]);
+  const distance = new Map([...seeds].map((id) => [id, 0]));
   const pathEdges = new Map();
-  const queue = [changed.id];
+  const queue = [...seeds];
   for (let index = 0; index < queue.length; index += 1) {
     const current = queue[index];
     for (const edge of outgoing.get(current) ?? []) {
@@ -278,8 +325,8 @@ function impactReport(query, writeNote) {
   }
 
   const affected = [...distance.entries()]
-    .filter(([id, hops]) => id !== changed.id && hops > 0)
-    .sort((a, b) => a[1] - b[1] || nodeById.get(a[0]).title.localeCompare(nodeById.get(b[0]).title));
+    .filter(([id, hops]) => !seeds.has(id) && hops > 0)
+    .sort((a, b) => a[1] - b[1] || graphNodes.get(a[0]).title.localeCompare(graphNodes.get(b[0]).title));
   const direct = affected.filter(([, hops]) => hops === 1);
   const transitive = affected.filter(([, hops]) => hops > 1);
 
@@ -289,7 +336,7 @@ function impactReport(query, writeNote) {
       const route = pathEdges.get(id) ?? [];
       const explanation = route.map((edge) => edge.relation).filter(Boolean).join(' → ');
       const evidence = [...new Set(route.map((edge) => edge.evidence).filter(Boolean))].join('; ');
-      return `- ${wikiLink(id)}${explanation ? ` — ${explanation}` : ''}${evidence ? `\n  Evidence: \`${evidence}\`` : ''}`;
+      return `- ${wikiLink(id, graphNodes)}${explanation ? ` — ${explanation}` : ''}${evidence ? `\n  Evidence: \`${evidence}\`` : ''}`;
     }).join('\n');
 
   const noImpactHint = affected.length === 0
@@ -300,10 +347,10 @@ function impactReport(query, writeNote) {
   const report = [
     `# Change impact: ${changed.title}`,
     '',
-    `Starting node: ${wikiLink(changed.id)} (${changed.sources?.join(', ') ?? 'no source anchor'})`,
-    `Traversal: ${changed.layer === 'module' ? 'module dependencies and directly linked code entry points' : 'the traced code call path'}`,
+    `Starting node: ${wikiLink(changed.id, graphNodes)} (${changed.sources?.join(', ') ?? 'no source anchor'})`,
+    `Traversal: ${changed.layer === 'module' ? 'owned files and functions, then dependency impact edges' : changed.layer === 'file' ? 'file consumers and functions declared in the file, then caller impact edges' : 'function callers'}`,
     '',
-    `Graph edges indicate possible impact propagation. This curated graph currently covers ${model.nodes.length} nodes; it is not a whole-repository semantic call graph.`,
+    `Graph edges indicate possible impact propagation. The merged graph currently covers ${graph.nodes.length} nodes; static analysis may miss runtime behavior.`,
     ...(noImpactHint ? ['', noImpactHint] : []),
     '',
     `## Direct dependents (${direct.length})`,
@@ -316,33 +363,49 @@ function impactReport(query, writeNote) {
     ''
   ].join('\n');
 
+  return { changed, direct: direct.map(([id]) => graphNodes.get(id)), transitive: transitive.map(([id]) => graphNodes.get(id)), report };
+}
+
+function reportTagsFor(changed, graph) {
+  const areas = changed.layer === 'module' ? [areaTagForModule(changed)] : (changed.areaIds ?? []);
+  return [...new Set(['impact-graph', 'impact-graph/report', `impact-graph/source-layer/${changed.layer}`, `impact-graph/source-kind/${changed.kind}`, ...areas.map((area) => `impact-graph/area/${area}`)])];
+}
+
+export function writeImpactReportNote(changed, report, graph, reportsRoot = path.join(repoRoot, 'docs', 'architecture', 'impact-graph', 'reports')) {
+  mkdirSync(reportsRoot, { recursive: true });
+  const reportPath = path.join(reportsRoot, `${changed.id}-impact.md`);
+  if (existsSync(reportPath) && !readFileSync(reportPath, 'utf8').includes(generatorMarker)) {
+    throw new Error(`Refusing to overwrite a report not owned by this generator: ${reportPath}`);
+  }
+  const reportNote = [
+    '---',
+    `graph_id: ${yamlString(`${changed.id}-impact`)}`,
+    'graph_layer: "impact-report"',
+    'graph_kind: "report"',
+    `tags:\n${reportTagsFor(changed, graph).map((tag) => `  - ${yamlString(tag)}`).join('\n')}`,
+    `generated_by: ${yamlString('scripts/impact-graph.mjs')}`,
+    '---',
+    '',
+    report,
+    ''
+  ].join('\n');
+  writeFileSync(reportPath, reportNote, 'utf8');
+  return reportPath;
+}
+
+function impactReport(query, writeNote) {
+  const graph = loadGraph();
+  const { changed, report } = buildImpactReport(graph, query);
   console.log(report);
   if (writeNote) {
-    const reportsRoot = path.join(repoRoot, 'docs', 'architecture', 'impact-graph', 'reports');
-    mkdirSync(reportsRoot, { recursive: true });
-    const reportPath = path.join(reportsRoot, `${changed.id}-impact.md`);
-    if (existsSync(reportPath) && !readFileSync(reportPath, 'utf8').includes('generated_by: "scripts/impact-graph.mjs"')) {
-      throw new Error(`Refusing to overwrite a report not owned by this generator: ${reportPath}`);
-    }
-    const reportNote = [
-      '---',
-      `graph_id: ${yamlString(`${changed.id}-impact`)}`,
-      'graph_layer: "impact-report"',
-      'graph_kind: "report"',
-      `tags:\n${reportTagsFor(changed).map((tag) => `  - ${yamlString(tag)}`).join('\n')}`,
-      `generated_by: ${yamlString('scripts/impact-graph.mjs')}`,
-      '---',
-      '',
-      report,
-      ''
-    ].join('\n');
-    writeFileSync(reportPath, reportNote, 'utf8');
+    const reportPath = writeImpactReportNote(changed, report, graph);
     console.log(`\nObsidian impact note: ${path.relative(repoRoot, reportPath)}`);
   }
 }
 
-function listNodes() {
-  for (const node of model.nodes) console.log(`${node.id}\t${node.layer}\t${node.title}`);
+function listNodes(layer) {
+  const graph = loadGraph();
+  for (const node of graph.nodes) if (!layer || layer === node.layer) console.log(`${node.id}\t${node.layer}\t${node.title}`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) try {
@@ -359,12 +422,22 @@ if (process.argv[1] && path.resolve(process.argv[1]) === scriptPath) try {
     if (!query) throw new Error('Provide a node ID, title, or source path before --note.');
     impactReport(query, writeNote);
   }
-  else if (command === 'list') listNodes();
+  else if (command === 'list') {
+    const layer = args[0];
+    if (layer && !['module', 'file', 'function'].includes(layer)) throw new Error(`Unknown list layer '${layer}'. Use module, file, or function.`);
+    listNodes(layer);
+  }
+  else if (command === 'validate') {
+    const errors = await validateGraph(loadGraph());
+    if (errors.length) throw new Error(errors.join('\n'));
+    console.log('Impact graph is valid.');
+  }
   else {
     console.log('Usage:');
     console.log('  node scripts/impact-graph.mjs generate');
-    console.log('  node scripts/impact-graph.mjs impact <node-id|title|source-path> [--note]');
-    console.log('  node scripts/impact-graph.mjs list');
+    console.log('  node scripts/impact-graph.mjs impact <node-id|file-path|qualified-function-name> [--note]');
+    console.log('  node scripts/impact-graph.mjs list [module|file|function]');
+    console.log('  node scripts/impact-graph.mjs validate');
   }
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
