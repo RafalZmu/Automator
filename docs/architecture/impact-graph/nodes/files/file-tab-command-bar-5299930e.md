@@ -32,7 +32,7 @@ Source file ui/commands/TabCommandBar.tsx.
 - contains (declares function): [[function-3396-ddf4ce78|TabCommandBar.callback.callback@83]] (ui/commands/TabCommandBar.tsx#L83)
 - contains (declares function): [[function-3906-a76c7356|TabCommandBar.map.callback@87]] (ui/commands/TabCommandBar.tsx#L87)
 - contains (declares function): [[function-4205-84b803ab|TabCommandBar.callback.callback@90]] (ui/commands/TabCommandBar.tsx#L90)
-- contains (declares function): [[function-4205-84b803ab|TabCommandBar.callback.callback@90]] (ui/commands/TabCommandBar.tsx#L90)
+- contains (declares function): [[function-4268-ee0b356d|TabCommandBar.callback.callback@90]] (ui/commands/TabCommandBar.tsx#L90)
 - impact (imports or re-exports): [[file-app-ed7dde6e|App.tsx]] (ui/App.tsx:18)
 
 ## Source anchors

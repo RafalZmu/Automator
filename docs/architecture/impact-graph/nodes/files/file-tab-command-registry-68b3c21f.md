@@ -41,7 +41,7 @@ Source file ui/commands/TabCommandRegistry.tsx.
 - contains (declares function): [[function-3126-94846e10|useRegisterTabCommands.register.callback@75]] (ui/commands/TabCommandRegistry.tsx#L75)
 - contains (declares function): [[function-3188-dbf5424b|useTabCommands]] (ui/commands/TabCommandRegistry.tsx#L78)
 - contains (declares function): [[function-3345-29dfae11|useTabCommands.callback.callback@80]] (ui/commands/TabCommandRegistry.tsx#L80)
-- contains (declares function): [[function-3345-29dfae11|useTabCommands.callback.callback@80]] (ui/commands/TabCommandRegistry.tsx#L80)
+- contains (declares function): [[function-3380-ab24f28f|useTabCommands.callback.callback@80]] (ui/commands/TabCommandRegistry.tsx#L80)
 - contains (declares function): [[function-3507-a8e6d59f|useAllTabCommandCatalog]] (ui/commands/TabCommandRegistry.tsx#L84)
 - contains (declares function): [[function-3709-bd73373c|useAllTabCommandCatalog.callback.callback@86]] (ui/commands/TabCommandRegistry.tsx#L86)
 - contains (declares function): [[function-3736-853d4655|useTabCommandResolver]] (ui/commands/TabCommandRegistry.tsx#L89)

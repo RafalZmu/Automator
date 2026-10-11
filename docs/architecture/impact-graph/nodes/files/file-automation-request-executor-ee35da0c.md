@@ -25,7 +25,7 @@ Source file src/Automator.Application/Automation/AutomationRequestExecutor.cs.
 - contains (declares function): [[function-cs-a24151b9|Automator.Application.Automation.AutomationRequestExecutor.CancelAll()]] (src/Automator.Application/Automation/AutomationRequestExecutor.cs#L49)
 - contains (declares function): [[function-cs-91e4210f|Automator.Application.Automation.AutomationRequestExecutor.CancelMatching(Func<(string ModuleId, string RequestId), bool>)]] (src/Automator.Application/Automation/AutomationRequestExecutor.cs#L51)
 - contains (declares function): [[function-2079-cc9a532e|lambda@src/Automator.Application/Automation/AutomationRequestExecutor.cs:55]] (src/Automator.Application/Automation/AutomationRequestExecutor.cs#L55)
-- contains (declares function): [[function-2079-cc9a532e|lambda@src/Automator.Application/Automation/AutomationRequestExecutor.cs:55]] (src/Automator.Application/Automation/AutomationRequestExecutor.cs#L55)
+- contains (declares function): [[function-2115-0856282d|lambda@src/Automator.Application/Automation/AutomationRequestExecutor.cs:55]] (src/Automator.Application/Automation/AutomationRequestExecutor.cs#L55)
 - contains (declares function): [[function-cs-f98303a9|Automator.Application.Automation.AutomationRequestExecutor.TryCancel(CancellationTokenSource)]] (src/Automator.Application/Automation/AutomationRequestExecutor.cs#L60)
 - impact (type-reference): [[file-backend-server-c9515ea3|BackendServer.cs]] (src/Automator.Backend/BackendServer.cs:1728)
 - impact (type-reference): [[file-backend-server-c9515ea3|BackendServer.cs]] (src/Automator.Backend/BackendServer.cs:30)

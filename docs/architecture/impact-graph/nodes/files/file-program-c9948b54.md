@@ -27,7 +27,7 @@ Source file tests/Automator.Workflows.Specs/Program.cs.
 - contains (declares function): [[function-cs-fad74e4a|Program.AcceptsRootVariableMappingsAndRejectsEmptyPointerSegments()]] (tests/Automator.Workflows.Specs/Program.cs#L189)
 - contains (declares function): [[function-cs-e3a1f302|Program.PersistsVariablesAndDefaultsLegacyRecords()]] (tests/Automator.Workflows.Specs/Program.cs#L218)
 - contains (declares function): [[function-13662-17c8c7bc|lambda@tests/Automator.Workflows.Specs/Program.cs:258]] (tests/Automator.Workflows.Specs/Program.cs#L258)
-- contains (declares function): [[function-13662-17c8c7bc|lambda@tests/Automator.Workflows.Specs/Program.cs:258]] (tests/Automator.Workflows.Specs/Program.cs#L258)
+- contains (declares function): [[function-13684-bcee4640|lambda@tests/Automator.Workflows.Specs/Program.cs:258]] (tests/Automator.Workflows.Specs/Program.cs#L258)
 - contains (declares function): [[function-cs-31f6febf|Program.RunsWithSavedVariablesAndSafeHistory()]] (tests/Automator.Workflows.Specs/Program.cs#L273)
 - contains (declares function): [[function-cs-8fc55d67|Program.CreateContext(WorkflowModule,MemoryLibraryStore,FakeWorkflowRunner)]] (tests/Automator.Workflows.Specs/Program.cs#L303)
 - contains (declares function): [[function-16648-14be39ee|lambda@tests/Automator.Workflows.Specs/Program.cs:307]] (tests/Automator.Workflows.Specs/Program.cs#L307)

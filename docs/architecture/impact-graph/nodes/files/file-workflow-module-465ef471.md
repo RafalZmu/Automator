@@ -39,7 +39,7 @@ Source file src/Automator.Application/Automation/WorkflowModule.cs.
 - contains (declares function): [[function-cs-4fc81695|Automator.Application.Automation.WorkflowModule.TryParseJsonPointer(string?,bool,string[])]] (src/Automator.Application/Automation/WorkflowModule.cs#L313)
 - contains (declares function): [[function-cs-6d620169|Automator.Application.Automation.WorkflowModule.IsPrefix(IReadOnlyList<string>,IReadOnlyList<string>)]] (src/Automator.Application/Automation/WorkflowModule.cs#L344)
 - contains (declares function): [[function-19104-ac5d4757|lambda@src/Automator.Application/Automation/WorkflowModule.cs:345]] (src/Automator.Application/Automation/WorkflowModule.cs#L345)
-- contains (declares function): [[function-19104-ac5d4757|lambda@src/Automator.Application/Automation/WorkflowModule.cs:345]] (src/Automator.Application/Automation/WorkflowModule.cs#L345)
+- contains (declares function): [[function-19157-ca21bc0f|lambda@src/Automator.Application/Automation/WorkflowModule.cs:345]] (src/Automator.Application/Automation/WorkflowModule.cs#L345)
 - contains (declares function): [[function-cs-1ca72ebc|Automator.Application.Automation.WorkflowModule.DeserializeProfile(JsonElement)]] (src/Automator.Application/Automation/WorkflowModule.cs#L347)
 - contains (declares function): [[function-cs-0e12831c|Automator.Application.Automation.WorkflowModule.NormalizeProfile(AutomationWorkflowProfile)]] (src/Automator.Application/Automation/WorkflowModule.cs#L368)
 - contains (declares function): [[function-cs-e236e522|Automator.Application.Automation.WorkflowModule.EmptyVariables()]] (src/Automator.Application/Automation/WorkflowModule.cs#L371)

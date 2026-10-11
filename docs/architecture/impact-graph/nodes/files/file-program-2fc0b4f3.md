@@ -63,7 +63,7 @@ Source file tests/Automator.Focus.Specs/Program.cs.
 - contains (declares function): [[function-27962-c7f3bd88|lambda@tests/Automator.Focus.Specs/Program.cs:536]] (tests/Automator.Focus.Specs/Program.cs#L536)
 - contains (declares function): [[function-cs-6079de41|ManualTimeProvider.Advance(TimeSpan)]] (tests/Automator.Focus.Specs/Program.cs#L539)
 - contains (declares function): [[function-28366-c78f0e19|lambda@tests/Automator.Focus.Specs/Program.cs:549]] (tests/Automator.Focus.Specs/Program.cs#L549)
-- contains (declares function): [[function-28366-c78f0e19|lambda@tests/Automator.Focus.Specs/Program.cs:549]] (tests/Automator.Focus.Specs/Program.cs#L549)
+- contains (declares function): [[function-28406-6b9b6477|lambda@tests/Automator.Focus.Specs/Program.cs:549]] (tests/Automator.Focus.Specs/Program.cs#L549)
 - contains (declares function): [[function-cs-b59418f4|ManualTimeProvider.ManualTimer.Change(TimeSpan,TimeSpan)]] (tests/Automator.Focus.Specs/Program.cs#L573)
 - contains (declares function): [[function-cs-91b7cf15|ManualTimeProvider.ManualTimer.Dispose()]] (tests/Automator.Focus.Specs/Program.cs#L585)
 - contains (declares function): [[function-cs-322547b8|ManualTimeProvider.ManualTimer.DisposeAsync()]] (tests/Automator.Focus.Specs/Program.cs#L591)

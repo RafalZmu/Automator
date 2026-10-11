@@ -20,7 +20,7 @@ Source file tests/Automator.Application.Specs/ScriptRunnerTemplateRunSpecs.cs.
 
 - contains (declares function): [[function-cs-eda1625c|ScriptRunnerTemplateRunSpecs.RunAsync()]] (tests/Automator.Application.Specs/ScriptRunnerTemplateRunSpecs.cs#L8)
 - contains (declares function): [[function-882-6c608210|lambda@tests/Automator.Application.Specs/ScriptRunnerTemplateRunSpecs.cs:20]] (tests/Automator.Application.Specs/ScriptRunnerTemplateRunSpecs.cs#L20)
-- contains (declares function): [[function-882-6c608210|lambda@tests/Automator.Application.Specs/ScriptRunnerTemplateRunSpecs.cs:20]] (tests/Automator.Application.Specs/ScriptRunnerTemplateRunSpecs.cs#L20)
+- contains (declares function): [[function-917-575d9834|lambda@tests/Automator.Application.Specs/ScriptRunnerTemplateRunSpecs.cs:20]] (tests/Automator.Application.Specs/ScriptRunnerTemplateRunSpecs.cs#L20)
 - contains (declares function): [[function-cs-47be374d|ScriptRunnerTemplateRunSpecs.WriteBundledAsset(string)]] (tests/Automator.Application.Specs/ScriptRunnerTemplateRunSpecs.cs#L86)
 - contains (declares function): [[function-cs-0ab070b3|ScriptRunnerTemplateRunSpecs.Options()]] (tests/Automator.Application.Specs/ScriptRunnerTemplateRunSpecs.cs#L93)
 - contains (declares function): [[function-cs-4d1b543e|ScriptRunnerTemplateRunSpecs.Ensure(bool,string)]] (tests/Automator.Application.Specs/ScriptRunnerTemplateRunSpecs.cs#L94)
