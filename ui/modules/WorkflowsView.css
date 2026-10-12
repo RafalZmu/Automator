@@ -23,7 +23,7 @@
 .workflow-empty p { max-width: 290px; margin: 5px 0 10px; color: var(--muted); font-size: 9px; line-height: 1.45; }
 .workflow-empty .secondary-button { min-height: 29px; font-size: 9px; }
 .workflow-loading, .workflow-empty-steps, .workflow-mapping-empty { margin: 0; color: var(--muted); font-size: 9px; }
-.workflow-editor { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.40); }
+.workflow-editor { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.40); }
 .window-shell[data-theme="dark"] .workflow-editor { background: rgba(16,25,29,.34); }
 .workflow-editor-heading { flex: none; justify-content: space-between; gap: 8px; }
 .workflow-editor-heading strong { color: var(--ink); font-size: 10px; }
@@ -47,7 +47,7 @@
 .workflow-variable label > span { color: var(--muted-strong); font-size: 8px; font-weight: 620; }
 .workflow-variable textarea { min-height: 38px; }
 .workflow-variable-remove { width: 22px; height: 22px; margin-bottom: 2px; border-color: var(--line); }
-.workflow-step-list { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; overflow: auto; padding-right: 2px; scrollbar-width: thin; }
+.workflow-step-list { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; overflow: auto; padding-right: 2px; scrollbar-width: thin; }
 .workflow-step { flex: none; display: flex; flex-direction: column; gap: 7px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.36); }
 .window-shell[data-theme="dark"] .workflow-step { background: rgba(20,31,35,.30); }
 .workflow-step-heading { gap: 5px; }

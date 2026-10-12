@@ -45,6 +45,12 @@ function abortError(): Error {
 }
 
 /** Creates a module-bound facade and reconciles keyboard availability across focus revoke/regain. */
+/** The host contract accepts strict JSON only; an `undefined` property (an unset optional field) would otherwise reject the whole request. */
+function withoutUndefined<T>(value: T): T {
+  const encoded = JSON.stringify(value);
+  return encoded === undefined ? value : JSON.parse(encoded) as T;
+}
+
 export function createAutomationServices(
   moduleId: string,
   bridge: AutomatorBridge,
@@ -194,7 +200,7 @@ export function createAutomationServices(
           moduleId,
           actionId: action.id,
           actionVersion: action.version,
-          input,
+          input: withoutUndefined(input),
         });
         activeModuleActionIds.add(requestId);
         const cancel = () => { void bridge.cancelAutomationModuleAction(moduleId, requestId).catch(() => undefined); };

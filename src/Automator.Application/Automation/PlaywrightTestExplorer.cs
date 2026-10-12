@@ -8,7 +8,7 @@ using Automator.Core.Plugins;
 namespace Automator.Application.Automation;
 
 /// <summary>Host-owned Playwright Test project discovery, metadata, file creation, and execution.</summary>
-internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutomationProcessService processes)
+internal sealed partial class PlaywrightTestExplorer(IAutomationLibrary library, IAutomationProcessService processes)
 {
     public PlaywrightTestExplorer(IAutomationLibraryStore libraryStore, IAutomationProcessService processService)
         : this(new BrowserLibraryFacade(libraryStore), processService) { }
@@ -305,7 +305,8 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
                 return Result(AutomationStatus.Warning, $"Playwright run for {displayTarget} exceeded its {timeoutSeconds}-second limit.",
                     new { timedOut = true, exitCode = (int?)null, durationMilliseconds = process.DurationMilliseconds, summary = (RunSummary?)null, tests = Array.Empty<PlaywrightTestOutcome>(), outputTruncated = process.StandardOutputTruncated || process.StandardErrorTruncated });
 
-            var report = ParseJsonReport(process.StandardOutput, discovered.Tests);
+            var parsed = ParseJsonReport(process.StandardOutput, discovered.Tests);
+            var report = (parsed.Summary, Tests: await AttachFailureContextAsync(root, parsed.Tests, cancellationToken).ConfigureAwait(false));
             var status = process.ExitCode == 0 ? AutomationStatus.Success : AutomationStatus.Error;
             var summary = report.Summary;
             var message = summary is null
@@ -319,6 +320,8 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
                 summary,
                 tests = report.Tests,
                 outputTruncated = process.StandardOutputTruncated || process.StandardErrorTruncated,
+                browsersMissing = MentionsMissingBrowser(process.StandardOutput) || MentionsMissingBrowser(process.StandardError),
+                runnerError = report.Tests.Count == 0 && process.ExitCode != 0 ? BoundTail(StripAnsi(process.StandardError ?? string.Empty).Trim(), 800) : null,
             });
         }
         finally
@@ -463,6 +466,19 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
                 await writer.WriteAsync(exampleSource.AsMemory(), cancellationToken).ConfigureAwait(false);
             }
             catch (IOException) when (File.Exists(examplePath)) { }
+        }
+
+        // Without a config Playwright resolves its root from the nearest package.json, which can be outside the managed project.
+        // Seed a minimal one (never replacing a user's) so results and failure snapshots stay inside the project.
+        if (!ConfigNames.Any(name => File.Exists(Path.Combine(root, name))))
+        {
+            try
+            {
+                await using var configStream = new FileStream(Path.Combine(root, "playwright.config.mjs"), FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                await configStream.WriteAsync(new UTF8Encoding(false).GetBytes(
+                    "import { defineConfig } from '@playwright/test';\n\n// Seeded by Automator. Keeps test output inside this project.\nexport default defineConfig({\n  outputDir: './test-results',\n});\n"), cancellationToken).ConfigureAwait(false);
+            }
+            catch (IOException) { }
         }
 
         var moduleRoot = Environment.GetEnvironmentVariable("AUTOMATOR_PLAYWRIGHT_MODULE_ROOT");
@@ -643,17 +659,73 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
                 {
                     var project = TryString(test, "projectName");
                     string? status = null;
+                    string? error = null;
+                    string? contextPath = null;
                     if (test.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array && results.GetArrayLength() > 0)
-                        status = TryString(results[results.GetArrayLength() - 1], "status");
+                    {
+                        var last = results[results.GetArrayLength() - 1];
+                        status = TryString(last, "status");
+                        error = ReadResultError(last);
+                        contextPath = ReadAttachmentPath(last, "error-context");
+                    }
                     status ??= TryString(test, "status");
                     if (status is null) continue;
-                    outcomes.Add(new PlaywrightTestOutcome(title, currentFile, line, project, status));
+                    outcomes.Add(new PlaywrightTestOutcome(title, currentFile, line, project, status, error, contextPath));
                 }
             }
         }
         if (suite.TryGetProperty("suites", out var nested) && nested.ValueKind == JsonValueKind.Array)
             foreach (var child in nested.EnumerateArray()) WalkSuites(child, currentFile, outcomes);
     }
+
+    /// <summary>First failure message of a test result, ANSI-stripped and bounded so it is safe to show and to hand to an assistant.</summary>
+    private static string? ReadResultError(JsonElement result)
+    {
+        string? message = null;
+        if (result.TryGetProperty("error", out var error)) message = TryString(error, "message");
+        if (message is null && result.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array && errors.GetArrayLength() > 0)
+            message = TryString(errors[0], "message");
+        if (string.IsNullOrWhiteSpace(message)) return null;
+        message = StripAnsi(message).Trim();
+        return message.Length <= 1500 ? message : message[..1500] + "...";
+    }
+
+    private static string? ReadAttachmentPath(JsonElement result, string name)
+    {
+        if (!result.TryGetProperty("attachments", out var attachments) || attachments.ValueKind != JsonValueKind.Array) return null;
+        foreach (var attachment in attachments.EnumerateArray())
+            if (string.Equals(TryString(attachment, "name"), name, StringComparison.Ordinal)) return TryString(attachment, "path");
+        return null;
+    }
+
+    /// <summary>Appends Playwright's own page snapshot at the moment of failure (read only from inside the project) so an assistant can see the real page.</summary>
+    private static async Task<IReadOnlyList<PlaywrightTestOutcome>> AttachFailureContextAsync(string root, IReadOnlyList<PlaywrightTestOutcome> outcomes, CancellationToken cancellationToken)
+    {
+        var result = new List<PlaywrightTestOutcome>(outcomes.Count);
+        foreach (var outcome in outcomes)
+        {
+            var current = outcome;
+            if (outcome.ContextPath is { Length: > 0 } path && outcome.Status is "failed" or "timedOut")
+            {
+                try
+                {
+                    var full = Path.GetFullPath(path);
+                    if (IsContained(root, full) && File.Exists(full) && new FileInfo(full).Length <= 64 * 1024
+                        && (File.GetAttributes(full) & FileAttributes.ReparsePoint) == 0)
+                    {
+                        var snapshot = StripAnsi(await File.ReadAllTextAsync(full, cancellationToken).ConfigureAwait(false)).Trim();
+                        if (snapshot.Length > 0)
+                            current = outcome with { Error = (outcome.Error ?? "The test failed.") + "\n\nPage details at the moment of failure:\n" + (snapshot.Length <= 3000 ? snapshot : snapshot[..3000] + "...") };
+                    }
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { }
+            }
+            result.Add(current);
+        }
+        return result;
+    }
+
+    private static string? BoundTail(string value, int max) => value.Length == 0 ? null : value.Length <= max ? value : "..." + value[^max..];
 
     private static int ReadPositiveInt(string value) => int.TryParse(value, out var result) && result > 0 ? result : 0;
     private static int? ReadNullablePositiveInt(string value) => ReadPositiveInt(value) is var result && result > 0 ? result : null;
@@ -773,7 +845,7 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         public static RunnerState Unavailable(string message) => new(false, null, null, null, message);
     }
     private sealed record RunSummary(int Passed, int Failed, int Skipped, int Interrupted);
-    private sealed record PlaywrightTestOutcome(string Title, string File, int Line, string? Project, string Status);
+    private sealed record PlaywrightTestOutcome(string Title, string File, int Line, string? Project, string Status, string? Error = null, [property: System.Text.Json.Serialization.JsonIgnore] string? ContextPath = null);
     private sealed record PlaywrightRunnerSummary(bool Available, string? Version, string Message);
     private sealed record StaleTagSummary(string File, string Title, IReadOnlyList<string> Tags);
     private sealed record PlaywrightTestFileSection(string Path, IReadOnlyList<PlaywrightTestIdentity> Tests);

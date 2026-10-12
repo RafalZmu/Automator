@@ -8,7 +8,7 @@ using Automator.Windows.Interop;
 
 namespace Automator.Windows;
 
-public sealed record LauncherWindowContext(IntPtr Handle, bool Visible, bool RendererFocused, bool NativeDialogActive, string Mode, bool TextEntryFocused = false);
+public sealed record LauncherWindowContext(IntPtr Handle, bool Visible, bool RendererFocused, bool NativeDialogActive, string Mode);
 public sealed record NavigationKeyRequested(NavigationKeyAction Action, uint VirtualKey);
 
 /// <summary>Owns a low-level keyboard hook and a dedicated Win32 message pump.</summary>
@@ -278,7 +278,7 @@ public sealed class KeyboardHookService : IDisposable
             && WindowsNativeMethods.GetForegroundWindow() == context.Handle;
         var hasModifier = IsAnyModifierPressed();
         var action = NavigationKeyPolicy.Decide(_getLauncherState(), foreground,
-            context.RendererFocused, hasModifier, key, context.TextEntryFocused);
+            context.RendererFocused, hasModifier, key);
         if (action == NavigationKeyAction.None) return false;
 
         lock (_sync) _consumedKeyDowns.Add(key);

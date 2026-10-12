@@ -63,7 +63,7 @@ Slot 9 is the Codex task builder.
 ## Controls and tab behavior
 
 - Tap **Right Ctrl** to open or close the panel. Opening selects slot 1.
-- Press **1–9** to select a workspace tab. While a text field in the launcher has focus, digits and `/` type into it instead. Each numbered tab shows a purpose icon beside its number. Slot 1 is the app launcher; slots 2–8 are Script Runner, API, Browser Automation, Workflows, Scheduler, Work Time, and Website Launcher; slot 9 is Codex.
+- Press **1–9** to select a workspace tab. Each numbered tab shows a purpose icon beside its number. Slot 1 is the app launcher; slots 2–8 are Script Runner, API, Browser Automation, Workflows, Scheduler, Work Time, and Website Launcher; slot 9 is Codex.
 - Opening the compact launcher shows Global Action Search as its home surface. It searches registered actions across tabs; a unique match runs, and choosing a tab-specific action switches to that tab. This home surface is not a numbered tab.
 - Press **/** in slot 1 to open the app catalog. The app under the pointer when the panel opens is pinned first.
 - Choose a listed app or browse for an EXE/shortcut, then assign a unique letters-only alias.
@@ -72,7 +72,7 @@ Slot 9 is the Codex task builder.
 - Settings can record another opener key, set the theme and startup behavior, import/export settings, relink missing paths, edit reusable Variables, set default interpreters, and open the log folder.
 - Script Runner stores Python, Bash, and PowerShell profiles in the local SQLite library. Profiles keep interpreter/script paths, individual arguments, working directory, output format, and timeout; runs can be canceled and show bounded stdout/stderr or parsed JSON.
 - API stores request profiles, supports Chrome Copy as cURL import, uses profile defaults for request JSON, and keeps credentials in Windows Credential Manager.
-- Browser Automation displays Playwright tests grouped by test file, supports Automator-managed tags, and can run a test, file section, or tag group. Automator seeds its configured managed project with an example test; users can also select an existing project.
+- Browser Automation displays Playwright tests grouped by test file, supports Automator-managed tags, and can run a test, file section, or tag group. **Write with AI** turns pasted recorded code plus notes into a reviewed new or edited test file using Codex or Claude. Automator seeds its configured managed project with an example test; users can also select an existing project.
 - Workflows run saved Script Runner, API, or Browser Automation profiles in order, map JSON values between steps, and stop after the first failed step.
 - Scheduler creates interval, daily, and weekly local-time schedules for saved scripts or workflows and includes an upcoming agenda/calendar.
 - Work Time records elapsed intervals, then saves a description and tags. Its history can be filtered, edited, summarized, and exported.

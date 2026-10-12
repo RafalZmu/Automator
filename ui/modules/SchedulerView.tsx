@@ -126,7 +126,7 @@ export function SchedulerView({ services }: ViewProps) {
     <style>{styles}</style>
     <header className="script-heading scheduler-heading">
       <div className="script-heading-title"><CalendarClock size={19} /><div><h1>Scheduler</h1><p>Saved workflows and scripts, on your local clock</p></div></div>
-      <button className="secondary-button" disabled={!!busy || (snapshot.workflows.length === 0 && snapshot.scripts.length === 0)} onClick={() => { setErrors([]); const targetKind = snapshot.workflows.length ? 'workflow' : 'scriptProfile'; const profileId = targetKind === 'workflow' ? snapshot.workflows[0]?.profileId : snapshot.scripts[0]?.profileId; setDraft(blankSchedule(targetKind, profileId)); }}><Plus size={13} /> New</button>
+      <button className="secondary-button" disabled={!!busy || (snapshot.workflows.length === 0 && snapshot.scripts.length === 0)} onClick={() => { setErrors([]); const targetKind = snapshot.workflows.length ? 'workflow' : 'scriptProfile'; const profileId = targetKind === 'workflow' ? snapshot.workflows[0]?.profileId : snapshot.scripts[0]?.profileId; setDraft(blankSchedule(targetKind, profileId)); }}><Plus size={13} /> New schedule</button>
     </header>
     <p className="scheduler-help">Runs while Automator is in the tray. Missed runs are skipped unless catch-up is enabled. Full exit stops scheduling.</p>
     {snapshotLoaded && <p role="status" className="scheduler-notice">{snapshot.running
@@ -189,7 +189,7 @@ export function SchedulerView({ services }: ViewProps) {
       <div className="script-editor-actions"><button className="secondary-button" type="button" disabled={!!busy} onClick={() => setDraft(null)}>Cancel</button><button className="primary-button" disabled={!!busy}><Save size={12} /> Save</button></div>
     </form>}
     <div className="scheduler-list">
-      {snapshotLoaded && snapshot.schedules.length === 0 && !draft && <div className="script-empty"><CalendarClock className="empty-icon" size={30} /><strong>No schedules yet</strong><p>{snapshot.workflows.length || snapshot.scripts.length ? 'Create a schedule to run a saved workflow or script automatically.' : 'Save a workflow in tab 5 or a script profile in tab 2, then return to schedule it.'}</p></div>}
+      {snapshotLoaded && snapshot.schedules.length === 0 && !draft && <div className="script-empty"><CalendarClock className="empty-icon" size={30} /><strong>No schedules yet</strong><p>{snapshot.workflows.length || snapshot.scripts.length ? 'Create a schedule to run a saved workflow or script automatically.' : 'Save a workflow in tab 5 or a script profile in tab 2, then return to schedule it.'}</p>{(snapshot.workflows.length > 0 || snapshot.scripts.length > 0) && <button className="secondary-button" disabled={!!busy} onClick={() => { setErrors([]); const targetKind = snapshot.workflows.length ? 'workflow' : 'scriptProfile'; const profileId = targetKind === 'workflow' ? snapshot.workflows[0]?.profileId : snapshot.scripts[0]?.profileId; setDraft(blankSchedule(targetKind, profileId)); }}><Plus size={13} /> New schedule</button>}</div>}
       {snapshot.schedules.map((schedule) => {
         const state = snapshot.states.find((item) => item.scheduleId === schedule.id);
         const targetCatalog = schedule.targetKind === 'workflow' ? snapshot.workflows : snapshot.scripts;

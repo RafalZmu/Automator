@@ -22,7 +22,15 @@ public sealed record BrowserAutomationProfile(
 public sealed class BrowserAutomationModule : ILauncherTabModuleProvider
 {
     private readonly IAutomationVariableProvider? _variables;
-    public BrowserAutomationModule(IAutomationVariableProvider? variables = null) => _variables = variables;
+    private readonly string _dataDirectory;
+    private readonly Func<string, AutomationServicesContext, IAuthoringCliClient>? _authoringClientFactory;
+    public BrowserAutomationModule(IAutomationVariableProvider? variables = null, string? dataDirectory = null,
+        Func<string, AutomationServicesContext, IAuthoringCliClient>? authoringClientFactory = null)
+    {
+        _variables = variables;
+        _authoringClientFactory = authoringClientFactory;
+        _dataDirectory = dataDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Automator");
+    }
     public const string IdValue = "browser-automation";
     public const int ContractVersionValue = 1;
     public const int SettingsVersionValue = 1;
@@ -53,6 +61,10 @@ public sealed class BrowserAutomationModule : ILauncherTabModuleProvider
             new("discoverTests", 1, [LibraryCapability, ProcessCapability]),
             new("createSection", 1, [LibraryCapability]),
             new("appendTest", 1, [LibraryCapability]),
+            new("proposeTest", 1, [LibraryCapability, ProcessCapability]),
+            new("applyTest", 1, [LibraryCapability]),
+            new("recordTest", 1, [LibraryCapability, ProcessCapability]),
+            new("installBrowsers", 1, [LibraryCapability, ProcessCapability]),
             new("saveTestTags", 1, [LibraryCapability, ProcessCapability]),
             new("removeStaleTags", 1, [LibraryCapability, ProcessCapability]),
             new("runTests", 1, [LibraryCapability, ProcessCapability]),
@@ -92,6 +104,10 @@ public sealed class BrowserAutomationModule : ILauncherTabModuleProvider
                 "discoverTests" => await CreateExplorer(services).DiscoverAsync(cancellationToken).ConfigureAwait(false),
                 "createSection" => await CreateExplorer(services).CreateSectionAsync(input, cancellationToken).ConfigureAwait(false),
                 "appendTest" => await CreateExplorer(services).AppendTestAsync(input, cancellationToken).ConfigureAwait(false),
+                "proposeTest" => await CreateExplorer(services).ProposeTestAsync(input, CreateAuthoringClient(input, services), cancellationToken).ConfigureAwait(false),
+                "applyTest" => await CreateExplorer(services).ApplyTestAsync(input, cancellationToken).ConfigureAwait(false),
+                "recordTest" => await CreateExplorer(services).RecordTestAsync(input, cancellationToken).ConfigureAwait(false),
+                "installBrowsers" => await CreateExplorer(services).InstallBrowsersAsync(cancellationToken).ConfigureAwait(false),
                 "saveTestTags" => await CreateExplorer(services).SaveTagsAsync(input, cancellationToken).ConfigureAwait(false),
                 "removeStaleTags" => await CreateExplorer(services).RemoveStaleTagsAsync(cancellationToken).ConfigureAwait(false),
                 "runTests" => await CreateExplorer(services).RunAsync(input, cancellationToken).ConfigureAwait(false),
@@ -106,7 +122,10 @@ public sealed class BrowserAutomationModule : ILauncherTabModuleProvider
         }
         catch (OperationCanceledException) { throw; }
         catch (BrowserProfileValidationException exception) { return Error(exception.Message); }
-        catch (InvalidDataException exception) when (actionId is "setProject" or "discoverTests" or "createSection" or "appendTest" or "saveTestTags" or "removeStaleTags" or "runTests")
+        catch (InvalidDataException exception) when (actionId is "setProject" or "discoverTests" or "createSection" or "appendTest" or "proposeTest" or "applyTest" or "recordTest" or "installBrowsers" or "saveTestTags" or "removeStaleTags" or "runTests")
+        { return Error(exception.Message); }
+        // The authoring CLIs throw fixed, path-free messages (signed out, unavailable, timed out).
+        catch (Exception exception) when (actionId == "proposeTest" && exception is InvalidOperationException or TimeoutException)
         { return Error(exception.Message); }
         catch
         {
@@ -118,6 +137,10 @@ public sealed class BrowserAutomationModule : ILauncherTabModuleProvider
                 "discoverTests" => "Playwright test discovery failed.",
                 "createSection" => "The new test section could not be created.",
                 "appendTest" => "The new test could not be added to that section.",
+                "proposeTest" => "The assistant could not prepare a test proposal.",
+                "applyTest" => "The test file could not be written.",
+                "recordTest" => "The recording could not be started. Check the project's Playwright runner.",
+                "installBrowsers" => "The browser could not be installed.",
                 "saveTestTags" => "The test tags could not be saved.",
                 "removeStaleTags" => "Stale test tags could not be removed.",
                 "runTests" => "The Playwright test run failed. Check the project runner and configuration.",
@@ -133,6 +156,18 @@ public sealed class BrowserAutomationModule : ILauncherTabModuleProvider
 
     private static PlaywrightTestExplorer CreateExplorer(AutomationServicesContext services) =>
         new(services.Library!, services.Processes!);
+
+    private IAuthoringCliClient CreateAuthoringClient(JsonElement input, AutomationServicesContext services)
+    {
+        var provider = input.ValueKind == JsonValueKind.Object && input.TryGetProperty("provider", out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : "codex";
+        if (_authoringClientFactory is not null && provider is "codex" or "claude") return _authoringClientFactory(provider!, services);
+        return provider switch
+        {
+            "codex" => new CodexCliClient(Path.Combine(_dataDirectory, "CodexTasks", "requests"), services.Processes!),
+            "claude" => new ClaudeCliClient(Path.Combine(_dataDirectory, "ClaudeTasks", "requests"), services.Processes!),
+            _ => throw new InvalidDataException("AI provider must be codex or claude."),
+        };
+    }
 
     private static async Task<AutomationResult> ListProfilesAsync(AutomationServicesContext services, CancellationToken cancellationToken)
     {

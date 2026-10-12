@@ -351,7 +351,7 @@ test('Scheduler save happy path keeps create calendar and editor buttons within 
     await clickButton(page, page, 'Calendar');
     assert.equal(await page.getByRole('button', { name: 'Calendar', exact: true }).getAttribute('aria-pressed'), 'true');
     await clickButton(page, page, 'Agenda');
-    await clickButton(page, page, 'New');
+    await clickButton(page, page.locator('header').filter({ hasText: 'Scheduler' }), 'New schedule');
     await visibleButton(page, page, 'Close editor');
     await page.getByLabel('Name', { exact: true }).fill('Visibility schedule');
     await page.getByLabel('Enabled', { exact: true }).uncheck();

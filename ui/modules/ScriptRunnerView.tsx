@@ -391,10 +391,16 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
               } : current);
             }}><option value="python">Python</option><option value="bash">Bash</option><option value="powershell">PowerShell</option></select></label>
             <label className="script-field-wide"><span>Interpreter executable</span><input required value={editing.interpreterPath} placeholder={editing.interpreter === 'python' ? 'C:\\Python\\python.exe' : editing.interpreter === 'bash' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'} onChange={(event) => setEditing({ ...editing, interpreterPath: event.target.value })} /></label>
-            <div className="script-field-wide"><PathField label="Script file" kind="file" required value={editing.scriptPath} placeholder={editing.interpreter === 'python' ? 'C:\\Scripts\\report.py' : editing.interpreter === 'bash' ? 'C:\\Scripts\\report.sh' : 'C:\\Scripts\\report.ps1'} onChange={(value) => setEditing((current) => current ? updateScriptPath(current, value) : current)} onBrowse={browseForScript} /></div>
+            <div className="script-field-wide"><PathField label="Script file" kind="file" required value={editing.scriptPath} placeholder={editing.interpreter === 'python' ? 'C:\\Scripts\\report.py' : editing.interpreter === 'bash' ? 'C:\\Scripts\\report.sh' : 'C:\\Scripts\\report.ps1'} onChange={(value) => setEditing((current) => {
+              if (!current) return current;
+              const next = updateScriptPath(current, value);
+              const separator = Math.max(value.lastIndexOf('\\'), value.lastIndexOf('/'));
+              // A pasted or typed script path defaults the working directory to its folder, as Browse already does.
+              return next.workingDirectory || separator <= 0 ? next : { ...next, workingDirectory: value.slice(0, separator) };
+            })} onBrowse={browseForScript} /></div>
             <label className="script-field-wide"><span>Arguments <small>one argument per line</small></span><textarea rows={3} value={editing.arguments.join('\n')} placeholder={'--daily\nvalue with spaces'} onChange={(event) => setEditing({ ...editing, arguments: event.target.value.split(/\r?\n/) })} /></label>
             <div className="script-field-wide"><GlobalVariableHints onInsert={(reference) => setEditing({ ...editing, arguments: [...editing.arguments, reference] })} /></div>
-            <div className="script-field-wide"><PathField label="Working directory" kind="directory" required value={editing.workingDirectory} placeholder="C:\\Scripts" onChange={(value) => setEditing({ ...editing, workingDirectory: value })} onBrowse={browseForWorkingDirectory} /></div>
+            <div className="script-field-wide"><PathField label="Working directory" kind="directory" required value={editing.workingDirectory} placeholder={'C:\\Scripts'} onChange={(value) => setEditing({ ...editing, workingDirectory: value })} onBrowse={browseForWorkingDirectory} /></div>
             <label><span>Output</span><select value={editing.outputMode} onChange={(event) => setEditing({ ...editing, outputMode: event.target.value as ScriptProfile['outputMode'] })}><option value="text">Plain text</option><option value="json">JSON</option></select></label>
             <label><span>Timeout <small>seconds</small></span><input required type="number" min={1} max={3600} value={editing.timeoutSeconds} onChange={(event) => setEditing({ ...editing, timeoutSeconds: Number(event.target.value) })} /></label>
           </div>
@@ -408,7 +414,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
           <article className="script-profile-row" key={profile.id}>
             <span className="script-profile-icon">{profile.interpreter === 'python' ? <Braces size={16} /> : <Terminal size={16} />}</span>
             <div className="script-profile-copy"><strong>{profile.name}</strong><span>{profile.interpreter === 'python' ? 'Python' : profile.interpreter === 'bash' ? 'Bash' : 'PowerShell'} · {profile.scriptPath || 'Script path missing'}</span></div>
-            <span className="script-profile-time"><Clock3 size={12} /> {profile.timeoutSeconds}s</span>
+            <span className="script-profile-time"><Clock3 size={12} /> {profile.timeoutSeconds}s limit</span>
             <button className="icon-button script-row-action" type="button" aria-label={runningId === profile.id ? `Cancel ${profile.name}` : `Run ${profile.name}`} title={runningId === profile.id ? 'Cancel run' : 'Run profile'} disabled={runningId !== null && runningId !== profile.id} onClick={() => void runProfile(profile)}>
               {runningId === profile.id ? <Square size={14} /> : <Play size={15} />}
             </button>

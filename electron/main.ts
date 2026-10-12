@@ -106,8 +106,6 @@ async function deliverExplorerLaunches(): Promise<void> {
   } catch (error) { writeLog('Explorer.LaunchFailed', 'Could not deliver the Explorer action.', { error: String(error) }); }
 }
 let nativeDialogActive = false;
-let lastRendererFocused = false;
-let launcherTextEntryFocused = false;
 let primaryFocusPending = false;
 let focusSequenceRunning = false;
 let focusRequestPending = false;
@@ -545,17 +543,6 @@ function registerIpc(): void {
     });
     pendingFocusNonce = undefined;
     return focused;
-  });
-
-  ipcMain.handle('automator:set-text-entry-focused', async (event, request: { focused?: unknown }) => {
-    const context = assertMainFrame(event, ['launcher', 'workspace']);
-    // Only the launcher panel's global digit and slash handling depends on text entry.
-    if (context.role !== 'launcher') return false;
-    const focused = request?.focused === true;
-    if (focused === launcherTextEntryFocused) return true;
-    launcherTextEntryFocused = focused;
-    await updateWindowContext(lastRendererFocused);
-    return true;
   });
 
   for (const [command, method] of Object.entries(backendMethods)) {
@@ -1026,7 +1013,6 @@ async function verifyNativeForeground(maxAttempts = 24): Promise<{ matches: bool
 }
 
 async function updateWindowContext(rendererFocused: boolean): Promise<void> {
-  lastRendererFocused = rendererFocused;
   if (quitRequested || !mainWindow || mainWindow.isDestroyed() || !backend || backendStatus !== 'ready' || !currentState) return;
   try {
     await backend.request('launcher/setWindowContext', {
@@ -1035,7 +1021,6 @@ async function updateWindowContext(rendererFocused: boolean): Promise<void> {
       rendererFocused,
       nativeDialogActive,
       mode: currentState.mode,
-      textEntryFocused: launcherTextEntryFocused,
     });
   } catch (error) {
     writeLog('Panel.ContextUpdateFailed', 'Could not update the native launcher context.', { error: String(error) });

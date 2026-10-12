@@ -11,3 +11,5 @@ Read the root AGENTS.md first. Global Action Search is the compact launcher's ho
 - Add command matching and renderer integration tests when changing ranking, routing, focus, or execution timing.
 
 Code: ui/commands/QuickActionsHome.tsx, TabCommandBar.tsx, TabCommandRegistry.tsx, and commandMatching.ts; composition and routing live in ui/App.tsx.
+
+- Saved-item search entries use the exact command ids the tab views register (`run-script:<id>`, `api:run:<id>`, `workflow:run:<id>`) and always carry a confirmation prompt. When adding another saved-item kind, add its source to `SavedItemSources` in BackendServer.cs and its id/prompt to `savedItemRunActions` in ui/App.tsx; keep ids identical to the view's command so the live command replaces the entry.

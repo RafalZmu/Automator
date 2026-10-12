@@ -304,3 +304,53 @@ export function readBrowserActionResult(value: unknown): BrowserAutomationAction
     links,
   };
 }
+
+export type PlaywrightTestProposal = {
+  file: string;
+  exists: boolean;
+  summary: string;
+  source: string;
+  previousSource: string | null;
+  baseHash: string | null;
+  contextFiles: string[];
+};
+
+export function readPlaywrightTestProposal(value: unknown): PlaywrightTestProposal | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  if (typeof item.file !== 'string' || typeof item.exists !== 'boolean' || typeof item.summary !== 'string' || typeof item.source !== 'string') return null;
+  const previousSource = typeof item.previousSource === 'string' ? item.previousSource : null;
+  const baseHash = typeof item.baseHash === 'string' ? item.baseHash : null;
+  if (item.exists && (previousSource === null || baseHash === null)) return null;
+  return {
+    file: item.file, exists: item.exists, summary: item.summary, source: item.source, previousSource, baseHash,
+    contextFiles: Array.isArray(item.contextFiles) ? item.contextFiles.filter((name): name is string => typeof name === 'string').slice(0, 32) : [],
+  };
+}
+
+export type DiffLine = { kind: 'same' | 'added' | 'removed'; text: string };
+
+/** Line diff for reviewing a proposal. Very large inputs fall back to showing the new text as added. */
+export function diffLines(before: string, after: string): DiffLine[] {
+  const a = before.length ? before.replaceAll('\r\n', '\n').split('\n') : [];
+  const b = after.replaceAll('\r\n', '\n').split('\n');
+  if (a.length * b.length > 4_000_000) return [...a.map((text) => ({ kind: 'removed' as const, text })), ...b.map((text) => ({ kind: 'added' as const, text }))];
+  const width = b.length + 1;
+  const table = new Uint32Array((a.length + 1) * width);
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      table[i * width + j] = a[i] === b[j] ? table[(i + 1) * width + j + 1] + 1 : Math.max(table[(i + 1) * width + j], table[i * width + j + 1]);
+    }
+  }
+  const result: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { result.push({ kind: 'same', text: a[i] }); i++; j++; }
+    else if (table[(i + 1) * width + j] >= table[i * width + j + 1]) result.push({ kind: 'removed', text: a[i++] });
+    else result.push({ kind: 'added', text: b[j++] });
+  }
+  while (i < a.length) result.push({ kind: 'removed', text: a[i++] });
+  while (j < b.length) result.push({ kind: 'added', text: b[j++] });
+  return result;
+}

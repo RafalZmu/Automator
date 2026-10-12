@@ -93,6 +93,19 @@ Run focused contracts with node --experimental-strip-types --test tests/browser-
 
 Run after npm.cmd run build:desktop with node --experimental-strip-types --test --test-concurrency=1 tests/electron/tab-happy-path-visibility.test.cjs.
 
+## AI test authoring — tests/Automator.Application.Specs/PlaywrightAuthoringSpecs.cs and tests/browser-automation-contract.test.mjs
+
+### a recording becomes a reviewed test, and applying never clobbers newer edits
+
+**Steps**
+
+1. Open Playwright, choose **Write with AI**, enter `tests/login.spec.ts`, enter a start URL and click **Record** (or paste a recorded snippet), close the recording window, add a note about shared login, and generate.
+2. Confirm a summary and a diff of an all-added new file appear and no file exists yet; click **Create file** and confirm the tests appear after refresh.
+3. Use the section sparkle button on that file, generate again, edit the file by hand before applying, then apply.
+4. Try a path such as `../x.spec.ts` or `tests/readme.md`.
+
+**Expected result:** The proposal includes the notes and project helper context; creating never overwrites an existing file; applying after a manual edit is rejected with a message asking to regenerate; unsafe paths and non-test source are rejected; CLI failures such as a signed-out CLI show their own message. Specs cover this with a fake CLI and fake codegen process (a non-http(s) start URL is rejected; an empty recording returns a warning); the diff and proposal parsing are covered by the contract tests. Real Codex/Claude output quality is verified manually.
+
 ## Additional backend coverage
 
 Module discovery, project selection, tag handling, safe section-file operations, and browser execution are covered by Application and Browser Infrastructure specification projects. Run them with npm.cmd run test:dotnet.

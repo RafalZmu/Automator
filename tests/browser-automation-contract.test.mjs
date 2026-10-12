@@ -73,3 +73,13 @@ test('Playwright section path validation allows test files under the project and
   assert.equal(validatePlaywrightSectionPath('/outside.spec.ts'), null);
   assert.equal(validatePlaywrightSectionPath('tests/new.test.mts'), null);
 });
+
+test('AI test proposals are validated and diffed line by line', async () => {
+  const { readPlaywrightTestProposal, diffLines } = await import('../ui/contracts/browser.ts');
+  const proposal = { file: 'tests/a.spec.ts', exists: false, summary: 's', source: 'x', previousSource: null, baseHash: null, contextFiles: ['playwright.config.ts', 3] };
+  assert.deepEqual(readPlaywrightTestProposal(proposal).contextFiles, ['playwright.config.ts']);
+  assert.equal(readPlaywrightTestProposal({ ...proposal, exists: true }), null, 'edits need the previous source and base hash');
+  assert.equal(readPlaywrightTestProposal({ ...proposal, source: 5 }), null);
+  assert.deepEqual(diffLines('a\nb\nc', 'a\nc\nd').map((line) => `${line.kind}:${line.text}`), ['same:a', 'removed:b', 'same:c', 'added:d']);
+  assert.deepEqual(diffLines('', 'one').map((line) => line.kind), ['added']);
+});

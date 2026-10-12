@@ -413,7 +413,7 @@ export function ApiView({ services }: ViewProps) {
         <button className="primary-button" type="button" onClick={startNewProfile}><Plus size={14} /> New profile</button>
       </header>
 
-      <details className="api-curl-import">
+      <details className="api-curl-import" open={profiles.length === 0 ? true : undefined}>
         <summary>Import Chrome “Copy as cURL”</summary>
         <div className="api-curl-import-body">
           <textarea id="api-curl-text" rows={4} spellCheck={false} value={curlText} onChange={(event) => setCurlText(event.target.value)} placeholder={'Paste curl \'https://…\' -H \'accept: …\' --data-raw …'} aria-label="cURL command to import" />

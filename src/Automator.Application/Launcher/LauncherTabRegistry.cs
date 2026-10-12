@@ -94,7 +94,7 @@ public static class LauncherTabRegistry
             new ScriptRunnerModule(variables, new ScriptRunnerTemplateInstaller(
                 dataDirectory is null ? null : Path.Combine(dataDirectory, "script-templates")), fileExplorerExecutable),
             new ApiModule(),
-            new BrowserAutomationModule(variables),
+            new BrowserAutomationModule(variables, dataDirectory),
             new WorkflowModule(),
             new SchedulerModule(),
             new FocusSessionsModule(),

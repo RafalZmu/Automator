@@ -1,12 +1,19 @@
-import { Check, CircleAlert, FilePlus2, FolderOpen, LoaderCircle, Play, Plus, RefreshCw, Square, Tag, Trash2 } from 'lucide-react';
+import { Check, CircleAlert, CircleDot, FilePlus2, FolderOpen, LoaderCircle, Play, Plus, RefreshCw, Sparkles, Square, Tag, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { AutomationModuleActionRequest, BackendUiState } from '../../contracts/rpc';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import type { AutomationServices } from '../automationServices';
 import {
-  readPlaywrightExplorerState, validatePlaywrightSectionPath,
-  type PlaywrightExplorerState, type PlaywrightTestIdentity,
+  diffLines, readPlaywrightExplorerState, readPlaywrightTestProposal, validatePlaywrightSectionPath,
+  type PlaywrightExplorerState, type PlaywrightTestIdentity, type PlaywrightTestProposal,
 } from '../contracts/browser';
+
+type AuthoringProvider = 'codex' | 'claude';
+const authoringProviderKey = 'automator.codex.provider';
+const authoringProviderNames: Record<AuthoringProvider, string> = { codex: 'Codex', claude: 'Claude' };
+function initialAuthoringProvider(): AuthoringProvider {
+  try { return localStorage.getItem(authoringProviderKey) === 'claude' ? 'claude' : 'codex'; } catch { return 'codex'; }
+}
 
 type ViewProps = {
   tab: BackendUiState['tabs'][number];
@@ -19,12 +26,15 @@ type RunOutput = {
   timedOut: boolean;
   durationMilliseconds: number;
   summary: { passed: number; failed: number; skipped: number; interrupted: number } | null;
-  tests: Array<{ title: string; file: string; line: number; project: string | null; status: string }>;
+  tests: Array<{ title: string; file: string; line: number; project: string | null; status: string; error: string | null }>;
+  runnerError: string | null;
+  browsersMissing: boolean;
   outputTruncated: boolean;
 };
 
 const styles = `
-.playwright-view{gap:8px}.playwright-heading{display:flex;align-items:center;gap:9px;flex:none}.playwright-heading-copy{flex:1;min-width:0}.playwright-heading h1{margin:0;color:var(--ink);font-size:12px;font-weight:680}.playwright-heading p{margin:3px 0 0;color:var(--muted);font-size:9px}.playwright-project{flex:none;display:flex;align-items:center;gap:6px;padding:7px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28)}.window-shell[data-theme="dark"] .playwright-project{background:rgba(16,25,29,.28)}.playwright-project input{flex:1;min-width:0;height:28px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;outline:0;color:var(--ink);background:var(--control);font:9px inherit}.playwright-project input:focus,.playwright-inline-editor input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(25,139,162,.1)}.playwright-project .secondary-button{flex:none}.playwright-info{display:flex;align-items:center;gap:6px;margin:0;padding:7px 9px;border:1px solid var(--line);border-radius:8px;color:var(--muted-strong);background:rgba(255,255,255,.27);font-size:9px;line-height:1.4}.playwright-info[data-error="true"]{color:var(--danger);background:rgba(255,240,238,.48)}.playwright-toolbar{display:flex;align-items:center;gap:6px;flex:none}.playwright-toolbar .spacer{flex:1}.playwright-toolbar select{height:29px;min-width:105px;padding:4px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--control);font:9px inherit}.playwright-runner{font-size:8px;color:var(--muted);white-space:nowrap}.playwright-list{flex:1;min-height:0;display:flex;flex-direction:column;gap:7px;overflow:auto;padding:1px 2px 3px 0;scrollbar-width:thin}.playwright-file{flex:none;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.26)}.window-shell[data-theme="dark"] .playwright-file{background:rgba(16,25,29,.22)}.playwright-file summary{display:flex;align-items:center;gap:6px;min-height:38px;padding:6px 8px;cursor:pointer;list-style:none}.playwright-file summary::-webkit-details-marker{display:none}.playwright-file-name{flex:1;min-width:0;overflow:hidden;color:var(--ink);font:9px "Cascadia Code",Consolas,monospace;text-overflow:ellipsis;white-space:nowrap}.playwright-file-count{color:var(--muted);font-size:8px;white-space:nowrap}.playwright-file-tools{display:flex;gap:3px}.playwright-test{display:flex;flex-direction:column;gap:4px;padding:7px 8px;border-top:1px solid var(--line)}.playwright-test-main{display:flex;align-items:center;gap:6px;min-width:0}.playwright-test-copy{flex:1;min-width:0}.playwright-test-title{overflow:hidden;color:var(--ink);font-size:9px;text-overflow:ellipsis;white-space:nowrap}.playwright-test-meta{margin-top:2px;color:var(--muted);font-size:7px}.playwright-test-actions{display:flex;align-items:center;gap:2px}.playwright-test-actions .icon-button{width:26px;height:26px}.playwright-tag-list{display:flex;flex-wrap:wrap;gap:4px}.playwright-tag{padding:2px 6px;border:1px solid rgba(26,131,151,.18);border-radius:99px;color:var(--accent-strong);background:var(--accent-soft);font-size:7px}.playwright-inline-editor{display:flex;align-items:center;gap:5px}.playwright-inline-editor input{flex:1;min-width:80px;height:25px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;color:var(--ink);background:var(--control);font:8px inherit}.playwright-inline-editor small{color:var(--muted);font-size:7px}.playwright-form{flex:none;display:flex;flex-direction:column;gap:7px;padding:8px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.32)}.playwright-form header{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:9px}.playwright-form header strong{flex:1}.playwright-form-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}.playwright-form label{display:flex;flex-direction:column;gap:3px;color:var(--muted);font-size:8px}.playwright-form label:first-child{grid-column:1/-1}.playwright-form input{min-width:0;height:28px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--control);font:9px inherit}.playwright-form-actions{display:flex;justify-content:flex-end;gap:5px}.playwright-empty{flex:1;min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--muted);text-align:center}.playwright-empty strong{color:var(--ink);font-size:10px}.playwright-empty p{max-width:320px;margin:0;font-size:8px;line-height:1.5}.playwright-stale{flex:none;display:flex;align-items:center;gap:7px;padding:7px;border:1px solid var(--line);border-radius:8px;color:var(--muted-strong);font-size:8px}.playwright-stale span{flex:1}.playwright-run-result{flex:none;max-height:27%;display:flex;flex-direction:column;gap:5px;padding:7px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28);overflow:auto}.playwright-run-result header{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:9px}.playwright-run-result header strong{flex:1}.playwright-outcome{display:flex;gap:7px;align-items:center;color:var(--muted-strong);font-size:8px}.playwright-outcome[data-status="passed"]{color:var(--success)}.playwright-outcome[data-status="failed"],.playwright-outcome[data-status="timedOut"]{color:var(--danger)}.playwright-outcome span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.playwright-view .icon-button{flex:none}.playwright-view .icon-button:disabled{opacity:.45}
+.playwright-view{gap:8px}.playwright-heading{display:flex;align-items:center;gap:9px;flex:none}.playwright-heading-copy{flex:1;min-width:0}.playwright-heading h1{margin:0;color:var(--ink);font-size:12px;font-weight:680}.playwright-heading p{margin:3px 0 0;color:var(--muted);font-size:9px}.playwright-project{flex:none;display:flex;align-items:center;gap:6px;padding:7px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28)}.window-shell[data-theme="dark"] .playwright-project{background:rgba(16,25,29,.28)}.playwright-project input{flex:1;min-width:0;height:28px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;outline:0;color:var(--ink);background:var(--control);font-size:9px;font-family:inherit}.playwright-project input:focus,.playwright-inline-editor input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(25,139,162,.1)}.playwright-project .secondary-button{flex:none}.playwright-info{display:flex;align-items:center;gap:6px;margin:0;padding:7px 9px;border:1px solid var(--line);border-radius:8px;color:var(--muted-strong);background:rgba(255,255,255,.27);font-size:9px;line-height:1.4}.playwright-info[data-error="true"]{color:var(--danger);background:rgba(255,240,238,.48)}.playwright-toolbar{display:flex;align-items:center;gap:6px;flex:none}.playwright-toolbar .spacer{flex:1}.playwright-toolbar select{height:29px;min-width:105px;padding:4px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--control);font-size:9px;font-family:inherit}.playwright-runner{font-size:8px;color:var(--muted);white-space:nowrap}.playwright-list{flex:1;min-height:0;display:flex;flex-direction:column;gap:7px;overflow:auto;padding:1px 2px 3px 0;scrollbar-width:thin}.playwright-file{flex:none;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.26)}.window-shell[data-theme="dark"] .playwright-file{background:rgba(16,25,29,.22)}.playwright-file summary{display:flex;align-items:center;gap:6px;min-height:38px;padding:6px 8px;cursor:pointer;list-style:none}.playwright-file summary::-webkit-details-marker{display:none}.playwright-file-name{flex:1;min-width:0;overflow:hidden;color:var(--ink);font:9px "Cascadia Code",Consolas,monospace;text-overflow:ellipsis;white-space:nowrap}.playwright-file-count{color:var(--muted);font-size:8px;white-space:nowrap}.playwright-file-tools{display:flex;gap:3px}.playwright-test{display:flex;flex-direction:column;gap:4px;padding:7px 8px;border-top:1px solid var(--line)}.playwright-test-main{display:flex;align-items:center;gap:6px;min-width:0}.playwright-test-copy{flex:1;min-width:0}.playwright-test-title{overflow:hidden;color:var(--ink);font-size:9px;text-overflow:ellipsis;white-space:nowrap}.playwright-test-meta{margin-top:2px;color:var(--muted);font-size:7px}.playwright-test-actions{display:flex;align-items:center;gap:2px}.playwright-test-actions .icon-button{width:26px;height:26px}.playwright-tag-list{display:flex;flex-wrap:wrap;gap:4px}.playwright-tag{padding:2px 6px;border:1px solid rgba(26,131,151,.18);border-radius:99px;color:var(--accent-strong);background:var(--accent-soft);font-size:7px}.playwright-inline-editor{display:flex;align-items:center;gap:5px}.playwright-inline-editor input{flex:1;min-width:80px;height:25px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;color:var(--ink);background:var(--control);font-size:8px;font-family:inherit}.playwright-inline-editor small{color:var(--muted);font-size:7px}.playwright-form{flex:none;display:flex;flex-direction:column;gap:7px;padding:8px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.32)}.playwright-form header{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:9px}.playwright-form header strong{flex:1}.playwright-form-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}.playwright-form label{display:flex;flex-direction:column;gap:3px;color:var(--muted);font-size:8px}.playwright-form label:first-child{grid-column:1/-1}.playwright-form input{min-width:0;height:28px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--control);font-size:9px;font-family:inherit}.playwright-form-actions{display:flex;justify-content:flex-end;gap:5px}.playwright-empty{flex:1;min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--muted);text-align:center}.playwright-empty strong{color:var(--ink);font-size:10px}.playwright-empty p{max-width:320px;margin:0;font-size:8px;line-height:1.5}.playwright-stale{flex:none;display:flex;align-items:center;gap:7px;padding:7px;border:1px solid var(--line);border-radius:8px;color:var(--muted-strong);font-size:8px}.playwright-stale span{flex:1}.playwright-run-result{flex:none;max-height:27%;display:flex;flex-direction:column;gap:5px;padding:7px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28);overflow:auto}.playwright-run-result header{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:9px}.playwright-run-result header strong{flex:1}.playwright-outcome{display:flex;gap:7px;align-items:center;color:var(--muted-strong);font-size:8px}.playwright-outcome[data-status="passed"]{color:var(--success)}.playwright-outcome[data-status="failed"],.playwright-outcome[data-status="timedOut"]{color:var(--danger)}.playwright-error{margin:2px 0 4px;padding:6px 8px;max-height:130px;overflow:auto;border:1px solid var(--line);border-radius:7px;color:var(--danger);background:rgba(220,70,60,.07);font:8px/1.5 "Cascadia Code",Consolas,monospace;white-space:pre-wrap;word-break:break-word}.playwright-outcome button{flex:none;height:22px;padding:0 7px;font-size:8px}.playwright-outcome span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.playwright-view .icon-button{flex:none}.playwright-view .icon-button:disabled{opacity:.45}
+.playwright-ai textarea{min-width:0;padding:6px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--control);font:9px "Cascadia Code",Consolas,monospace;resize:vertical}.playwright-ai textarea:focus,.playwright-ai input:focus,.playwright-ai select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(25,139,162,.1);outline:0}.playwright-ai select{height:28px;padding:4px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--control);font-size:9px;font-family:inherit}.playwright-ai label.wide,.playwright-ai .playwright-record{grid-column:1/-1}.playwright-record{display:flex;align-items:flex-end;gap:6px}.playwright-record label{flex:1;min-width:0}.playwright-record button{flex:none;height:28px}.playwright-ai-hint{margin:0;color:var(--muted);font-size:8px;line-height:1.45}.playwright-ai-summary{margin:0;color:var(--muted-strong);font-size:9px;line-height:1.5;white-space:pre-wrap}.playwright-diff{max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:7px;background:var(--control);font:8px/1.5 "Cascadia Code",Consolas,monospace}.playwright-diff div{padding:0 8px;white-space:pre-wrap;word-break:break-all}.playwright-diff div[data-kind="added"]{color:var(--success);background:rgba(40,160,90,.1)}.playwright-diff div[data-kind="removed"]{color:var(--danger);background:rgba(220,70,60,.1)}
 @media(max-width:430px){.playwright-project{flex-wrap:wrap}.playwright-project input{flex-basis:100%}.playwright-toolbar{flex-wrap:wrap}.playwright-form-fields{grid-template-columns:1fr}.playwright-form label:first-child{grid-column:auto}}
 `;
 
@@ -37,7 +47,8 @@ function readRunOutput(message: string, value: unknown): RunOutput {
     const item = test as Record<string, unknown>;
     if (typeof item.title !== 'string' || typeof item.file !== 'string' || typeof item.status !== 'string') return [];
     return [{ title: item.title, file: item.file, line: typeof item.line === 'number' ? item.line : 0,
-      project: typeof item.project === 'string' ? item.project : null, status: item.status }];
+      project: typeof item.project === 'string' ? item.project : null, status: item.status,
+      error: typeof item.error === 'string' ? item.error : null }];
   }) : [];
   const number = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
   return {
@@ -48,7 +59,14 @@ function readRunOutput(message: string, value: unknown): RunOutput {
       skipped: number(summaryValue.skipped), interrupted: number(summaryValue.interrupted) } : null,
     tests: tests.slice(0, 256),
     outputTruncated: record.outputTruncated === true,
+    runnerError: typeof record.runnerError === 'string' ? record.runnerError : null,
+    browsersMissing: record.browsersMissing === true,
   };
+}
+
+/** Aborting a dispatched action surfaces either as an AbortError or as the host's wrapped cancel message. */
+function isCancellation(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || /was canceled|was cancelled/i.test(error.message));
 }
 
 function displayTestTitle(test: PlaywrightTestIdentity): string {
@@ -71,6 +89,15 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
   const [tagDraft, setTagDraft] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
   const [runOutput, setRunOutput] = useState<RunOutput | null>(null);
+  const [ai, setAi] = useState<{ file: string; recording: string; notes: string } | null>(null);
+  const [startUrl, setStartUrl] = useState('');
+  const [browsersMissing, setBrowsersMissing] = useState(false);
+  const [provider, setProvider] = useState<AuthoringProvider>(initialAuthoringProvider);
+  const [proposal, setProposal] = useState<PlaywrightTestProposal | null>(null);
+  const aiController = useRef<AbortController | null>(null);
+  const aiActionsRef = useRef<HTMLDivElement | null>(null);
+  // A proposal lands below the long form; bring its Apply button into view.
+  useEffect(() => { if (proposal) aiActionsRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, [proposal]);
   const runController = useRef<AbortController | null>(null);
 
   const showResult = useCallback((result: { status: string; message: string; data: unknown }) => {
@@ -164,11 +191,15 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
   };
 
   const openCreateSection = () => {
+    setAi(null);
+    setProposal(null);
     setFormKind('section');
     setForm({ file: 'tests/new.spec.ts', testName: 'new test' });
   };
 
   const openAppendTest = (file: string) => {
+    setAi(null);
+    setProposal(null);
     setFormKind('test');
     setForm({ file, testName: 'new test' });
   };
@@ -194,6 +225,128 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
       setNotice(error instanceof Error ? error.message : 'Could not update the Playwright test file.');
       setNoticeIsError(true);
     } finally { setBusy(null); }
+  };
+
+  const openAi = (file?: string) => {
+    setForm(null);
+    setProposal(null);
+    setAi((current) => ({ file: file ?? current?.file ?? 'tests/new.spec.ts', recording: current?.recording ?? '', notes: current?.notes ?? '' }));
+  };
+
+  const fixWithAi = (test: RunOutput['tests'][number]) => {
+    const file = validatePlaywrightSectionPath(test.file);
+    if (!file) return;
+    setForm(null);
+    setProposal(null);
+    setAi((current) => ({
+      file,
+      recording: current?.recording || `// Existing test "${test.title}" in ${file} is failing. Fix it.`,
+      notes: `The test "${test.title}" failed with this error. Fix the test (or its locators/assertions) so it passes:\n\n${test.error ?? 'No error message was captured.'}`,
+    }));
+  };
+
+  const installBrowsers = async () => {
+    if (busy) return;
+    setBusy('install');
+    setNotice('Downloading Chromium (about 120 MB). This can take a minute…');
+    setNoticeIsError(false);
+    try {
+      const result = await services.modules.dispatch('installBrowsers', {});
+      showResult(result);
+      setBrowsersMissing(result.status !== 'success');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not install the browser.');
+      setNoticeIsError(true);
+    } finally { setBusy(null); }
+  };
+
+  const changeProvider = (value: AuthoringProvider) => {
+    setProvider(value);
+    try { localStorage.setItem(authoringProviderKey, value); } catch { /* the preference is optional */ }
+  };
+
+  const startRecording = async () => {
+    if (!ai || busy) return;
+    const url = startUrl.trim();
+    if (url && !/^https?:\/\/\S+$/i.test(url)) {
+      setNotice('Enter a start URL beginning with http:// or https://.');
+      setNoticeIsError(true);
+      return;
+    }
+    const controller = new AbortController();
+    aiController.current = controller;
+    setBusy('record');
+    setNotice('A recording browser is opening. Use the app, then close that window to bring the code here.');
+    setNoticeIsError(false);
+    try {
+      const result = await services.modules.dispatch('recordTest', url ? { url } : {}, { signal: controller.signal });
+      const data = showResult(result);
+      if (data && typeof data === 'object' && (data as Record<string, unknown>).browsersMissing === true) setBrowsersMissing(true);
+      const code = data && typeof data === 'object' && typeof (data as Record<string, unknown>).code === 'string' ? (data as { code: string }).code : '';
+      if (code) {
+        setAi((current) => current && { ...current, recording: code });
+        setProposal(null);
+      } else {
+        setNotice(result.message);
+        setNoticeIsError(result.status !== 'success');
+      }
+    } catch (error) {
+      if (isCancellation(error)) setNotice('Recording cancelled.');
+      else { setNotice(error instanceof Error ? error.message : 'Could not start the recording.'); setNoticeIsError(true); }
+    } finally {
+      if (aiController.current === controller) aiController.current = null;
+      setBusy(null);
+    }
+  };
+
+  const generateProposal = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!ai || busy) return;
+    const file = validatePlaywrightSectionPath(ai.file);
+    if (!file) {
+      setNotice('Use a project-relative *.spec.ts or *.test.ts file path without `..` segments.');
+      setNoticeIsError(true);
+      return;
+    }
+    const controller = new AbortController();
+    aiController.current = controller;
+    setBusy('ai');
+    setProposal(null);
+    setNotice(`Asking ${authoringProviderNames[provider]} to write the test…`);
+    setNoticeIsError(false);
+    try {
+      const result = await services.modules.dispatch('proposeTest', {
+        file, recording: ai.recording, notes: ai.notes.trim(), provider,
+      }, { signal: controller.signal });
+      const parsed = readPlaywrightTestProposal(showResult(result));
+      if (!parsed) throw new Error('The assistant returned an invalid proposal.');
+      setProposal(parsed);
+      setNotice('Review the proposed changes below. Nothing is written until you apply them.');
+    } catch (error) {
+      if (isCancellation(error)) setNotice('Test generation cancelled.');
+      else { setNotice(error instanceof Error ? error.message : 'Could not generate the test.'); setNoticeIsError(true); }
+    } finally {
+      if (aiController.current === controller) aiController.current = null;
+      setBusy(null);
+    }
+  };
+
+  const applyProposal = async () => {
+    if (!proposal || busy) return;
+    setBusy('apply');
+    try {
+      const result = await services.modules.dispatch('applyTest', {
+        file: proposal.file, source: proposal.source, ...(proposal.baseHash ? { baseHash: proposal.baseHash } : {}),
+      });
+      showResult(result);
+      setProposal(null);
+      setAi(null);
+      setBusy(null);
+      await refreshTests();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not write the test file.');
+      setNoticeIsError(true);
+    } finally { setBusy((current) => current === 'apply' ? null : current); }
   };
 
   const editTags = (test: PlaywrightTestIdentity) => {
@@ -233,11 +386,15 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
       else if (kind === 'test') input.testId = target;
       else input.tag = target;
       const result = await services.modules.dispatch('runTests', input as AutomationModuleActionRequest['input'], { signal: controller.signal });
-      const data = showResult(result);
-      const output = readRunOutput(result.message, data);
+      const output = readRunOutput(result.message, result.data);
+      // A failing test reports an error status but still carries per-test outcomes; show them instead of only a banner.
+      if (result.status === 'error' && output.tests.length === 0 && !output.runnerError) throw new Error(result.message);
+      if (output.browsersMissing) setBrowsersMissing(true);
+      setNotice(result.message);
+      setNoticeIsError(result.status === 'error' || (result.status === 'warning' && /could not|failed|unavailable|not found|exceeded/i.test(result.message)));
       setRunOutput(output);
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (isCancellation(error)) {
         setNotice('Playwright run cancelled.');
         setNoticeIsError(false);
       } else {
@@ -267,6 +424,8 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
     { id: 'refresh-tests', label: 'Refresh Playwright tests', keywords: ['discover', 'reload'], disabled: !explorer?.projectRoot || !!busy, run: refreshTests },
     { id: 'choose-project', label: 'Choose Playwright project folder', keywords: ['folder', 'directory'], disabled: !!busy, run: chooseProject },
     { id: 'create-section', label: 'Create Playwright test section', keywords: ['new file', 'spec'], disabled: !explorer?.projectRoot || !!busy, run: openCreateSection },
+    { id: 'install-browsers', label: 'Install Playwright browser', keywords: ['chromium', 'download', 'setup'], disabled: !explorer?.projectRoot || !explorer.runner.available || !!busy, confirmationPrompt: 'Download Chromium for Playwright (about 120 MB)?', run: installBrowsers },
+    { id: 'ai-write-test', label: 'Write a Playwright test with AI', keywords: ['recording', 'codegen', 'agent', 'refactor', 'new test'], disabled: !explorer?.projectRoot || !explorer.runner.available || !!busy, run: () => openAi() },
     ...((explorer?.files ?? []).flatMap((file) => [
       { id: `run-file:${file.path}`, label: `Run section ${file.path}`, keywords: ['playwright test file'], disabled: !!busy, confirmationPrompt: `Run all Playwright tests in ${file.path}?`, run: () => run('file', file.path) },
       { id: `append:${file.path}`, label: `Add test to ${file.path}`, keywords: ['new test'], disabled: !!busy, run: () => openAppendTest(file.path) },
@@ -296,6 +455,7 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
     </form>
 
     {notice && <p className="playwright-info" data-error={noticeIsError} role={noticeIsError ? 'alert' : 'status'}>{noticeIsError ? <CircleAlert size={12} /> : <Check size={12} />}{notice}</p>}
+    {browsersMissing && <p className="playwright-info" data-error="true" role="alert"><CircleAlert size={12} />Playwright's browser isn't installed yet, so recording and browser tests can't run.<button className="secondary-button" type="button" disabled={!!busy} onClick={() => void installBrowsers()}>{busy === 'install' ? <LoaderCircle size={12} /> : <Plus size={12} />} Install browser</button></p>}
     {explorer?.projectRoot && !explorer.runner.available && <p className="playwright-info" data-error="true" role="alert">{explorer.runner.message}</p>}
 
     {form && <form className="playwright-form" onSubmit={(event) => void saveTestFile(event)}>
@@ -307,11 +467,43 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
       <div className="playwright-form-actions"><button className="secondary-button" type="button" disabled={!!busy} onClick={() => setForm(null)}>Cancel</button><button className="primary-button" disabled={!!busy}>{busy === 'file' ? <LoaderCircle size={12} /> : <Plus size={12} />} {formKind === 'section' ? 'Create file' : 'Add test'}</button></div>
     </form>}
 
+    {ai && <form className="playwright-form playwright-ai" onSubmit={(event) => void generateProposal(event)} aria-label="Write a test with AI">
+      <header><Sparkles size={13} /><strong>Write a test with AI</strong>
+        <select aria-label="AI assistant" value={provider} disabled={!!busy} onChange={(event) => changeProvider(event.target.value as AuthoringProvider)}>
+          <option value="codex">Codex</option><option value="claude">Claude</option>
+        </select></header>
+      <div className="playwright-form-fields">
+        <label><span>Test file (new, or an existing one to edit)</span><input required maxLength={512} value={ai.file} disabled={!!busy} onChange={(event) => setAi({ ...ai, file: event.target.value })} placeholder="tests/auth/login.spec.ts" /></label>
+        <div className="playwright-record wide">
+          <label><span>Start URL to record</span><input type="url" maxLength={2048} value={startUrl} disabled={!!busy} onChange={(event) => setStartUrl(event.target.value)} placeholder="https://app.example.com/login" /></label>
+          {busy === 'record'
+            ? <button className="secondary-button" type="button" onClick={() => aiController.current?.abort()}><Square size={10} /> Stop recording</button>
+            : <button className="secondary-button" type="button" disabled={!!busy} onClick={() => void startRecording()}><CircleDot size={12} /> Record</button>}
+        </div>
+        <label className="wide"><span>Recorded Playwright code</span><textarea required rows={7} maxLength={65536} value={ai.recording} disabled={!!busy} onChange={(event) => setAi({ ...ai, recording: event.target.value })} placeholder="Click Record to capture a flow, or paste code from Playwright codegen" spellCheck={false} /></label>
+        <label className="wide"><span>Notes for the assistant (optional)</span><textarea rows={3} maxLength={4000} value={ai.notes} disabled={!!busy} onChange={(event) => setAi({ ...ai, notes: event.target.value })} placeholder="e.g. Login is handled by the shared auth setup, so start already signed in. Assert the dashboard heading." spellCheck={false} /></label>
+      </div>
+      <p className="playwright-ai-hint">The recording, your notes, the target file and a few project files (Playwright config, auth/fixture helpers, one sample test) are sent to {authoringProviderNames[provider]}. Secrets in the recording are moved to environment variables.</p>
+      {proposal && <>
+        <p className="playwright-ai-summary">{proposal.summary}</p>
+        <div className="playwright-diff" role="region" aria-label={proposal.exists ? 'Proposed changes' : 'Proposed new file'}>
+          {diffLines(proposal.previousSource ?? '', proposal.source).map((line, index) => <div key={index} data-kind={line.kind}>{line.kind === 'added' ? '+ ' : line.kind === 'removed' ? '- ' : '  '}{line.text}</div>)}
+        </div>
+        {proposal.contextFiles.length > 0 && <p className="playwright-ai-hint">Used project files: {proposal.contextFiles.join(', ')}</p>}
+      </>}
+      <div className="playwright-form-actions" ref={aiActionsRef}>
+        <button className="secondary-button" type="button" disabled={busy === 'apply'} onClick={() => { if (busy === 'ai' || busy === 'record') aiController.current?.abort(); setAi(null); setProposal(null); }}>{busy === 'ai' ? 'Cancel' : 'Close'}</button>
+        <button className="secondary-button" disabled={!!busy || !ai.recording.trim()}>{busy === 'ai' ? <LoaderCircle size={12} /> : <Sparkles size={12} />} {proposal ? 'Regenerate' : 'Generate'}</button>
+        {proposal && <button className="primary-button" type="button" disabled={!!busy} onClick={() => void applyProposal()}>{busy === 'apply' ? <LoaderCircle size={12} /> : <Check size={12} />} {proposal.exists ? 'Apply changes' : 'Create file'}</button>}
+      </div>
+    </form>}
+
     {explorer && staleTagCount > 0 && <div className="playwright-stale"><Tag size={12} /><span>{staleTagCount} tag record{staleTagCount === 1 ? '' : 's'} refer to tests no longer found after refresh.</span><button className="secondary-button" type="button" disabled={!!busy} onClick={() => void removeStaleTags()}><Trash2 size={11} /> Clean up</button></div>}
 
     <div className="playwright-toolbar">
       <button className="secondary-button" type="button" disabled={!!busy || !explorer?.projectRoot} onClick={() => void refreshTests()}>{busy === 'discover' ? <LoaderCircle size={12} /> : <RefreshCw size={12} />} Refresh tests</button>
       <button className="secondary-button" type="button" disabled={!!busy || !explorer?.projectRoot} onClick={openCreateSection}><Plus size={12} /> New section</button>
+      <button className="secondary-button" type="button" disabled={!!busy || !explorer?.projectRoot || !explorer.runner.available} onClick={() => openAi()}><Sparkles size={12} /> Write with AI</button>
       <span className="spacer" />
       <select aria-label="Tag group" value={selectedTag} onChange={(event) => setSelectedTag(event.target.value)} disabled={!explorer?.tags.length}>
         {explorer?.tags.length ? explorer.tags.map((tag) => <option key={tag} value={tag}>{tag}</option>) : <option value="">No tag groups</option>}
@@ -326,7 +518,7 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
       {explorer?.projectRoot && explorer.runner.available && explorer.files.length === 0 && <div className="playwright-empty"><FilePlus2 size={24} /><strong>No tests discovered</strong><p>Create a test section here or add test files with your agent, then refresh.</p><button className="secondary-button" type="button" disabled={!!busy} onClick={openCreateSection}><Plus size={11} /> Create section</button></div>}
       {explorer?.files.map((file) => <details className="playwright-file" key={file.path} open>
         <summary><FilePlus2 size={13} /><span className="playwright-file-name" title={file.path}>{file.path}</span><span className="playwright-file-count">{file.tests.length} test{file.tests.length === 1 ? '' : 's'}</span>
-          <span className="playwright-file-tools"><button className="icon-button" type="button" aria-label={`Run section ${file.path}`} title="Run section" disabled={!!busy} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void run('file', file.path); }}><Play size={12} /></button><button className="icon-button" type="button" aria-label={`Add test to ${file.path}`} title="Add test" disabled={!!busy} onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAppendTest(file.path); }}><Plus size={12} /></button></span>
+          <span className="playwright-file-tools"><button className="icon-button" type="button" aria-label={`Run section ${file.path}`} title="Run section" disabled={!!busy} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void run('file', file.path); }}><Play size={12} /></button><button className="icon-button" type="button" aria-label={`Edit ${file.path} with AI`} title="Edit with AI" disabled={!!busy} onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAi(file.path); }}><Sparkles size={12} /></button><button className="icon-button" type="button" aria-label={`Add test to ${file.path}`} title="Add test" disabled={!!busy} onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAppendTest(file.path); }}><Plus size={12} /></button></span>
         </summary>
         {file.tests.map((test) => {
           const outcomeKey = `${test.file.toLowerCase()}:${test.line}:${test.titlePath.at(-1)?.toLowerCase() ?? ''}`;
@@ -345,7 +537,13 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
     {runOutput && <section className="playwright-run-result" aria-label="Playwright run results">
       <header><Check size={12} /><strong>Run results</strong><span>{(runOutput.durationMilliseconds / 1000).toFixed(1)} s</span><button className="icon-button" aria-label="Clear run results" onClick={() => setRunOutput(null)}>×</button></header>
       <p className="playwright-info">{runOutput.message}{runOutput.outputTruncated ? ' Test runner output was truncated; the run itself continued.' : ''}</p>
-      {runOutput.tests.map((test, index) => <div className="playwright-outcome" data-status={test.status} key={`${test.file}:${test.line}:${test.project}:${index}`}><span>{test.project ? `[${test.project}] ` : ''}{test.file}:{test.line} · {test.title}</span><strong>{test.status}</strong></div>)}
+      {runOutput.runnerError && <pre className="playwright-error">{runOutput.runnerError}</pre>}
+      {runOutput.tests.map((test, index) => <div key={`${test.file}:${test.line}:${test.project}:${index}`}>
+        <div className="playwright-outcome" data-status={test.status}><span>{test.project ? `[${test.project}] ` : ''}{test.file}:{test.line} · {test.title}</span>
+          {(test.status === 'failed' || test.status === 'timedOut') && <button className="secondary-button" type="button" disabled={!!busy} onClick={() => fixWithAi(test)}><Sparkles size={11} /> Fix with AI</button>}
+          <strong>{test.status}</strong></div>
+        {test.error && <pre className="playwright-error">{test.error}</pre>}
+      </div>)}
     </section>}
   </section>;
 }

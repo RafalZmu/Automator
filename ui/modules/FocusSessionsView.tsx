@@ -305,51 +305,6 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
         <input aria-label="Count only working hours" type="checkbox" checked={workingPeriodOnly} onChange={(event) => setWorkingPeriodOnly(event.target.checked)} />
         <span><strong>Count only working hours</strong><small>08:00–16:00 local time each day</small></span>
       </label>
-      <section className="work-time-entry-card" aria-label="New work timer">
-        <header><div><Play size={14} /><h2>New timer</h2></div><span>{runningTimer ? 'Pause the running timer first' : 'Description required'}</span></header>
-        <form onSubmit={(event) => { event.preventDefault(); void startTimer(); }}>
-          <label className="work-time-field"><span>Work description <b>Required</b></span>
-            <input ref={startDescriptionRef} className="work-time-start-input" aria-label="New timer description" value={startDescription} maxLength={500}
-              placeholder="What are you working on?" disabled={!!busy} onChange={(event) => setStartDescription(event.target.value)} />
-          </label>
-          <div className="work-time-entry-actions">
-            <button className="primary-button" type="submit" disabled={!!busy || !!runningTimer || !cleanedStartDescription}><Play size={13} /> {busy === 'start' ? 'Starting…' : 'Start timer'}</button>
-          </div>
-        </form>
-      </section>
-
-      <section className="work-time-entry-card work-time-manual-card" aria-label="Add a work entry manually">
-        <header><div><Clock3 size={14} /><h2>Add time without the timer</h2></div><span>{manualDurationLabel ? `${manualDurationLabel}, ending now` : 'Ends now'}</span></header>
-        <form onSubmit={(event) => void submitManualEntry(event)}>
-          <div className="work-time-manual-times">
-            <label className="work-time-field">
-              <span>Hours</span>
-              <input id="work-time-manual-hours" aria-label="Manual entry hours" type="number" inputMode="numeric" min={0} max={99} step={1} placeholder="0" value={manualHours}
-                disabled={!!busy} onChange={(event) => setManualHours(event.target.value)} />
-            </label>
-            <label className="work-time-field">
-              <span>Minutes</span>
-              <input aria-label="Manual entry minutes" type="number" inputMode="numeric" min={0} max={59} step={1} placeholder="0" value={manualMinutes}
-                disabled={!!busy} onChange={(event) => setManualMinutes(event.target.value)} />
-            </label>
-          </div>
-          {manualError && <p className="work-time-field-error" role="alert">{manualError}</p>}
-          <label className="work-time-field">
-            <span>Description <b>Required</b></span>
-            <textarea aria-label="Manual entry description" value={manualDescription} maxLength={500} rows={2} placeholder="What did you work on?"
-              disabled={!!busy} onChange={(event) => setManualDescription(event.target.value)} />
-          </label>
-          <label className="work-time-field">
-            <span>Tags <b>Optional</b></span>
-            <div className="work-time-tags-input"><Tag size={13} /><input aria-label="Manual entry tags" value={manualTags} maxLength={500} placeholder="planning, release, bug fix"
-              disabled={!!busy} onChange={(event) => setManualTags(event.target.value)} /><small>Separate with commas</small></div>
-          </label>
-          <div className="work-time-entry-actions">
-            <button className="primary-button" type="submit" disabled={!!busy || !manualDescriptionValue || 'error' in manualInterval}><Check size={13} /> Add entry</button>
-          </div>
-        </form>
-      </section>
-
       {snapshot.timers.length > 0 && <section className="work-time-timer-list" aria-label="Work timers">
         {snapshot.timers.map((timer) => {
           const elapsed = timerDuration(timer);
@@ -399,6 +354,52 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
           </div>
         </form>
       </section>)}
+
+      <section className="work-time-entry-card" aria-label="New work timer">
+        <header><div><Play size={14} /><h2>New timer</h2></div><span>{runningTimer ? 'Pause the running timer first' : 'Description required'}</span></header>
+        <form onSubmit={(event) => { event.preventDefault(); void startTimer(); }}>
+          <label className="work-time-field"><span>Work description <b>Required</b></span>
+            <input ref={startDescriptionRef} className="work-time-start-input" aria-label="New timer description" value={startDescription} maxLength={500}
+              placeholder="What are you working on?" disabled={!!busy} onChange={(event) => setStartDescription(event.target.value)} />
+          </label>
+          <div className="work-time-entry-actions">
+            <button className="primary-button" type="submit" disabled={!!busy || !!runningTimer || !cleanedStartDescription}><Play size={13} /> {busy === 'start' ? 'Starting…' : 'Start timer'}</button>
+          </div>
+        </form>
+      </section>
+
+      <section className="work-time-entry-card work-time-manual-card" aria-label="Add a work entry manually">
+        <header><div><Clock3 size={14} /><h2>Add time without the timer</h2></div><span>{manualDurationLabel ? `${manualDurationLabel}, ending now` : 'Ends now'}</span></header>
+        <form onSubmit={(event) => void submitManualEntry(event)}>
+          <div className="work-time-manual-times">
+            <label className="work-time-field">
+              <span>Hours</span>
+              <input id="work-time-manual-hours" aria-label="Manual entry hours" type="number" inputMode="numeric" min={0} max={99} step={1} placeholder="0" value={manualHours}
+                disabled={!!busy} onChange={(event) => setManualHours(event.target.value)} />
+            </label>
+            <label className="work-time-field">
+              <span>Minutes</span>
+              <input aria-label="Manual entry minutes" type="number" inputMode="numeric" min={0} max={59} step={1} placeholder="0" value={manualMinutes}
+                disabled={!!busy} onChange={(event) => setManualMinutes(event.target.value)} />
+            </label>
+          </div>
+          {manualError && <p className="work-time-field-error" role="alert">{manualError}</p>}
+          <label className="work-time-field">
+            <span>Description <b>Required</b></span>
+            <textarea aria-label="Manual entry description" value={manualDescription} maxLength={500} rows={2} placeholder="What did you work on?"
+              disabled={!!busy} onChange={(event) => setManualDescription(event.target.value)} />
+          </label>
+          <label className="work-time-field">
+            <span>Tags <b>Optional</b></span>
+            <div className="work-time-tags-input"><Tag size={13} /><input aria-label="Manual entry tags" value={manualTags} maxLength={500} placeholder="planning, release, bug fix"
+              disabled={!!busy} onChange={(event) => setManualTags(event.target.value)} /><small>Separate with commas</small></div>
+          </label>
+          <div className="work-time-entry-actions">
+            <button className="primary-button" type="submit" disabled={!!busy || !manualDescriptionValue || 'error' in manualInterval}><Check size={13} /> Add entry</button>
+          </div>
+        </form>
+      </section>
+
 
       {surface === 'workspace' && <section className="work-time-reports" aria-label="Work time reports">
         <header className="work-time-reports-heading">

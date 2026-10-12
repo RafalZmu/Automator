@@ -12,7 +12,6 @@ var checks = new (string Name, Func<Task> Run)[]
     ("opening resets launcher state and captures the previous foreground HWND", OpeningResetsStateAndCapturesContext),
     ("global tab keys require the visible foreground launcher context", GlobalTabKeysRequireLauncherContext),
     ("global navigation consumes only focused unmodified launcher keys", NavigationKeyPolicyRequiresFocusedUnmodifiedLauncher),
-    ("global navigation yields digits and slash while text entry is focused", NavigationKeyPolicyYieldsDigitsAndSlashToTextEntry),
     ("hotkey recording ignores stale, unfocused and native-dialog input", RecordingRequiresVisibleFocusedContext),
     ("a view-mode transition cancels pending alias activation", ModeTransitionCancelsPendingActivation),
     ("stale catalog completion is ignored after the view changes", StaleCatalogCompletionIsIgnored),
@@ -47,6 +46,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("Explorer mappings validate files and preserve transient values", ScriptRunnerExplorerSpecs.RunAsync),
     ("script template catalog validates descriptors and legacy profile metadata", ScriptRunnerTemplateSpecs.RunAsync),
     ("Codex task builder validates capability, actions, CLI output and draft IDs", CodexTaskSpecs.RunAsync),
+    ("Playwright AI authoring proposes reviewed tests and applies them without clobbering edits", PlaywrightAuthoringSpecs.RunAsync),
     ("API profiles save URL-only grants and profile default JSON", ApiProfilesSaveUrlOnlyAndDefaultInput),
     ("work-time log actions validate metadata and delegate to the host coordinator", FocusSessionModuleDispatchesCoordinatorActions),
     ("context disposal cancels active HTTP calls and rejects later calls", ContextDisposalScopesHttpCalls),
@@ -156,23 +156,6 @@ static Task NavigationKeyPolicyRequiresFocusedUnmodifiedLauncher()
     Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x32));
     session.EnterMode(LauncherMode.Settings);
     Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x1B));
-    return Task.CompletedTask;
-}
-
-static Task NavigationKeyPolicyYieldsDigitsAndSlashToTextEntry()
-{
-    var session = new LauncherSession(CreateSettings());
-    session.ShowPanel("0x11");
-    var state = session.NavigationState;
-    Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(state, true, true, false, 0x32, textEntryFocused: false));
-    Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(state, true, true, false, 0x32, textEntryFocused: true));
-    Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(state, true, true, false, 0x61, textEntryFocused: true));
-    Check.Equal(NavigationKeyAction.OpenCatalog, NavigationKeyPolicy.Decide(state, true, true, false, 0xBF, textEntryFocused: false));
-    Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(state, true, true, false, 0xBF, textEntryFocused: true));
-    Check.Equal(NavigationKeyAction.Close, NavigationKeyPolicy.Decide(state, true, true, false, 0x1B, textEntryFocused: true));
-    session.OpenCatalog([]);
-    Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x32, textEntryFocused: true));
-    Check.Equal(NavigationKeyAction.Close, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x1B, textEntryFocused: true));
     return Task.CompletedTask;
 }
 

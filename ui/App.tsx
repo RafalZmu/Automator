@@ -32,7 +32,9 @@ type SettingsDraft = Pick<BackendUiState, 'hotkey' | 'theme' | 'startWithWindows
 
 const numberedTabIcons = [AppWindow, Terminal, Braces, MousePointerClick, Workflow, CalendarClock, Clock, Globe] as const;
 
-const quickActionBootstrap: readonly { scope: string; id: string; label: string; keywords: readonly string[]; category: string }[] = [
+type QuickActionBootstrap = { scope: string; id: string; label: string; keywords: readonly string[]; category: string; confirmationPrompt?: string };
+
+const quickActionBootstrap: readonly QuickActionBootstrap[] = [
   { scope: 'script-runner', id: 'new-script-profile', label: 'Create script profile', keywords: ['python', 'powershell', 'bash', 'new'], category: 'Script Runner · action' },
   { scope: 'api', id: 'api:new-profile', label: 'New API profile', keywords: ['request', 'http', 'create'], category: 'API · action' },
   { scope: 'api', id: 'api:paste-curl', label: 'Paste cURL request', keywords: ['chrome', 'import', 'curl'], category: 'API · action' },
@@ -43,6 +45,34 @@ const quickActionBootstrap: readonly { scope: string; id: string; label: string;
   { scope: 'focus-sessions', id: 'start-work', label: 'Start work timer', keywords: ['begin', 'time log'], category: 'Work Time Log · action' },
   { scope: 'focus-sessions', id: 'stop-work', label: 'Stop work timer', keywords: ['end', 'time log'], category: 'Work Time Log · action' },
 ];
+
+// Saved profiles are published by the backend so Global Action Search can find them before their tab has been opened.
+// The ids match the commands each tab view registers, so choosing one opens the tab and runs the live command.
+const savedItemRunActions: Record<string, { commandId: (id: string) => string; prompt: (name: string) => string; keywords: readonly string[] }> = {
+  'script-runner': { commandId: (id) => `run-script:${id}`, prompt: (name) => `Run script profile “${name}”?`, keywords: ['script', 'profile', 'run'] },
+  api: { commandId: (id) => `api:run:${id}`, prompt: () => 'This sends an HTTP request using the saved profile.', keywords: ['api', 'request', 'send', 'run'] },
+  workflows: { commandId: (id) => `workflow:run:${id}`, prompt: (name) => `Run workflow “${name}”?`, keywords: ['workflow', 'execute', 'run'] },
+};
+
+function readSavedItemActions(moduleStates: BackendUiState['moduleStates'], tabs: BackendUiState['tabs']): QuickActionBootstrap[] {
+  return moduleStates.flatMap((moduleState) => {
+    const source = savedItemRunActions[moduleState.moduleId];
+    const tab = tabs.find((candidate) => candidate.id === moduleState.moduleId);
+    const raw = moduleState.values.savedItems;
+    if (!source || !tab || typeof raw !== 'string') return [];
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.slice(0, 200).flatMap((item): QuickActionBootstrap[] => {
+        if (!item || typeof item !== 'object') return [];
+        const { id, name } = item as { id?: unknown; name?: unknown };
+        if (typeof id !== 'string' || typeof name !== 'string' || !id || !name) return [];
+        return [{ scope: moduleState.moduleId, id: source.commandId(id), label: `Run ${name}`, keywords: [...source.keywords, name, id],
+          category: `${tab.title} · saved`, confirmationPrompt: source.prompt(name) }];
+      });
+    } catch { return []; }
+  });
+}
 
 function AppIcon({ binding }: { binding: Binding }) {
   const [broken, setBroken] = useState(false);
@@ -268,15 +298,6 @@ function SettingsDialog({
   );
 }
 
-// Text-like controls only: digits and '/' must type normally there, but not in buttons, checkboxes or other controls.
-const textInputTypes = new Set(['', 'text', 'search', 'url', 'tel', 'email', 'password', 'number', 'date', 'datetime-local', 'month', 'time', 'week']);
-function isTextEntryTarget(target: EventTarget | null): boolean {
-  if (target instanceof HTMLInputElement) return textInputTypes.has(target.type) && !target.readOnly && !target.disabled;
-  if (target instanceof HTMLTextAreaElement) return !target.readOnly && !target.disabled;
-  if (target instanceof HTMLSelectElement) return !target.disabled;
-  return target instanceof HTMLElement && target.isContentEditable;
-}
-
 export function App() {
   const isWorkspaceSurface = new URLSearchParams(window.location.search).get('surface') === 'workspace';
   const [explorerLaunches, setExplorerLaunches] = useState<FileExplorerLaunchRequest[]>([]);
@@ -308,7 +329,6 @@ export function App() {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const currentStateRef = useRef<BackendUiState | null>(null);
   const bridgeRef = useRef<AutomatorBridge | null>(null);
-  const textEntryReportRef = useRef<((focused: boolean) => void) | null>(null);
   const quickActionsHomeRef = useRef(false);
   const commandCatalog = useAllTabCommandCatalog();
   const resolveLiveCommand = useTabCommandResolver();
@@ -411,37 +431,6 @@ export function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!bridge) return undefined;
-    let reported = false;
-    // Sends only changes; the native hook reads the flag to decide whether digits and '/' belong to the page.
-    const report = (focused: boolean) => {
-      if (focused === reported) return;
-      reported = focused;
-      void bridge.setTextEntryFocused(focused).catch(() => undefined);
-    };
-    textEntryReportRef.current = report;
-    const onFocusIn = (event: FocusEvent) => report(isTextEntryTarget(event.target));
-    const onFocusOut = (event: FocusEvent) => {
-      // Focus moving to another element is reported by its focusin; a null relatedTarget means focus left the page.
-      if (!event.relatedTarget) report(false);
-    };
-    document.addEventListener('focusin', onFocusIn);
-    document.addEventListener('focusout', onFocusOut);
-    report(isTextEntryTarget(document.activeElement));
-    return () => {
-      document.removeEventListener('focusin', onFocusIn);
-      document.removeEventListener('focusout', onFocusOut);
-      textEntryReportRef.current = null;
-    };
-  }, [bridge]);
-
-  useEffect(() => {
-    // Removing a focused input does not fire focusout, so re-check the active element after the tab or mode DOM settles.
-    const frame = requestAnimationFrame(() => textEntryReportRef.current?.(isTextEntryTarget(document.activeElement)));
-    return () => cancelAnimationFrame(frame);
-  }, [state?.selectedTab, state?.mode]);
-
   const activeTab = state?.tabs.find((tab) => tab.slot === state.selectedTab) ?? state?.tabs[0];
   const moduleState = activeTab ? state?.moduleStates.find((item) => item.moduleId === activeTab.id) : undefined;
   const capabilitySignature = activeTab?.capabilities.map(({ id, version }) => `${id}@${version}`).join(',') ?? '';
@@ -461,7 +450,17 @@ export function App() {
   const automationServices = automationServicesEntry?.key === serviceContextKey ? automationServicesEntry.services : null;
   const visibleBindings = useMemo(() => {
     if (!state) return [];
-    const source = state.mode === 'catalog' ? state.catalogApps : state.bindings;
+    let source = state.mode === 'catalog' ? state.catalogApps : state.bindings;
+    if (state.mode === 'catalog') {
+      // Start Menu often lists the same program twice (for example per-user and all-users shortcuts).
+      const seen = new Set<string>();
+      source = source.filter((binding) => {
+        const key = `${binding.name}|${binding.targetPath}`.toLocaleLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
     const query = localQuery.trim().toLocaleLowerCase();
     return source.filter((binding) => !query || binding.name.toLocaleLowerCase().includes(query) || binding.alias.toLocaleLowerCase().includes(query));
   }, [state, localQuery]);
@@ -661,12 +660,13 @@ export function App() {
       run: noop,
     }));
     const discoveredCommandIds = new Set(commandCatalog.map(({ scope, command }) => `${scope}:${command.id}`));
-    const websiteBootstrap: typeof quickActionBootstrap = websiteShortcuts.map((row) => ({
+    const websiteBootstrap: readonly QuickActionBootstrap[] = websiteShortcuts.map((row) => ({
       scope: 'website-launcher', id: `launch-${row.id}`, label: `Launch ${row.name}`,
       keywords: [row.alias.toLocaleLowerCase() + 'w', row.name, 'websites browser'],
       category: `Website Launcher · alias ${row.alias.toLocaleLowerCase()}w`,
     }));
-    const bootstrappedCommands: QuickAction[] = [...quickActionBootstrap, ...websiteBootstrap].flatMap((descriptor) => {
+    const savedItemBootstrap = readSavedItemActions(state.moduleStates, state.tabs);
+    const bootstrappedCommands: QuickAction[] = [...quickActionBootstrap, ...websiteBootstrap, ...savedItemBootstrap].flatMap((descriptor) => {
       const tab = state.tabs.find((candidate) => candidate.id === descriptor.scope);
       if (!tab || discoveredCommandIds.has(`${descriptor.scope}:${descriptor.id}`)) return [];
       return [{
@@ -675,7 +675,8 @@ export function App() {
         keywords: [...descriptor.keywords, tab.title, tab.id],
         kind: 'module' as const,
         scope: descriptor.scope,
-        category: `${tab.title} · action`,
+        category: descriptor.category.includes(' · saved') ? descriptor.category : `${tab.title} · action`,
+        confirmationPrompt: descriptor.confirmationPrompt,
         targetId: descriptor.id,
         run: noop,
       }];
@@ -917,7 +918,7 @@ export function App() {
                   <span>Unique letters only</span>
                   <input ref={aliasRef} id="alias-input" value={localAlias} maxLength={32} autoComplete="off" spellCheck={false} onChange={(event) => setLocalAlias(event.target.value.replace(/[^a-z]/gi, ''))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void runCommand(() => bridge.saveAlias(aliasCandidate!.id, localAlias)); } }} />
                 </label>
-                <p className="alias-hint">Type the alias into the launcher to start this application after a short pause.</p>
+                <p className="alias-hint">Letters a-z only; digits and symbols are ignored. Type the alias into the launcher to start this application after a short pause.</p>
                 <div className="alias-actions">
                   <button className="secondary-button" type="button" onClick={() => void runCommand(() => bridge.setMode(isCatalog ? 'catalog' : 'launcher'))}>Cancel</button>
                   <button className="primary-button" type="button" disabled={!/^[a-z]{1,32}$/i.test(localAlias)} onClick={() => void runCommand(() => bridge.saveAlias(aliasCandidate!.id, localAlias))}><Check size={15} /> Save alias</button>

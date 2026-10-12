@@ -24,17 +24,6 @@ foreach (var item in root.GetProperty("validRequests").EnumerateArray())
     checks++;
     Console.WriteLine($"PASS {item.GetProperty("name").GetString()}");
 }
-
-var textEntryWindowContext = RpcProtocol.ParseParameters<WindowContextParams>(RpcProtocol.ParseRequest(root.GetProperty("validRequests").EnumerateArray()
-    .Single(item => item.GetProperty("name").GetString() == "window-context-text-entry").GetProperty("request").GetRawText()));
-if (!textEntryWindowContext.TextEntryFocused)
-    throw new InvalidOperationException("textEntryFocused fixture must parse as true.");
-var defaultWindowContext = RpcProtocol.ParseParameters<WindowContextParams>(RpcProtocol.ParseRequest("""{"jsonrpc":"2.0","id":3,"method":"launcher/setWindowContext","params":{"windowHandleHex":"0x000000000001ABCD","visible":true,"rendererFocused":true,"nativeDialogActive":false,"mode":"launcher"}}"""));
-if (defaultWindowContext.TextEntryFocused)
-    throw new InvalidOperationException("textEntryFocused must default to false when omitted.");
-checks++;
-Console.WriteLine("PASS window-context-text-entry-optional-flag");
-
 foreach (var item in root.GetProperty("invalidRequests").EnumerateArray())
 {
     try

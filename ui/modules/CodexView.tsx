@@ -231,7 +231,7 @@ export function CodexView({ tab, services }: Props) {
   const effectsText = (effect: TaskDraft['effects'][number]) => `${effect.kind}: ${effect.description}${effect.target ? ` (${effect.target})` : ''}`;
 
   return <section className="module-view codex-view" aria-label="Codex task builder">
-    <header className="codex-heading"><span className="codex-icon"><Sparkles size={17} /></span><div><h1>Codex</h1><p>Turn a repeatable task into a plan and inspectable automation</p></div><button className="secondary-button" type="button" disabled={busy !== null} onClick={() => void reloadStatus()}><RefreshCw size={13} /> Retry status</button></header>
+    <header className="codex-heading"><span className="codex-icon"><Sparkles size={17} /></span><div><h1>AI task builder</h1><p>Turn a repeatable task into a plan and inspectable automation</p></div><button className="secondary-button" type="button" disabled={busy !== null} onClick={() => void reloadStatus()}><RefreshCw size={13} /> Retry status</button></header>
     {error && <p role="alert" className="codex-alert"><CircleAlert size={14} />{error}</p>}
     {notice && <p role="status" className="codex-notice">{notice}</p>}
 

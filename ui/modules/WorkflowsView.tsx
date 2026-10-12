@@ -1,5 +1,5 @@
 import {
-  ArrowDown, ArrowUp, Braces, CircleAlert, Clock3, ListPlus, Play, Plus, Save, Square, Trash2,
+  ArrowDown, ArrowUp, CircleAlert, Clock3, ListPlus, Play, Plus, Save, Square, Trash2, Workflow,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AutomationServices } from '../automationServices';
@@ -282,7 +282,7 @@ export function WorkflowsView({ services, tab }: ViewProps) {
     <section className="module-view workflows-view" aria-label="Workflows">
       <header className="workflow-heading">
         <div className="workflow-heading-title">
-          <span className="workflow-module-icon"><Braces size={16} /></span>
+          <span className="workflow-module-icon"><Workflow size={16} /></span>
           <div><h1>Workflows</h1><p>Chain saved profiles and pass structured JSON between steps.</p></div>
         </div>
         <button className="primary-button" type="button" disabled={running} onClick={() => createOrEdit()}><Plus size={13} /> New workflow</button>
@@ -322,7 +322,7 @@ export function WorkflowsView({ services, tab }: ViewProps) {
                     }))}>{WORKFLOW_PROFILE_MODULES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
                     <label><span>Saved profile</span><select required value={step.profileId} onChange={(event) => updateStep(stepIndex, (current) => ({ ...current, profileId: event.target.value }))}>
                       <option value="">Choose a {moduleLabel} profile…</option>
-                      {profilesByModule[step.moduleId].map((profile) => <option key={profile.profileId} value={profile.profileId}>{profile.name} · {profile.profileId}</option>)}
+                      {profilesByModule[step.moduleId].map((profile) => <option key={profile.profileId} value={profile.profileId}>{profilesByModule[step.moduleId].filter((other) => other.name === profile.name).length > 1 ? `${profile.name} · ${profile.profileId}` : profile.name}</option>)}
                     </select></label>
                   </div>
                   <div className="workflow-mappings-heading"><strong>Input mappings</strong><button className="secondary-button" type="button" onClick={() => addBinding(stepIndex)}><ListPlus size={12} /> Add mapping</button></div>
@@ -365,14 +365,14 @@ export function WorkflowsView({ services, tab }: ViewProps) {
             <button className="secondary-button" type="button" onClick={addStep} disabled={draft.steps.length >= 32}><Plus size={13} /> Add step</button>
             <span className="workflow-step-hint">Runs in order and stops at the first failed step.</span>
           </div>
-          {validationError && <p className="workflow-validation"><CircleAlert size={13} /> {validationError}</p>}
+          {validationError && (draft.name.trim() || draft.steps.length > 0) && <p className="workflow-validation"><CircleAlert size={13} /> {validationError}</p>}
           <div className="workflow-save-actions"><button className="secondary-button" type="button" onClick={() => setDraft(null)}>Cancel</button><button className="primary-button" type="button" disabled={Boolean(validationError)} onClick={() => void saveWorkflow()}><Save size={13} /> Save workflow</button></div>
         </section>
       ) : (
         <div className="workflow-list" aria-live="polite">
           {workflows.map((workflow) => (
             <article className="workflow-row" key={workflow.id}>
-              <span className="workflow-row-icon"><Braces size={15} /></span>
+              <span className="workflow-row-icon"><Workflow size={15} /></span>
               <div className="workflow-row-copy"><strong>{workflow.name}</strong><span>{workflow.stepCount} step{workflow.stepCount === 1 ? '' : 's'} · {workflow.id}</span></div>
               <button className="icon-button" type="button" aria-label={`Run ${workflow.name}`} disabled={running} title="Run workflow" onClick={() => void runWorkflow(workflow.id)}>{running ? <Square size={14} /> : <Play size={14} />}</button>
               <button className="icon-button" type="button" aria-label={`Edit ${workflow.name}`} disabled={running} title="Edit workflow" onClick={() => void editWorkflow(workflow)}><Save size={13} /></button>
@@ -380,7 +380,7 @@ export function WorkflowsView({ services, tab }: ViewProps) {
             </article>
           ))}
           {!loading && workflows.length === 0 && !draft && <div className="workflow-empty">
-            <span className="empty-icon"><Braces size={20} /></span><strong>No workflows yet</strong>
+            <span className="empty-icon"><Workflow size={20} /></span><strong>No workflows yet</strong>
             <p>Build a sequence from saved Script Runner, API, and Browser Automation profiles.</p>
             <button className="secondary-button" type="button" onClick={() => createOrEdit()}><Plus size={13} /> Create a workflow</button>
           </div>}

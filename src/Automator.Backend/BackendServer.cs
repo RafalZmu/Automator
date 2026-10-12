@@ -47,6 +47,11 @@ public sealed class BackendServer : IAsyncDisposable
     private PlaywrightAutomationBrowserService? _browserAutomationService;
     private AutomationLibraryTransferService? _libraryTransferService;
     private AutomationVariableService? _variableService;
+    private IAutomationLibraryStore? _savedItemLibrary;
+    private IReadOnlyDictionary<string, string> _savedItemActions = new Dictionary<string, string>(StringComparer.Ordinal);
+    // Saved items Global Action Search can list before their tab has been opened (the tab view supplies the live command).
+    private static readonly (string ModuleId, string Collection)[] SavedItemSources =
+        [("script-runner", "profiles"), ("api", "profiles"), ("workflows", "profiles")];
     private AutomationRunActivityService? _runActivityService;
     private AutomationCapabilityRegistry? _capabilityRegistry;
     private AutomationModuleRegistry? _automationModules;
@@ -438,6 +443,10 @@ public sealed class BackendServer : IAsyncDisposable
                             parameters.ContractVersion, parameters.ActionVersion, parameters.Input, activeTab.Id,
                             context, _settings!.ModuleSettings, token).ConfigureAwait(false);
                         status = result.Status;
+                        if (SavedItemSources.Any(source => source.ModuleId == parameters.ModuleId)
+                            && (parameters.ActionId.StartsWith("save", StringComparison.Ordinal) || parameters.ActionId.StartsWith("delete", StringComparison.Ordinal))
+                            && await RefreshSavedItemActionsAsync().ConfigureAwait(false))
+                            await PublishStateAsync().ConfigureAwait(false);
                         return result;
                     }
                     catch (OperationCanceledException)
@@ -896,6 +905,7 @@ public sealed class BackendServer : IAsyncDisposable
         _keyboardEventHub = new AutomationKeyboardEventHub(_log);
         var libraryStore = new SqliteAutomationLibraryStore(Path.Combine(dataDirectory, "library.db"));
         _variableService = new AutomationVariableService(libraryStore);
+        _savedItemLibrary = libraryStore;
         _runActivityService = new AutomationRunActivityService(libraryStore);
         var processService = new LocalProcessExecutionService();
         IAutomationSecretManager secretManager;
@@ -1021,7 +1031,40 @@ public sealed class BackendServer : IAsyncDisposable
             }
         }
 
+        await RefreshSavedItemActionsAsync().ConfigureAwait(false);
         return new BackendInitializeResult(GetState(), hookInstalled, _keyboardHook.InstallErrorCode, _sessionId);
+    }
+
+    /// <summary>Re-reads saved profile names for Global Action Search. Returns true when the published list changed.</summary>
+    private async Task<bool> RefreshSavedItemActionsAsync()
+    {
+        var library = _savedItemLibrary;
+        if (library is null) return false;
+        var next = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (moduleId, collection) in SavedItemSources)
+        {
+            try
+            {
+                var records = await library.ListAsync(moduleId, collection, _lifetime.Token).ConfigureAwait(false);
+                var items = records
+                    .Select(record => (record.Id, Name: record.Data.ValueKind == JsonValueKind.Object && record.Data.TryGetProperty("name", out var name)
+                        && name.ValueKind == JsonValueKind.String ? name.GetString() : null))
+                    .Where(item => !string.IsNullOrWhiteSpace(item.Name) && item.Id.Length <= 64)
+                    .OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase)
+                    .Take(200)
+                    .Select(item => new { id = item.Id, name = item.Name!.Length > 96 ? item.Name[..96] : item.Name })
+                    .ToArray();
+                next[moduleId] = JsonSerializer.Serialize(items);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                next[moduleId] = "[]";
+            }
+        }
+        var previous = _savedItemActions;
+        var changed = next.Count != previous.Count || next.Any(pair => !previous.TryGetValue(pair.Key, out var value) || value != pair.Value);
+        _savedItemActions = next;
+        return changed;
     }
 
     private BackendUiState GetState()
@@ -1056,6 +1099,13 @@ public sealed class BackendServer : IAsyncDisposable
             {
                 // Invalid imported preferences are not exposed to Global Action Search; the tab reports the settings issue.
             }
+        }
+        var savedItemActions = _savedItemActions;
+        for (var index = 0; index < moduleStates.Length; index++)
+        {
+            if (!savedItemActions.TryGetValue(moduleStates[index].ModuleId, out var savedJson)) continue;
+            var values = new Dictionary<string, string>(moduleStates[index].Values, StringComparer.Ordinal) { ["savedItems"] = savedJson };
+            moduleStates[index] = moduleStates[index] with { Values = values };
         }
         return new BackendUiState(
             RpcProtocol.Version,
@@ -1103,7 +1153,7 @@ public sealed class BackendServer : IAsyncDisposable
         // A stale renderer context cannot authorize global navigation after a mode transition.
         var modeMatches = string.Equals(parameters.Mode, currentMode, StringComparison.Ordinal);
         Volatile.Write(ref _windowContext, new LauncherWindowContext(hwnd, parameters.Visible && modeMatches,
-            parameters.RendererFocused && modeMatches, parameters.NativeDialogActive, parameters.Mode, parameters.TextEntryFocused));
+            parameters.RendererFocused && modeMatches, parameters.NativeDialogActive, parameters.Mode));
         if (hwnd != IntPtr.Zero) _nativeChrome.Apply(hwnd);
         RefreshKeyboardDeliveryContext();
     }
@@ -1308,6 +1358,7 @@ public sealed class BackendServer : IAsyncDisposable
         _session!.ReplaceBindings(settings.Bindings);
         _launchScheduler!.CancelPending();
         ClearError();
+        await RefreshSavedItemActionsAsync().ConfigureAwait(false);
         await PublishStateAsync().ConfigureAwait(false);
         var warningCount = libraryResult?.Warnings.Count ?? 0;
         _log!.Write(ApplicationLogLevel.Information, "Backup.Imported", "An Automator backup was imported.",
@@ -1602,7 +1653,7 @@ public sealed class BackendServer : IAsyncDisposable
         var nativeForeground = modeMatches && !context.NativeDialogActive && context.Visible
             && context.Handle != IntPtr.Zero && WindowsForegroundWindow.CurrentHandle == context.Handle;
         var action = NavigationKeyPolicy.Decide(_session.NavigationState, nativeForeground,
-            context.RendererFocused && modeMatches, hasModifier: false, request.VirtualKey, context.TextEntryFocused);
+            context.RendererFocused && modeMatches, hasModifier: false, request.VirtualKey);
         switch (action)
         {
             case NavigationKeyAction.Close:
