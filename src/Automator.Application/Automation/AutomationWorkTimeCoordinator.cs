@@ -138,18 +138,49 @@ public sealed class AutomationWorkTimeCoordinator : IAutomationWorkTimeCoordinat
         }, cancellationToken);
     }
 
-    public Task<AutomationWorkTimeSnapshot> UpdateEntryAsync(string id, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
+    /// <summary>Registers a finished interval without the timer. Overlap with other entries is intentionally allowed.</summary>
+    public Task<AutomationWorkTimeSnapshot> CreateEntryAsync(DateTimeOffset startedUtc, DateTimeOffset stoppedUtc, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
+    {
+        var label = CleanDescription(description);
+        var cleanedTags = NormalizeTags(tags);
+        return OperateAsync(async (now, token) =>
+        {
+            ValidateInterval(startedUtc, stoppedUtc, now);
+            var entry = CreateSingleSegmentEntry(Guid.NewGuid().ToString("N"), startedUtc, stoppedUtc, label, cleanedTags);
+            ValidateEntry(entry);
+            await WriteEntryAsync(entry, token).ConfigureAwait(false);
+            _history.Add(entry);
+            _history.Sort((a, b) => a.StoppedUtc.CompareTo(b.StoppedUtc));
+            await PruneHistoryAsync(token).ConfigureAwait(false);
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Updates a saved entry. Changing its start or end collapses it into one segment spanning the new
+    /// interval; leaving both unchanged keeps the recorded pause gaps and duration.
+    /// </summary>
+    public Task<AutomationWorkTimeSnapshot> UpdateEntryAsync(string id, DateTimeOffset startedUtc, DateTimeOffset stoppedUtc, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
     {
         var entryId = CleanId(id);
         var label = CleanDescription(description);
         var cleanedTags = NormalizeTags(tags);
-        return OperateAsync(async (_, token) =>
+        return OperateAsync(async (now, token) =>
         {
             var index = _history.FindIndex(entry => entry.Id == entryId);
             if (index < 0) throw new InvalidOperationException("The saved work entry no longer exists.");
-            var entry = _history[index] with { Description = label, Tags = cleanedTags };
+            var existing = _history[index];
+            var timesChanged = startedUtc.ToUniversalTime() != existing.StartedUtc || stoppedUtc.ToUniversalTime() != existing.StoppedUtc;
+            AutomationWorkTimeEntry entry;
+            if (timesChanged)
+            {
+                ValidateInterval(startedUtc, stoppedUtc, now);
+                entry = CreateSingleSegmentEntry(entryId, startedUtc, stoppedUtc, label, cleanedTags);
+            }
+            else entry = existing with { Description = label, Tags = cleanedTags };
+            ValidateEntry(entry);
             await WriteEntryAsync(entry, token).ConfigureAwait(false);
             _history[index] = entry;
+            if (timesChanged) _history.Sort((a, b) => a.StoppedUtc.CompareTo(b.StoppedUtc));
         }, cancellationToken);
     }
 
@@ -252,6 +283,21 @@ public sealed class AutomationWorkTimeCoordinator : IAutomationWorkTimeCoordinat
             await _libraryStore.DeleteAsync(ModuleId, HistoryCollection, _history[0].Id, token).ConfigureAwait(false);
             _history.RemoveAt(0);
         }
+    }
+
+    private static AutomationWorkTimeEntry CreateSingleSegmentEntry(string id, DateTimeOffset startedUtc, DateTimeOffset stoppedUtc, string description, IReadOnlyList<string> tags)
+    {
+        var start = startedUtc.ToUniversalTime();
+        var stop = stoppedUtc.ToUniversalTime();
+        return new AutomationWorkTimeEntry(id, start, stop, (long)(stop - start).TotalMilliseconds, description, tags, [new(start, stop)]);
+    }
+
+    private static void ValidateInterval(DateTimeOffset startedUtc, DateTimeOffset stoppedUtc, DateTimeOffset now)
+    {
+        if (startedUtc == default || stoppedUtc == default)
+            throw new InvalidDataException("Enter both a start and an end time for the work entry.");
+        if (stoppedUtc <= startedUtc) throw new InvalidDataException("The end time must be after the start time.");
+        if (stoppedUtc > now) throw new InvalidDataException("The end time cannot be in the future.");
     }
 
     private static string CleanId(string id)

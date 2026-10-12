@@ -402,10 +402,16 @@ public sealed class AutomationServicesContext : IAsyncDisposable
             return await inner.SaveEntryAsync(id, description, tags, linked.Token).ConfigureAwait(false);
         }
 
-        public async Task<AutomationWorkTimeSnapshot> UpdateEntryAsync(string id, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
+        public async Task<AutomationWorkTimeSnapshot> CreateEntryAsync(DateTimeOffset startedUtc, DateTimeOffset stoppedUtc, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);
-            return await inner.UpdateEntryAsync(id, description, tags, linked.Token).ConfigureAwait(false);
+            return await inner.CreateEntryAsync(startedUtc, stoppedUtc, description, tags, linked.Token).ConfigureAwait(false);
+        }
+
+        public async Task<AutomationWorkTimeSnapshot> UpdateEntryAsync(string id, DateTimeOffset startedUtc, DateTimeOffset stoppedUtc, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
+        {
+            using var linked = Link(context, cancellationToken);
+            return await inner.UpdateEntryAsync(id, startedUtc, stoppedUtc, description, tags, linked.Token).ConfigureAwait(false);
         }
 
         public async Task<AutomationWorkTimeSnapshot> DeleteEntryAsync(string id, CancellationToken cancellationToken)

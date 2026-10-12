@@ -144,6 +144,68 @@ export function workTimeEntryDurationMilliseconds(entry: Pick<WorkTimeEntry, 'st
     : entry.durationMilliseconds;
 }
 
+function pad(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/** Formats an instant as a local `datetime-local` value, keeping seconds so edited entries are not shifted. */
+export function localDateTimeInputValue(iso: string): string {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return '';
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+/** Converts a local `datetime-local` value to a UTC ISO string, or null when it is incomplete or does not exist (e.g. 02:30 on a DST gap day). */
+export function workTimeInputToIso(value: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = match[6] === undefined ? 0 : Number(match[6]);
+  const date = new Date(year, month - 1, day, hour, minute, second);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day
+      || date.getHours() !== hour || date.getMinutes() !== minute || date.getSeconds() !== second) return null;
+  return date.toISOString();
+}
+
+export function validateWorkTimeInterval(startedUtc: string, stoppedUtc: string, now = Date.now()): string | null {
+  const start = Date.parse(startedUtc);
+  const stop = Date.parse(stoppedUtc);
+  if (!Number.isFinite(start) || !Number.isFinite(stop)) return 'Enter a valid start and end time.';
+  if (stop <= start) return 'The end time must be after the start time.';
+  if (stop > now) return 'The end time cannot be in the future.';
+  return null;
+}
+
+export type WorkTimeIntervalInput = { startedUtc: string; stoppedUtc: string } | { error: string };
+
+/**
+ * Resolves start and end form values into UTC timestamps. An untouched field keeps the saved
+ * original instant, so editing only the description never rounds stored milliseconds or, for an
+ * entry with pauses, triggers the backend's collapse into a single segment.
+ */
+export function resolveWorkTimeInterval(
+  startValue: string,
+  stopValue: string,
+  original: { startedUtc: string; stoppedUtc: string } | null = null,
+  now = Date.now(),
+): WorkTimeIntervalInput {
+  const startedUtc = original && startValue === localDateTimeInputValue(original.startedUtc)
+    ? original.startedUtc
+    : workTimeInputToIso(startValue);
+  const stoppedUtc = original && stopValue === localDateTimeInputValue(original.stoppedUtc)
+    ? original.stoppedUtc
+    : workTimeInputToIso(stopValue);
+  if (!startedUtc || !stoppedUtc) return { error: 'Enter a valid start and end time.' };
+  // An untouched interval is already saved, so it stays valid even if clock changes make it look odd.
+  const unchanged = original && startedUtc === original.startedUtc && stoppedUtc === original.stoppedUtc;
+  const error = unchanged ? null : validateWorkTimeInterval(startedUtc, stoppedUtc, now);
+  return error ? { error } : { startedUtc, stoppedUtc };
+}
+
 export function formatWorkTimeDuration(milliseconds: number): string {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1_000));
   if (totalSeconds < 60) return `${totalSeconds}s`;

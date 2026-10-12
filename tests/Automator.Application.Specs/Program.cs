@@ -630,7 +630,7 @@ static async Task FocusSessionModuleDispatchesCoordinatorActions()
     Check.Equal(2, module.Definition.ContractVersion);
     Check.Equal("focus-sessions", module.Definition.ViewKind);
     Check.True(module.Definition.Actions.Select(action => action.Id)
-        .SequenceEqual(["getSnapshot", "start", "pause", "resume", "end", "saveEntry", "updateEntry", "deleteEntry", "discardTimer", "discardPending"]));
+        .SequenceEqual(["getSnapshot", "start", "pause", "resume", "end", "saveEntry", "createEntry", "updateEntry", "deleteEntry", "discardTimer", "discardPending"]));
     Check.True(module.Definition.Actions.All(action => action.RequiredCapabilities.Contains(
         new AutomationCapabilityRequirement(AutomationCapabilityIds.WorkTimeManagement, 1))));
 
@@ -661,17 +661,33 @@ static async Task FocusSessionModuleDispatchesCoordinatorActions()
     Check.Equal("Review release", coordinator.LastDescription);
     Check.True(coordinator.LastTags.SequenceEqual(["work", "review"]));
 
+    var missingInterval = await registry.DispatchAsync(module.Id, "createEntry", 2, 2,
+        JsonDocument.Parse("""{"description":"Review release","tags":[]}""").RootElement,
+        module.Id, services, settings, CancellationToken.None);
+    Check.Equal(AutomationStatus.Error, missingInterval.Status);
+    Check.Equal(0, coordinator.CreateCount);
+
+    var created = await registry.DispatchAsync(module.Id, "createEntry", 2, 2,
+        JsonDocument.Parse("""{"startedUtc":"2026-10-03T09:00:00Z","stoppedUtc":"2026-10-03T10:30:00+02:00","description":"Planning","tags":["work"]}""").RootElement,
+        module.Id, services, settings, CancellationToken.None);
+    Check.Equal(AutomationStatus.Success, created.Status);
+    Check.Equal(1, coordinator.CreateCount);
+    Check.Equal(new DateTimeOffset(2026, 10, 3, 9, 0, 0, TimeSpan.Zero), coordinator.LastStartedUtc);
+    Check.Equal(new DateTimeOffset(2026, 10, 3, 8, 30, 0, TimeSpan.Zero), coordinator.LastStoppedUtc);
+    Check.Equal("Planning", coordinator.LastDescription);
+
     var invalidUpdate = await registry.DispatchAsync(module.Id, "updateEntry", 2, 2,
-        JsonDocument.Parse("""{"id":"entry-1","description":"  ","tags":[]}""").RootElement,
+        JsonDocument.Parse("""{"id":"entry-1","startedUtc":"2026-10-03T09:00:00Z","stoppedUtc":"2026-10-03T10:00:00Z","description":"  ","tags":[]}""").RootElement,
         module.Id, services, settings, CancellationToken.None);
     Check.Equal(AutomationStatus.Error, invalidUpdate.Status);
     Check.Equal(0, coordinator.UpdateCount);
 
     var updated = await registry.DispatchAsync(module.Id, "updateEntry", 2, 2,
-        JsonDocument.Parse("""{"id":"entry-1","description":"Corrected work","tags":["planning"]}""").RootElement,
+        JsonDocument.Parse("""{"id":"entry-1","startedUtc":"2026-10-03T09:00:00Z","stoppedUtc":"2026-10-03T10:00:00Z","description":"Corrected work","tags":["planning"]}""").RootElement,
         module.Id, services, settings, CancellationToken.None);
     Check.Equal(AutomationStatus.Success, updated.Status);
     Check.Equal("entry-1", coordinator.LastUpdatedId);
+    Check.Equal(new DateTimeOffset(2026, 10, 3, 10, 0, 0, TimeSpan.Zero), coordinator.LastStoppedUtc);
     Check.Equal("Corrected work", coordinator.LastDescription);
     Check.True(coordinator.LastTags.SequenceEqual(["planning"]));
 
@@ -684,7 +700,7 @@ static async Task FocusSessionModuleDispatchesCoordinatorActions()
         JsonDocument.Parse("""{"id":"entry-1"}""").RootElement, module.Id, services, settings, CancellationToken.None);
     Check.Equal(AutomationStatus.Success, deleted.Status);
     Check.Equal("entry-1", coordinator.LastDeletedId);
-    Check.True(coordinator.Calls.SequenceEqual(["getSnapshot", "start", "pause", "resume", "end", "discardTimer", "discardPending", "saveEntry", "updateEntry", "deleteEntry"]));
+    Check.True(coordinator.Calls.SequenceEqual(["getSnapshot", "start", "pause", "resume", "end", "discardTimer", "discardPending", "saveEntry", "createEntry", "updateEntry", "deleteEntry"]));
     var priorCalls = coordinator.Calls.Count;
     foreach (var action in new[] { "start", "pause", "resume", "end", "discardTimer", "discardPending", "saveEntry" })
     {
@@ -1505,8 +1521,11 @@ sealed class RecordingWorkTimeCoordinator : IAutomationWorkTimeCoordinator
 {
     public List<string> Calls { get; } = [];
     public int SaveCount { get; private set; }
+    public int CreateCount { get; private set; }
     public int UpdateCount { get; private set; }
     public int DeleteCount { get; private set; }
+    public DateTimeOffset LastStartedUtc { get; private set; }
+    public DateTimeOffset LastStoppedUtc { get; private set; }
     public string? LastTargetId { get; private set; }
     public string? LastDescription { get; private set; }
     public string? LastUpdatedId { get; private set; }
@@ -1548,12 +1567,26 @@ sealed class RecordingWorkTimeCoordinator : IAutomationWorkTimeCoordinator
         return Task.FromResult(Snapshot());
     }
 
-    public Task<AutomationWorkTimeSnapshot> UpdateEntryAsync(string id, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
+    public Task<AutomationWorkTimeSnapshot> CreateEntryAsync(DateTimeOffset startedUtc, DateTimeOffset stoppedUtc, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Calls.Add("createEntry");
+        CreateCount++;
+        LastStartedUtc = startedUtc;
+        LastStoppedUtc = stoppedUtc;
+        LastDescription = description;
+        LastTags = tags.ToArray();
+        return Task.FromResult(Snapshot());
+    }
+
+    public Task<AutomationWorkTimeSnapshot> UpdateEntryAsync(string id, DateTimeOffset startedUtc, DateTimeOffset stoppedUtc, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         Calls.Add("updateEntry");
         UpdateCount++;
         LastUpdatedId = id;
+        LastStartedUtc = startedUtc;
+        LastStoppedUtc = stoppedUtc;
         LastDescription = description;
         LastTags = tags.ToArray();
         return Task.FromResult(Snapshot());

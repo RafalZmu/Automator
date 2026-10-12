@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Automator.Application.Launcher;
@@ -32,6 +33,7 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
             new("resume", 2, [WorkTimeCapability]),
             new("end", 2, [WorkTimeCapability]),
             new("saveEntry", 2, [WorkTimeCapability]),
+            new("createEntry", 2, [WorkTimeCapability]),
             new("updateEntry", 2, [WorkTimeCapability]),
             new("deleteEntry", 2, [WorkTimeCapability]),
             new("discardTimer", 2, [WorkTimeCapability]),
@@ -82,6 +84,7 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
                 "resume" => SnapshotResult(await coordinator.ResumeAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Work timer resumed."),
                 "end" => SnapshotResult(await coordinator.EndAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Work timer ended. Review and save the entry."),
                 "saveEntry" => await SaveEntryAsync(coordinator, input, cancellationToken).ConfigureAwait(false),
+                "createEntry" => await CreateEntryAsync(coordinator, input, cancellationToken).ConfigureAwait(false),
                 "updateEntry" => await UpdateEntryAsync(coordinator, input, cancellationToken).ConfigureAwait(false),
                 "deleteEntry" => await DeleteEntryAsync(coordinator, input, cancellationToken).ConfigureAwait(false),
                 "discardTimer" => SnapshotResult(await coordinator.DiscardTimerAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Paused timer discarded."),
@@ -117,9 +120,37 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
         CancellationToken cancellationToken)
     {
         var id = ReadEntryId(input);
+        var (startedUtc, stoppedUtc) = ReadIntervalInput(input);
         var (description, tags) = ReadEntryInput(input);
-        var snapshot = await coordinator.UpdateEntryAsync(id, description, tags, cancellationToken).ConfigureAwait(false);
+        var snapshot = await coordinator.UpdateEntryAsync(id, startedUtc, stoppedUtc, description, tags, cancellationToken).ConfigureAwait(false);
         return SnapshotResult(snapshot, "Work-time entry updated.");
+    }
+
+    private static async ValueTask<AutomationResult> CreateEntryAsync(
+        IAutomationWorkTimeCoordinator coordinator,
+        JsonElement input,
+        CancellationToken cancellationToken)
+    {
+        var (startedUtc, stoppedUtc) = ReadIntervalInput(input);
+        var (description, tags) = ReadEntryInput(input);
+        var snapshot = await coordinator.CreateEntryAsync(startedUtc, stoppedUtc, description, tags, cancellationToken).ConfigureAwait(false);
+        return SnapshotResult(snapshot, "Work-time entry added.");
+    }
+
+    private static (DateTimeOffset StartedUtc, DateTimeOffset StoppedUtc) ReadIntervalInput(JsonElement input)
+    {
+        if (input.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("Work-time entry input must be an object.");
+        return (ReadTimestamp(input, "startedUtc"), ReadTimestamp(input, "stoppedUtc"));
+    }
+
+    private static DateTimeOffset ReadTimestamp(JsonElement input, string name)
+    {
+        if (!input.TryGetProperty(name, out var value)
+            || value.ValueKind != JsonValueKind.String
+            || !DateTimeOffset.TryParse(value.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var timestamp))
+            throw new InvalidDataException("Enter a valid start and end time for the work entry.");
+        return timestamp.ToUniversalTime();
     }
 
     private static async ValueTask<AutomationResult> DeleteEntryAsync(

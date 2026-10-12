@@ -34,7 +34,8 @@ public interface IAutomationWorkTimeCoordinator
     Task<AutomationWorkTimeSnapshot> ResumeAsync(string id, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> EndAsync(string id, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> SaveEntryAsync(string id, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken);
-    Task<AutomationWorkTimeSnapshot> UpdateEntryAsync(string id, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken);
+    Task<AutomationWorkTimeSnapshot> CreateEntryAsync(DateTimeOffset startedUtc, DateTimeOffset stoppedUtc, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken);
+    Task<AutomationWorkTimeSnapshot> UpdateEntryAsync(string id, DateTimeOffset startedUtc, DateTimeOffset stoppedUtc, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> DeleteEntryAsync(string id, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> DiscardTimerAsync(string id, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> DiscardPendingAsync(string id, CancellationToken cancellationToken);

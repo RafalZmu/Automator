@@ -92,6 +92,26 @@ Run focused model cases with node --experimental-strip-types --test --test-concu
 
 **Expected result:** Milliseconds and timestamps are exact; CSV quoting escapes delimiters and quotes, and the formula-like description is prefixed safely.
 
+### work-time manual entries convert local datetime fields and reject invalid intervals
+
+**Steps**
+
+1. Convert local `datetime-local` values with and without seconds, and reject overflowing dates and non-matching formats.
+2. Validate a valid interval, a reversed or zero-length interval, a future end, and an unparsable start.
+3. Resolve a complete form interval and an interval with an empty end field.
+
+**Expected result:** Valid local times become UTC instants; invalid intervals return the matching message and never produce a timestamp.
+
+### work-time edits keep the stored instant when a time field is untouched
+
+**Steps**
+
+1. Format a saved entry's start and end, with sub-second precision, into form fields.
+2. Resolve the unchanged fields against the original entry and then change only the start.
+3. Resolve a reversed edit.
+
+**Expected result:** Unchanged fields keep the exact original instants including milliseconds; a changed field is converted from local time; a reversed edit is rejected.
+
 ## Legacy Focus Sessions view-model compatibility — tests/electron/focus-sessions-model.test.cjs
 
 The test filename and view-model module retain the old Focus Sessions name for compatibility. These cases cover countdown formatting and snapshot parsing used by the legacy model; they are not the current Work Time interval report flow.
@@ -221,6 +241,30 @@ The coordinator and API cases below are executed by `npm.cmd run test:dotnet`. R
 
 **Expected result:** Metadata changes preserve all timing and segments; deletion removes the durable record and repeating deletion fails.
 
+### manual work entries register an explicit single-segment interval, allow overlaps, and validate bounds
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Start a timer, then add a manual entry with an explicit start and end and a tag.
+2. Add an entry that overlaps the first and a 1.234-second entry.
+3. Try a zero-length interval, a reversed interval, a future end, and a blank description.
+
+**Expected result:** Each valid entry is saved as one segment with an exact duration and a durable record, overlaps are allowed, the running timer is untouched, and every invalid attempt is rejected without changing history.
+
+### changing a saved entry's times collapses its pauses while unchanged times keep them
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Save an entry made of two segments separated by a pause.
+2. Edit only its description with the original start and end.
+3. Edit its start and end, then try a reversed and a future interval.
+
+**Expected result:** Unchanged times keep both segments and the duration; changed times produce a single segment whose duration equals the new interval, the history stays ordered by end time, and invalid intervals leave the entry unchanged.
+
 ### active work time persists across backend restart
 
 **Source:** tests/Automator.Focus.Specs/Program.cs
@@ -313,7 +357,7 @@ The coordinator and API cases below are executed by `npm.cmd run test:dotnet`. R
 
 1. Register the Work Time module and verify all declared version 2 action IDs.
 2. Dispatch getSnapshot, start, pause, resume, end, discardTimer, and discardPending; inspect snapshot keys and target IDs.
-3. Save, update, and delete specific entries, checking descriptions, tags, and IDs.
+3. Create an entry from timestamps (including a non-UTC offset), and save, update, and delete specific entries, checking descriptions, tags, intervals, and IDs.
 4. Reject missing inputs, invalid descriptions/tags, and stale module/action version 1 requests.
 
 **Expected result:** Only valid version 2 inputs reach the coordinator. Snapshots expose timers, pendingEntries, and history; all state-changing actions target the supplied ID and the shared result envelope remains supported.

@@ -13,7 +13,9 @@ import {
   formatWorkTimeDuration,
   getWorkTimeTags,
   isWorkTimeDescriptionValid,
+  localDateTimeInputValue,
   readWorkTimeSnapshot,
+  resolveWorkTimeInterval,
   workTimeEntryDurationMilliseconds,
   type WorkTimeReportFilter,
   type WorkTimeSnapshot,
@@ -37,9 +39,15 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
   const [workingPeriodOnly, setWorkingPeriodOnly] = useState(false);
   const [reportFilter, setReportFilter] = useState<WorkTimeReportFilter>({ fromDate: '', toDate: '', tag: '' });
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editStart, setEditStart] = useState('');
+  const [editStop, setEditStop] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editTags, setEditTags] = useState('');
   const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
+  const [manualStart, setManualStart] = useState('');
+  const [manualStop, setManualStop] = useState('');
+  const [manualDescription, setManualDescription] = useState('');
+  const [manualTags, setManualTags] = useState('');
   const startDescriptionRef = useRef<HTMLInputElement>(null);
   const alive = useRef(true);
 
@@ -129,20 +137,60 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
 
   const beginEdit = (entry: WorkTimeSnapshot['history'][number]) => {
     setEditingEntryId(entry.id);
+    setEditStart(localDateTimeInputValue(entry.startedUtc));
+    setEditStop(localDateTimeInputValue(entry.stoppedUtc));
     setEditDescription(entry.description);
     setEditTags(entry.tags.join(', '));
     setDeleteCandidateId(null);
   };
 
+  const editingEntry = snapshot?.history.find((entry) => entry.id === editingEntryId) ?? null;
+  const editInterval = editingEntry ? resolveWorkTimeInterval(editStart, editStop, editingEntry, now) : null;
+  const editError = editInterval && 'error' in editInterval ? editInterval.error : '';
+  const editCollapsesPauses = !!editingEntry && editingEntry.segments.length > 1 && !!editInterval && 'startedUtc' in editInterval
+    && (editInterval.startedUtc !== editingEntry.startedUtc || editInterval.stoppedUtc !== editingEntry.stoppedUtc);
+
   const saveEdit = async () => {
-    if (!editingEntryId) return;
-    const id = editingEntryId;
+    if (!editingEntry) return;
+    const interval = resolveWorkTimeInterval(editStart, editStop, editingEntry);
+    if ('error' in interval) {
+      setNotice(interval.error);
+      return;
+    }
     const ok = await dispatch('updateEntry', {
-      id,
+      id: editingEntry.id,
+      startedUtc: interval.startedUtc,
+      stoppedUtc: interval.stoppedUtc,
       description: editDescription.trim(),
       tags: editTags.split(',').map((tag) => tag.trim()).filter(Boolean),
     });
     if (ok) setEditingEntryId(null);
+  };
+
+  const manualInterval = manualStart && manualStop ? resolveWorkTimeInterval(manualStart, manualStop, null, now) : null;
+  const manualError = manualInterval && 'error' in manualInterval ? manualInterval.error : '';
+  const manualDurationLabel = manualInterval && 'startedUtc' in manualInterval
+    ? formatWorkTimeDuration(Date.parse(manualInterval.stoppedUtc) - Date.parse(manualInterval.startedUtc))
+    : '';
+  const manualDescriptionValue = manualDescription.trim();
+  const submitManualEntry = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const interval = resolveWorkTimeInterval(manualStart, manualStop, null, Date.now());
+    if ('error' in interval) {
+      setNotice(interval.error);
+      return;
+    }
+    const ok = await dispatch('createEntry', {
+      startedUtc: interval.startedUtc,
+      stoppedUtc: interval.stoppedUtc,
+      description: manualDescriptionValue,
+      tags: manualTags.split(',').map((tag) => tag.trim()).filter(Boolean),
+    });
+    if (!ok) return;
+    setManualStart('');
+    setManualStop('');
+    setManualDescription('');
+    setManualTags('');
   };
 
   const deleteEntry = async (id: string) => {
@@ -170,6 +218,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
   const commands = useMemo(() => [
     { id: 'toggle-work', label: 'Work timer shortcut', keywords: ['start pause shortcut s'], disabled: !!busy || !snapshot, run: toggleWorkTimer },
     { id: 'start-work', label: 'Start work timer', keywords: ['begin named timer'], disabled: !!busy || !snapshot || !!runningTimer || !cleanedStartDescription, run: startTimer },
+    { id: 'add-work-entry-manually', label: 'Add work entry manually', keywords: ['register time without timer log past interval'], disabled: !!busy || !snapshot, run: () => { document.getElementById('work-time-manual-start')?.focus(); } },
     ...(runningTimer ? [{ id: `pause-work-${runningTimer.id}`, label: `Pause ${runningTimer.description}`, keywords: ['pause timer'], disabled: !!busy, run: async () => { await dispatch('pause', { id: runningTimer.id }); } }] : []),
     ...((snapshot?.timers ?? []).filter((timer) => timer.status === 'paused').flatMap((timer) => [
       { id: `resume-work-${timer.id}`, label: `Resume ${timer.description}`, keywords: ['continue timer'], disabled: !!busy || !!runningTimer, run: async () => { await dispatch('resume', { id: timer.id }); } },
@@ -217,6 +266,38 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
           </label>
           <div className="work-time-entry-actions">
             <button className="primary-button" type="submit" disabled={!!busy || !!runningTimer || !cleanedStartDescription}><Play size={13} /> {busy === 'start' ? 'Starting…' : 'Start timer'}</button>
+          </div>
+        </form>
+      </section>
+
+      <section className="work-time-entry-card work-time-manual-card" aria-label="Add a work entry manually">
+        <header><div><Clock3 size={14} /><h2>Add time without the timer</h2></div><span>{manualDurationLabel}</span></header>
+        <form onSubmit={(event) => void submitManualEntry(event)}>
+          <div className="work-time-manual-times">
+            <label className="work-time-field">
+              <span>Start <b>Required</b></span>
+              <input id="work-time-manual-start" aria-label="Manual entry start" type="datetime-local" step={1} value={manualStart}
+                disabled={!!busy} onChange={(event) => setManualStart(event.target.value)} />
+            </label>
+            <label className="work-time-field">
+              <span>End <b>Required</b></span>
+              <input aria-label="Manual entry end" type="datetime-local" step={1} value={manualStop}
+                disabled={!!busy} onChange={(event) => setManualStop(event.target.value)} />
+            </label>
+          </div>
+          {manualError && <p className="work-time-field-error" role="alert">{manualError}</p>}
+          <label className="work-time-field">
+            <span>Description <b>Required</b></span>
+            <textarea aria-label="Manual entry description" value={manualDescription} maxLength={500} rows={2} placeholder="What did you work on?"
+              disabled={!!busy} onChange={(event) => setManualDescription(event.target.value)} />
+          </label>
+          <label className="work-time-field">
+            <span>Tags <b>Optional</b></span>
+            <div className="work-time-tags-input"><Tag size={13} /><input aria-label="Manual entry tags" value={manualTags} maxLength={500} placeholder="planning, release, bug fix"
+              disabled={!!busy} onChange={(event) => setManualTags(event.target.value)} /><small>Separate with commas</small></div>
+          </label>
+          <div className="work-time-entry-actions">
+            <button className="primary-button" type="submit" disabled={!!busy || !manualDescriptionValue || !manualStart || !manualStop || !!manualError}><Check size={13} /> Add entry</button>
           </div>
         </form>
       </section>
@@ -299,10 +380,14 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
             const isDeleting = deleteCandidateId === entry.id;
             return <article className="work-time-report-row" key={entry.id}>
               {isEditing ? <form className="work-time-edit-form" onSubmit={(event) => { event.preventDefault(); void saveEdit(); }}>
+                <label><span>Start</span><input aria-label="Edit work start time" type="datetime-local" step={1} value={editStart} onChange={(event) => setEditStart(event.target.value)} disabled={!!busy} /></label>
+                <label><span>End</span><input aria-label="Edit work end time" type="datetime-local" step={1} value={editStop} onChange={(event) => setEditStop(event.target.value)} disabled={!!busy} /></label>
                 <label><span>Description</span><input aria-label="Edit work description" maxLength={500} value={editDescription} onChange={(event) => setEditDescription(event.target.value)} disabled={!!busy} /></label>
                 <label><span>Tags</span><input aria-label="Edit work tags" maxLength={500} value={editTags} onChange={(event) => setEditTags(event.target.value)} disabled={!!busy} /></label>
+                {editError && <p className="work-time-field-error work-time-edit-error" role="alert">{editError}</p>}
+                {!editError && editCollapsesPauses && <p className="work-time-field-hint work-time-edit-error">Changing the start or end replaces this entry's pauses with one continuous interval.</p>}
                 <div className="work-time-report-actions">
-                  <button className="primary-button" type="submit" disabled={!!busy || !editDescription.trim()}><Check size={12} /> Save work entry changes</button>
+                  <button className="primary-button" type="submit" disabled={!!busy || !editDescription.trim() || !!editError}><Check size={12} /> Save work entry changes</button>
                   <button className="secondary-button" type="button" disabled={!!busy} onClick={() => setEditingEntryId(null)}>Cancel work entry changes</button>
                 </div>
               </form> : <>

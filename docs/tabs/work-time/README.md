@@ -2,7 +2,9 @@
 
 Work Time logs elapsed work intervals rather than running a Pomodoro cycle. Start a named timer with a required description. Keep several timers paused between tasks while at most one timer runs. Pause the current timer before starting another; resume or end any paused timer later. Ended timers become independent drafts with editable descriptions and optional tags. Save or discard each draft separately. Durations retain seconds, including intervals shorter than one minute.
 
-The history supports filtering by date and tag, editing or deleting entries, viewing totals, and exporting a CSV report. Multiple timers and ended drafts remain available after a restart.
+Time can also be registered without any timer. The “Add time without the timer” card (Launcher and Workspace) takes a start and end time, a required description, and optional tags, and saves a finished entry as one continuous segment. The end must be after the start and cannot be in the future. Manual entries may overlap other entries, and they do not affect running timers or drafts.
+
+The history supports filtering by date and tag, editing or deleting entries, viewing totals, and exporting a CSV report. Editing a saved entry can also correct its start and end times. Changing either time replaces the entry with one continuous segment from the new start to the new end, so any pauses it had are removed and its duration becomes the new interval; the edit form warns about this for entries with pauses. Saving with both times unchanged keeps the entry's pauses, segments, and exact timestamps. Multiple timers and ended drafts remain available after a restart.
 
 While this tab is active, press **S** to pause the running timer, or focus the New timer description when none is running. It never chooses a paused timer to resume. The shortcut is also listed in the tab command menu and does not run while editing text.
 
@@ -26,7 +28,9 @@ See [TESTS.md](TESTS.md) for interval, duration, report, shortcut, and Workspace
 
 The Work Time module now exposes contract/action version 2. The shared RPC result envelope stays version 1, and settings stay version 1. Its snapshot is `{ timers, pendingEntries, history }`.
 
-`start {description}` creates a named running timer. `pause {id}` retains the timer and closes its current segment; `resume {id}` starts a new segment when no timer is running. `end {id}` moves either a running or paused timer into an unsaved draft. Ending a paused timer leaves a different running timer intact. `discardTimer {id}` removes only a paused timer. `saveEntry {id, description, tags}` and `discardPending {id}` target one ended draft. Saved history still supports `updateEntry` and `deleteEntry` with IDs.
+`createEntry {startedUtc, stoppedUtc, description, tags}` saves a finished single-segment entry without a timer, and `updateEntry {id, startedUtc, stoppedUtc, description, tags}` edits a saved entry; both take ISO timestamps and reject an end that is not after the start or is in the future. `updateEntry` with unchanged times keeps the entry's segments; changed times collapse it to one segment and recalculate `durationMilliseconds`. Overlapping entries are allowed.
+
+`start {description}` creates a named running timer. `pause {id}` retains the timer and closes its current segment; `resume {id}` starts a new segment when no timer is running. `end {id}` moves either a running or paused timer into an unsaved draft. Ending a paused timer leaves a different running timer intact. `discardTimer {id}` removes only a paused timer. `saveEntry {id, description, tags}` and `discardPending {id}` target one ended draft. Saved history supports `createEntry`, `updateEntry`, and `deleteEntry`.
 
 Timer fields are `id`, `description`, `startedUtc`, `status` (`running` or `paused`), `elapsedMilliseconds`, `sampledUtc`, and ordered `segments`. A running timer has one open final segment with `stoppedUtc: null`; drafts and saved entries contain completed segments. Paused duration is excluded from the accumulated elapsed time.
 

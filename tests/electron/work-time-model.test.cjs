@@ -175,3 +175,44 @@ test('work-time CSV export preserves exact milliseconds and escapes spreadsheet 
     '"work-1","2026-10-07T07:00:00.000Z","2026-10-07T07:00:01.234Z","1.234","1234","\'=SUM(1,""2"")","planning, review"',
   ].join('\r\n'));
 });
+
+test('work-time manual entries convert local datetime fields and reject invalid intervals', async () => {
+  const { resolveWorkTimeInterval, validateWorkTimeInterval, workTimeInputToIso } = await import(modelUrl);
+  const now = new Date(2026, 9, 7, 12, 0, 0).getTime();
+
+  assert.equal(workTimeInputToIso('2026-10-07T09:15'), new Date(2026, 9, 7, 9, 15).toISOString());
+  assert.equal(workTimeInputToIso('2026-10-07T09:15:30'), new Date(2026, 9, 7, 9, 15, 30).toISOString());
+  assert.equal(workTimeInputToIso('2026-02-31T09:15'), null, 'overflowing calendar days are rejected');
+  assert.equal(workTimeInputToIso('2026-10-07 09:15'), null, 'only the datetime-local format is accepted');
+  assert.equal(workTimeInputToIso(''), null);
+
+  const start = new Date(2026, 9, 7, 9, 0, 0).toISOString();
+  const stop = new Date(2026, 9, 7, 10, 30, 0).toISOString();
+  assert.equal(validateWorkTimeInterval(start, stop, now), null);
+  assert.equal(validateWorkTimeInterval(stop, start, now), 'The end time must be after the start time.');
+  assert.equal(validateWorkTimeInterval(start, start, now), 'The end time must be after the start time.');
+  assert.equal(validateWorkTimeInterval(start, new Date(2026, 9, 7, 13).toISOString(), now), 'The end time cannot be in the future.');
+  assert.equal(validateWorkTimeInterval('not a date', stop, now), 'Enter a valid start and end time.');
+
+  assert.deepEqual(resolveWorkTimeInterval('2026-10-07T09:00', '2026-10-07T10:30', null, now), { startedUtc: start, stoppedUtc: stop });
+  assert.deepEqual(resolveWorkTimeInterval('2026-10-07T10:30', '2026-10-07T09:00', null, now), { error: 'The end time must be after the start time.' });
+  assert.deepEqual(resolveWorkTimeInterval('2026-10-07T09:00', '', null, now), { error: 'Enter a valid start and end time.' });
+});
+
+test('work-time edits keep the stored instant when a time field is untouched', async () => {
+  const { localDateTimeInputValue, resolveWorkTimeInterval } = await import(modelUrl);
+  const now = new Date(2026, 9, 7, 12, 0, 0).getTime();
+  const original = {
+    startedUtc: new Date(2026, 9, 7, 9, 0, 0, 250).toISOString(),
+    stoppedUtc: new Date(2026, 9, 7, 10, 0, 0, 750).toISOString(),
+  };
+
+  assert.equal(localDateTimeInputValue(original.startedUtc), '2026-10-07T09:00:00');
+  assert.deepEqual(resolveWorkTimeInterval(localDateTimeInputValue(original.startedUtc), localDateTimeInputValue(original.stoppedUtc), original, now),
+    original, 'milliseconds survive an edit that changes nothing about the times');
+
+  const moved = resolveWorkTimeInterval('2026-10-07T09:30:00', localDateTimeInputValue(original.stoppedUtc), original, now);
+  assert.deepEqual(moved, { startedUtc: new Date(2026, 9, 7, 9, 30, 0).toISOString(), stoppedUtc: original.stoppedUtc });
+  assert.deepEqual(resolveWorkTimeInterval('2026-10-07T10:30:00', '2026-10-07T10:00:00', original, now),
+    { error: 'The end time must be after the start time.' });
+});

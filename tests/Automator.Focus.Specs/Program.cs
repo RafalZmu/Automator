@@ -15,6 +15,8 @@ var checks = new (string Name, Func<Task> Run)[]
     ("paused work time resumes accumulated time and discards by ID", WorkTimePendingCanResumeAndDiscard),
     ("saved work-time entries can be edited and deleted without losing interval timing", WorkTimeEntriesCanBeEditedAndDeleted),
     ("active work time persists across backend restart", ActiveWorkTimeSurvivesRestart),
+    ("manual work entries register an explicit single-segment interval, allow overlaps, and validate bounds", ManualWorkTimeEntriesUseExplicitIntervals),
+    ("changing a saved entry's times collapses its pauses while unchanged times keep them", WorkTimeEntryTimesCollapseSegments),
     ("multiple named timers exclude pauses and retain independent drafts", WorkTimeMultipleTimers),
     ("only one timer runs and ending a paused timer preserves another runner", WorkTimeOnlyOneRunner),
     ("timers and independent drafts survive restart and targeted discard", WorkTimeDraftsSurviveRestart),
@@ -307,7 +309,7 @@ static async Task WorkTimeEntriesCanBeEditedAndDeleted()
     time.Advance(TimeSpan.FromSeconds(75));
     await c.EndAsync(id, CancellationToken.None);
     var original = (await c.SaveEntryAsync(id, "Original description", ["old-tag"], CancellationToken.None)).History.Single();
-    var edited = (await c.UpdateEntryAsync(id, "Corrected description", ["planning", "review"], CancellationToken.None)).History.Single();
+    var edited = (await c.UpdateEntryAsync(id, original.StartedUtc, original.StoppedUtc, "Corrected description", ["planning", "review"], CancellationToken.None)).History.Single();
     Check.Equal("Corrected description", edited.Description);
     Check.True(edited.Tags.SequenceEqual(["planning", "review"]));
     Check.Equal(original.StartedUtc, edited.StartedUtc);
@@ -318,6 +320,91 @@ static async Task WorkTimeEntriesCanBeEditedAndDeleted()
     Check.Equal(0, deleted.History.Count);
     Check.Equal(null, store.LastRecord("focus-sessions", "work-time-history", id));
     await Check.ThrowsAsync<InvalidOperationException>(() => c.DeleteEntryAsync(id, CancellationToken.None));
+}
+
+static async Task ManualWorkTimeEntriesUseExplicitIntervals()
+{
+    var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero));
+    var store = new FocusLibraryStore();
+    await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    var c = lease.Coordinator;
+    var running = (await c.StartAsync("Live timer", CancellationToken.None)).Timers.Single();
+
+    var created = await c.CreateEntryAsync(new DateTimeOffset(2026, 10, 3, 9, 0, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 10, 3, 10, 30, 0, TimeSpan.Zero), "Planning", ["work"], CancellationToken.None);
+    Check.Equal(running.Id, created.Timers.Single().Id);
+    Check.Equal(0, created.PendingEntries.Count);
+    var entry = created.History.Single();
+    Check.Equal(5_400_000L, entry.DurationMilliseconds);
+    Check.Equal(1, entry.Segments.Count);
+    Check.Equal(entry.StartedUtc, entry.Segments[0].StartedUtc);
+    Check.Equal(entry.StoppedUtc, entry.Segments[0].StoppedUtc);
+    Check.True(entry.Tags.SequenceEqual(["work"]));
+    Check.True(store.LastRecord("focus-sessions", "work-time-history", entry.Id) is not null);
+
+    var overlapping = await c.CreateEntryAsync(new DateTimeOffset(2026, 10, 3, 9, 30, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 10, 3, 10, 0, 0, TimeSpan.Zero), "Overlaps planning", [], CancellationToken.None);
+    Check.Equal(2, overlapping.History.Count);
+    var precise = await c.CreateEntryAsync(new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 10, 3, 8, 0, 1, 234, TimeSpan.Zero), "Quick check", [], CancellationToken.None);
+    Check.Equal(1_234L, precise.History[0].DurationMilliseconds);
+    Check.Equal("Quick check", precise.History[0].Description);
+
+    await Check.ThrowsAsync<InvalidDataException>(() => c.CreateEntryAsync(new DateTimeOffset(2026, 10, 3, 11, 0, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 10, 3, 11, 0, 0, TimeSpan.Zero), "Zero length", [], CancellationToken.None));
+    await Check.ThrowsAsync<InvalidDataException>(() => c.CreateEntryAsync(new DateTimeOffset(2026, 10, 3, 11, 0, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 10, 3, 10, 0, 0, TimeSpan.Zero), "Reversed", [], CancellationToken.None));
+    await Check.ThrowsAsync<InvalidDataException>(() => c.CreateEntryAsync(new DateTimeOffset(2026, 10, 3, 11, 0, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 10, 3, 13, 0, 0, TimeSpan.Zero), "Future", [], CancellationToken.None));
+    await Check.ThrowsAsync<InvalidDataException>(() => c.CreateEntryAsync(new DateTimeOffset(2026, 10, 3, 9, 0, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 10, 3, 10, 0, 0, TimeSpan.Zero), "  ", [], CancellationToken.None));
+    var afterRejections = await c.GetSnapshotAsync(CancellationToken.None);
+    Check.Equal(3, afterRejections.History.Count);
+    Check.Equal(running.Id, afterRejections.Timers.Single().Id);
+}
+
+static async Task WorkTimeEntryTimesCollapseSegments()
+{
+    var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero));
+    var store = new FocusLibraryStore();
+    await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    var c = lease.Coordinator;
+    var id = (await c.StartAsync("Paused work", CancellationToken.None)).Timers.Single().Id;
+    time.Advance(TimeSpan.FromMinutes(10));
+    await c.PauseAsync(id, CancellationToken.None);
+    time.Advance(TimeSpan.FromMinutes(5));
+    await c.ResumeAsync(id, CancellationToken.None);
+    time.Advance(TimeSpan.FromMinutes(10));
+    await c.EndAsync(id, CancellationToken.None);
+    var original = (await c.SaveEntryAsync(id, "Paused work", [], CancellationToken.None)).History.Single();
+    Check.Equal(2, original.Segments.Count);
+    Check.Equal(1_200_000L, original.DurationMilliseconds);
+
+    var renamed = (await c.UpdateEntryAsync(id, original.StartedUtc, original.StoppedUtc, "Renamed", [], CancellationToken.None)).History.Single();
+    Check.Equal("Renamed", renamed.Description);
+    Check.Equal(2, renamed.Segments.Count);
+    Check.Equal(1_200_000L, renamed.DurationMilliseconds);
+
+    var other = (await c.CreateEntryAsync(new DateTimeOffset(2026, 10, 3, 12, 20, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 10, 3, 12, 24, 0, TimeSpan.Zero), "Later", [], CancellationToken.None)).History;
+    Check.Equal("Later", other[0].Description);
+    Check.Equal(id, other[^1].Id);
+
+    var moved = await c.UpdateEntryAsync(id, new DateTimeOffset(2026, 10, 3, 11, 50, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 10, 3, 12, 30, 0, TimeSpan.Zero) - TimeSpan.FromMinutes(5), "Renamed", [], CancellationToken.None);
+    var collapsed = moved.History.Single(item => item.Id == id);
+    Check.Equal(1, collapsed.Segments.Count);
+    Check.Equal(2_100_000L, collapsed.DurationMilliseconds);
+    Check.Equal(collapsed.StartedUtc, collapsed.Segments[0].StartedUtc);
+    Check.Equal(collapsed.StoppedUtc, collapsed.Segments[0].StoppedUtc);
+    Check.Equal(id, moved.History[^1].Id);
+    Check.Equal(2_100_000L, store.LastRecord("focus-sessions", "work-time-history", id)!.Data.GetProperty("durationMilliseconds").GetInt64());
+
+    await Check.ThrowsAsync<InvalidDataException>(() => c.UpdateEntryAsync(id, new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 10, 3, 11, 0, 0, TimeSpan.Zero), "Renamed", [], CancellationToken.None));
+    await Check.ThrowsAsync<InvalidDataException>(() => c.UpdateEntryAsync(id, new DateTimeOffset(2026, 10, 3, 11, 50, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 10, 3, 13, 0, 0, TimeSpan.Zero), "Renamed", [], CancellationToken.None));
+    Check.Equal(1, (await c.GetSnapshotAsync(CancellationToken.None)).History.Single(item => item.Id == id).Segments.Count);
 }
 
 static async Task ActiveWorkTimeSurvivesRestart()
