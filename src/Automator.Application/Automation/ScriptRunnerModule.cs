@@ -31,17 +31,20 @@ public sealed record ScriptRunnerProfile(
     string WorkingDirectory,
     ScriptRunnerOutputMode OutputMode,
     int TimeoutSeconds,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ScriptRunnerTemplateOrigin? TemplateOrigin = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ScriptRunnerTemplateOrigin? TemplateOrigin = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CodexTaskApproval? CodexApproval = null);
 
 public sealed record ScriptRunnerTemplateOrigin(string Id, int Version);
 
 /// <summary>Reusable Python, Bash, and PowerShell profiles with bounded process results.</summary>
-public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
+public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
 {
+    private readonly string? _fileExplorerExecutable;
     private readonly IAutomationVariableProvider? _variables;
     private readonly ScriptRunnerTemplateInstaller _templateInstaller;
-    public ScriptRunnerModule(IAutomationVariableProvider? variables = null, ScriptRunnerTemplateInstaller? templateInstaller = null)
+    public ScriptRunnerModule(IAutomationVariableProvider? variables = null, ScriptRunnerTemplateInstaller? templateInstaller = null, string? fileExplorerExecutable = null)
     {
+        _fileExplorerExecutable = fileExplorerExecutable;
         _variables = variables;
         _templateInstaller = templateInstaller ?? new();
     }
@@ -49,10 +52,13 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
     public const int ContractVersionValue = 1;
     public const int SettingsVersionValue = 1;
     public const string ProfileCollection = "profiles";
+    public const string RegisterPowerShellScriptActionId = "register-powershell-script";
     private static readonly Regex ProfileIdPattern = new("^[a-z0-9][a-z0-9._-]{0,63}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     internal static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     private static readonly AutomationCapabilityRequirement LibraryCapability = new(AutomationCapabilityIds.LibraryStorage, 1);
     private static readonly AutomationCapabilityRequirement ProcessCapability = new(AutomationCapabilityIds.ProcessExecution, 1);
+
+    private static readonly AutomationCapabilityRequirement ExplorerMenuCapability = new(AutomationCapabilityIds.FileExplorerMenu, 1);
 
     public AutomationModuleDefinition Definition { get; } = new(
         2,
@@ -63,14 +69,18 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
         false,
         ContractVersionValue,
         SettingsVersionValue,
-        [LibraryCapability, ProcessCapability],
+        [LibraryCapability, ProcessCapability, ExplorerMenuCapability],
         [
             new("listProfiles", 1, [LibraryCapability]),
             new("listTemplates", 1, [LibraryCapability]),
             new("installTemplate", 1, [LibraryCapability]),
             new("saveProfile", 1, [LibraryCapability]),
-            new("deleteProfile", 1, [LibraryCapability]),
+            new("deleteProfile", 1, [LibraryCapability, ExplorerMenuCapability]),
             new("runProfile", 1, [LibraryCapability, ProcessCapability]),
+            new("listExplorerActions", 1, [LibraryCapability, ExplorerMenuCapability]),
+            new("saveExplorerAction", 1, [LibraryCapability, ExplorerMenuCapability]),
+            new("deleteExplorerAction", 1, [LibraryCapability, ExplorerMenuCapability]),
+            new("runExplorerAction", 1, [LibraryCapability, ProcessCapability]),
         ]);
 
     public int ContractVersion => Definition.ContractVersion;
@@ -99,6 +109,10 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
         {
             return actionId switch
             {
+                "listExplorerActions" => await ListExplorerActionsAsync(services, cancellationToken),
+                "saveExplorerAction" => await SaveExplorerActionAsync(input, services, cancellationToken),
+                "deleteExplorerAction" => await DeleteExplorerActionAsync(input, services, cancellationToken),
+                "runExplorerAction" => await RunExplorerActionAsync(input, services, cancellationToken),
                 "listProfiles" => await ListProfilesAsync(services, cancellationToken).ConfigureAwait(false),
                 "listTemplates" => ListTemplates(),
                 "installTemplate" => await InstallTemplateAsync(input, moduleSettings, services, cancellationToken).ConfigureAwait(false),
@@ -144,22 +158,28 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
         if (profile.TemplateOrigin is not null && !_templateInstaller.MatchesInstalledAsset(profile))
             throw new InvalidDataException("Template origin does not match a registered installed script asset.");
 
+        var existing = await services.Library!.GetAsync(ProfileCollection, profile.Id, cancellationToken).ConfigureAwait(false);
+        var existingProfile = existing is null ? null : JsonSerializer.Deserialize<ScriptRunnerProfile>(existing.Data.GetRawText(), JsonOptions);
+        profile = profile with { CodexApproval = existingProfile?.CodexApproval };
+
         await services.Library!.UpsertAsync(ProfileCollection, profile.Id, SettingsVersionValue,
             JsonSerializer.SerializeToElement(profile, JsonOptions), cancellationToken).ConfigureAwait(false);
         return Result(AutomationStatus.Success, $"Saved {profile.Name}.", new { profile });
     }
 
-    private static async Task<AutomationResult> DeleteProfileAsync(
+    private async Task<AutomationResult> DeleteProfileAsync(
         JsonElement input, AutomationServicesContext services, CancellationToken cancellationToken)
     {
         var id = ReadId(input);
         var deleted = await services.Library!.DeleteAsync(ProfileCollection, id, cancellationToken).ConfigureAwait(false);
+        foreach (var action in await ReadExplorerActionsAsync(services, cancellationToken))
+            if (action.ProfileId == id) await services.Library.DeleteAsync(ExplorerActionCollection, action.Id, cancellationToken);
         return Result(deleted ? AutomationStatus.Success : AutomationStatus.Information,
-            deleted ? "Script profile removed." : "Script profile was already removed.", new { id, deleted });
+            deleted ? "Script profile removed." : "Script profile was already removed.", new { id, deleted, registration = await ReconcileExplorerMenuAsync(services, cancellationToken) });
     }
 
     private async Task<AutomationResult> RunProfileAsync(
-        JsonElement input, AutomationServicesContext services, CancellationToken cancellationToken)
+        JsonElement input, AutomationServicesContext services, CancellationToken cancellationToken, IReadOnlyList<string>? explorerArguments = null, string? explorerFilePath = null)
     {
         var id = ReadId(input);
         var record = await services.Library!.GetAsync(ProfileCollection, id, cancellationToken).ConfigureAwait(false);
@@ -187,40 +207,61 @@ public sealed class ScriptRunnerModule : ILauncherTabModuleProvider
         if (_variables is not null)
         {
             var globals = await _variables.GetAsync(cancellationToken).ConfigureAwait(false);
-            profile = profile with { Arguments = profile.Arguments.Select(argument => AutomationVariableInterpolation.Expand(argument, globals.Values)).ToArray() };
+            profile = profile with { Arguments = (explorerArguments ?? profile.Arguments).Select(argument => AutomationVariableInterpolation.Expand(argument, globals.Values)).ToArray() };
+            explorerArguments = null;
             Validate(profile);
         }
-        var runProfile = transientArguments is null ? profile : profile with { Arguments = transientArguments };
-        var arguments = runProfile.Interpreter == ScriptRunnerInterpreter.Powershell
-            ? new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", runProfile.ScriptPath }.Concat(runProfile.Arguments).ToArray()
-            : new[] { runProfile.ScriptPath }.Concat(runProfile.Arguments).ToArray();
-        AutomationProcessResult processResult;
-        try
+        if (profile.CodexApproval is { } codexApproval)
         {
-            processResult = await services.Processes!.ExecuteAsync(new AutomationProcessRequest(
-                runProfile.InterpreterPath, arguments, runProfile.WorkingDirectory,
-                TimeSpan.FromSeconds(runProfile.TimeoutSeconds)), cancellationToken).ConfigureAwait(false);
+            var revision = await ScriptRunnerExecution.HashProfileRevisionAsync(profile, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(revision, codexApproval.SourceHash, StringComparison.Ordinal)
+                || codexApproval.Scope is null
+                || !string.Equals(ScriptRunnerExecution.HashReview(codexApproval.Scope, codexApproval.Inputs, codexApproval.Effects), codexApproval.ScopeHash, StringComparison.Ordinal))
+                return Error("This generated task changed after approval. Review and approve its current source and scope before running it.");
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception exception) when (template is not null)
+        var runProfile = profile with { Arguments = transientArguments ?? explorerArguments ?? profile.Arguments };
+        if (explorerFilePath is not null)
+            runProfile = runProfile with { Arguments = runProfile.Arguments.Select(argument => argument.Replace(FilePathToken, explorerFilePath, StringComparison.Ordinal)).ToArray() };
+        Validate(runProfile);
+        AutomationProcessResult processResult;
+        JsonElement? structuredOutput;
+        bool parseFailure;
+        if (template is null)
         {
-            return Error(RedactSensitive(exception.Message, template, transientArguments!));
+            var execution = await ScriptRunnerExecution.RunAsync(runProfile, services.Processes!, null,
+                AutomationExecutionOrigin.Manual, Guid.NewGuid().ToString("N"), cancellationToken).ConfigureAwait(false);
+            processResult = execution.ProcessResult;
+            parseFailure = execution.ParseFailure;
+            structuredOutput = runProfile.OutputMode == ScriptRunnerOutputMode.Json && !parseFailure ? execution.Output : null;
+        }
+        else
+        {
+            var arguments = runProfile.Interpreter == ScriptRunnerInterpreter.Powershell
+                ? new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", runProfile.ScriptPath }.Concat(runProfile.Arguments).ToArray()
+                : new[] { runProfile.ScriptPath }.Concat(runProfile.Arguments).ToArray();
+            try
+            {
+                processResult = await services.Processes!.ExecuteAsync(new AutomationProcessRequest(
+                    runProfile.InterpreterPath, arguments, runProfile.WorkingDirectory,
+                    TimeSpan.FromSeconds(runProfile.TimeoutSeconds)), cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception exception)
+            {
+                return Error(RedactSensitive(exception.Message, template, transientArguments!));
+            }
+            var redactedOutput = RedactSensitive(processResult.StandardOutput, template, transientArguments!);
+            structuredOutput = null;
+            parseFailure = false;
+            if (runProfile.OutputMode == ScriptRunnerOutputMode.Json && !string.IsNullOrWhiteSpace(redactedOutput))
+            {
+                try { using var document = JsonDocument.Parse(redactedOutput); structuredOutput = document.RootElement.Clone(); }
+                catch (JsonException) { parseFailure = true; }
+            }
         }
 
         var stdout = template is null ? processResult.StandardOutput : RedactSensitive(processResult.StandardOutput, template, transientArguments!);
         var stderr = template is null ? processResult.StandardError : RedactSensitive(processResult.StandardError, template, transientArguments!);
-
-        JsonElement? structuredOutput = null;
-        var parseFailure = false;
-        if (profile.OutputMode == ScriptRunnerOutputMode.Json && !string.IsNullOrWhiteSpace(stdout))
-        {
-            try
-            {
-                using var document = JsonDocument.Parse(stdout);
-                structuredOutput = document.RootElement.Clone();
-            }
-            catch (JsonException) { parseFailure = true; }
-        }
 
         var status = processResult.TimedOut ? AutomationStatus.Warning
             : processResult.ExitCode == 0 && !parseFailure ? AutomationStatus.Success

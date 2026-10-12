@@ -15,6 +15,8 @@ The tab shows schedule history and an upcoming agenda/calendar. The agenda uses 
 
 Schedule a saved profile by ID so interpreter and profile validation stay owned by the source module.
 
+To schedule a Codex-generated Playwright task, place its saved `playwright-task` profile in a saved Workflow, then schedule that Workflow. Scheduler has no direct Playwright target. The task's current approval revision is checked when the Workflow runs.
+
 ## Test case steps
 
 See [TESTS.md](TESTS.md) for recurrence, schedule snapshot, agenda, and calendar cases with their steps and expected results.

@@ -4,10 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { FileExplorerLaunchQueue, parseFileExplorerLaunch, stableExplorerExecutable } from './fileExplorerLaunch';
 import { BackendProcess } from './backendProcess';
 import { computePanelBounds, getWindowsDisplayCapabilities } from './platform';
 import {
   automationHttpResultSchema,
+  fileExplorerLaunchRequestSchema,
   automationKeyboardEligibilityResultSchema,
   moduleSettingsUpdateResultSchema,
   moduleSettingsGetResultSchema,
@@ -27,6 +29,8 @@ import { authorizeAutomationServiceCall, type AutomationWindowContext } from './
 import { injectHostWindowContext } from './hostWindowContext';
 import { projectStateForWindow, WindowContextRegistry } from './windowContextRegistry';
 import { getScriptRunnerPathPickerSpec } from './scriptRunnerPathPicker';
+import { getCodexScopePathPickerSpec } from './codexScopePathPicker';
+import { authorizeCodexExport, extensionForCodexFormat, writeCodexSourceCreateNew } from './codexExport';
 
 const moduleDirectory = __dirname;
 const workspaceRoot = path.resolve(moduleDirectory, '../..');
@@ -41,7 +45,7 @@ if (testMode) {
   fs.mkdirSync(testData, { recursive: true });
   app.setPath('userData', testData);
 }
-const singleInstance = app.requestSingleInstanceLock();
+const singleInstance = app.requestSingleInstanceLock({ fileExplorerLaunch: parseFileExplorerLaunch(process.argv) });
 if (!singleInstance) app.quit();
 
 const localData = testMode
@@ -76,6 +80,27 @@ let backendStatus: 'ready' | 'starting' | 'failed' = 'starting';
 let backendFailure = '';
 let trayIconReady = false;
 let rendererReady = false;
+let explorerListenerReady = false;
+const explorerLaunchQueue = new FileExplorerLaunchQueue();
+const initialExplorerLaunch = parseFileExplorerLaunch(process.argv);
+if (initialExplorerLaunch) explorerLaunchQueue.enqueue(initialExplorerLaunch);
+
+async function deliverExplorerLaunches(): Promise<void> {
+  try {
+    await explorerLaunchQueue.drain(rendererReady && explorerListenerReady && backendStatus === 'ready'
+      && Boolean(mainWindow && !mainWindow.isDestroyed()), async (request) => {
+      await showLauncher();
+      if (!backend || !mainWindow || mainWindow.isDestroyed()) throw new Error('Explorer launch window is unavailable.');
+      const slot = currentState?.tabs.find((tab) => tab.id === 'script-runner')?.slot;
+      if (!slot) throw new Error('Script Runner is unavailable.');
+      applyBackendState(await backend.request('launcher/selectTab', { tab: slot }));
+      mainWindow.show();
+      mainWindow.focus();
+      if (!rendererReady || !explorerListenerReady) throw new Error('Explorer launch listener is unavailable.');
+      mainWindow.webContents.send('automator:file-explorer-launch', request);
+    });
+  } catch (error) { writeLog('Explorer.LaunchFailed', 'Could not deliver the Explorer action.', { error: String(error) }); }
+}
 let nativeDialogActive = false;
 let primaryFocusPending = false;
 let focusSequenceRunning = false;
@@ -300,6 +325,10 @@ async function startBackend(): Promise<void> {
   if (dataDirectory) fs.mkdirSync(dataDirectory, { recursive: true });
 
   const backendEnvironment = { ...process.env };
+  delete backendEnvironment.AUTOMATOR_HOST_EXECUTABLE;
+  const explorerExecutable = stableExplorerExecutable(app.isPackaged, testMode,
+    Boolean(process.env.PORTABLE_EXECUTABLE_FILE), process.execPath, isPathWithin(process.execPath, os.tmpdir()));
+  if (explorerExecutable) backendEnvironment.AUTOMATOR_HOST_EXECUTABLE = explorerExecutable;
   const browserRuntimeFolder = app.isPackaged
     ? path.join(process.resourcesPath, 'browser-runtime')
     : path.join(workspaceRoot, 'node_modules');
@@ -354,6 +383,7 @@ async function startBackend(): Promise<void> {
     const state = applyBackendState(result.state, generation);
     if (!state) throw new Error('Backend initial state failed contract validation.');
     backendStatus = 'ready';
+    void deliverExplorerLaunches();
     sendToAllWindows('automator:backend-status', { status: backendStatus, message: '' });
     writeLog('Backend.Ready', 'The backend initialized protocol, settings, foreground monitor and keyboard hook.', {
       backendProcessId: child.childProcessId,
@@ -464,10 +494,22 @@ function registerIpc(): void {
       buildId,
     };
   });
+  ipcMain.handle('automator:file-explorer-listener-ready', (event) => {
+    assertMainFrame(event);
+    explorerListenerReady = true;
+    void deliverExplorerLaunches();
+    return true;
+  });
+  ipcMain.handle('automator:file-explorer-listener-closed', (event) => {
+    assertMainFrame(event);
+    explorerListenerReady = false;
+    return true;
+  });
   ipcMain.handle('automator:renderer-ready', (event) => {
     const context = assertMainFrame(event, ['launcher', 'workspace']);
     if (context.role === 'launcher') {
       rendererReady = true;
+      void deliverExplorerLaunches();
       if (currentState) sendStateToWindows(currentState);
       maybeLogReady();
     } else if (currentState) {
@@ -607,6 +649,13 @@ function registerIpc(): void {
     const selected = await showDialogForCaller(event, spec);
     return selected.canceled || selected.filePaths.length === 0 ? null : selected.filePaths[0];
   });
+  ipcMain.handle('automator:pick-codex-scope-path', async (event, kind: unknown) => {
+    const context = assertMainFrame(event, ['launcher', 'workspace']);
+    const activeLauncher = context.role !== 'launcher' || Boolean(currentState?.visible && currentState.mode === 'launcher');
+    const spec = getCodexScopePathPickerSpec(kind, context.selectedTab, activeLauncher);
+    const selected = await showDialogForCaller(event, spec);
+    return selected.canceled || selected.filePaths.length === 0 ? null : selected.filePaths[0];
+  });
   ipcMain.handle('automator:pick-browser-project-directory', async (event) => {
     const context = assertMainFrame(event, ['launcher', 'workspace']);
     if (context.selectedTab !== 4 || (context.role === 'launcher' && (!currentState?.visible || currentState.mode !== 'launcher')))
@@ -616,6 +665,37 @@ function registerIpc(): void {
       properties: ['openDirectory'],
     });
     return selected.canceled || selected.filePaths.length === 0 ? null : selected.filePaths[0];
+  });
+  ipcMain.handle('automator:export-codex-draft', async (event, draftId: unknown) => {
+    const context = getWindowContext(event);
+    authorizeCodexExport(event.senderFrame === event.sender.mainFrame, context, currentState, draftId);
+    if (!context) throw new Error('Codex export requires an active Automator window.');
+    const callCodexAction = async (actionId: 'getDraft' | 'exportDraft') => {
+      const result = await invokeModuleBackend(event, 'automation/moduleAction', {
+        requestId: randomUUID(), contractVersion: 1, moduleId: 'codex', actionId, actionVersion: 1, input: { id: draftId },
+      });
+      const parsed = automationResultSchema.safeParse(result);
+      if (!parsed.success || parsed.data.status === 'error') throw new Error(parsed.success ? parsed.data.message : 'Backend returned an invalid Codex export result.');
+      return parsed.data.data;
+    };
+    const draftValue = await callCodexAction('getDraft');
+    const draft = draftValue && typeof draftValue === 'object' && !Array.isArray(draftValue) ? draftValue as Record<string, unknown> : {};
+      if (draft.saved !== true) throw new Error('Save the task successfully before exporting its source.');
+    const extension = extensionForCodexFormat(draft.format);
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    if (!owner || owner.isDestroyed()) throw new Error('The requesting Automator window is no longer available.');
+    const show = () => dialog.showSaveDialog(owner, {
+      title: 'Export Codex task source',
+      defaultPath: path.join(app.getPath('documents'), `codex-task.${extension}`),
+      filters: [{ name: `${extension.toUpperCase()} source`, extensions: [extension] }, { name: 'All files', extensions: ['*'] }],
+    });
+    const selected = context.role === 'launcher' ? await withNativeDialog(show) : await show();
+    if (selected.canceled || !selected.filePath) return false;
+    const exportedValue = await callCodexAction('exportDraft');
+    const exported = exportedValue && typeof exportedValue === 'object' && !Array.isArray(exportedValue) ? exportedValue as Record<string, unknown> : {};
+    if (typeof exported.source !== 'string') throw new Error('Backend returned invalid Codex source.');
+    await writeCodexSourceCreateNew(selected.filePath, exported.source);
+    return true;
   });
   ipcMain.handle('automator:module-settings-update', async (event, params: Record<string, unknown>) => {
     const result = await invokeModuleBackend(event, 'module/settingsUpdate', params ?? {});
@@ -1116,6 +1196,7 @@ function createWindow(): void {
   owned.webContents.on('render-process-gone', (_event, details) => {
     writeLog('Renderer.Crashed', 'Renderer process exited; reloading the frontend.', { reason: details.reason, exitCode: details.exitCode });
     rendererReady = false;
+    explorerListenerReady = false;
     if (!owned.isDestroyed()) setTimeout(() => { if (!owned.isDestroyed()) void loadRenderer(owned, packagedRendererUrl); }, 250);
   });
   owned.webContents.on('did-fail-load', (_event, code, description, validatedUrl, isMainFrame) => {
@@ -1240,7 +1321,16 @@ async function initializeApp(): Promise<void> {
 }
 
 if (singleInstance) {
-  app.on('second-instance', () => void showLauncher());
+  app.on('second-instance', (_event, argv, _workingDirectory, additionalData: unknown) => {
+    const forwarded = fileExplorerLaunchRequestSchema.safeParse(
+      additionalData && typeof additionalData === 'object' && 'fileExplorerLaunch' in additionalData
+        ? additionalData.fileExplorerLaunch : null);
+    const request = forwarded.success ? forwarded.data : parseFileExplorerLaunch(argv);
+    if (request) {
+      explorerLaunchQueue.enqueue(request);
+      void deliverExplorerLaunches();
+    } else void showLauncher();
+  });
   app.whenReady().then(initializeApp).catch((error: unknown) => {
     writeLog('App.InitializationFailed', 'Electron host initialization failed.', { error: String(error) });
     app.quit();

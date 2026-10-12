@@ -2,7 +2,7 @@
 
 Website Launcher saves named shortcuts with a letters-only alias. Each shortcut contains ordered browser groups; each group contains ordered websites. From this tab, users type the alias into its action search. In Global Action Search they append `w` to disambiguate the website shortcut from an application with the same alias, for example `docsw`.
 
-Launch requests go through the active `website-launcher` module action and the host-owned `website.launch` capability. The Windows adapter opens HTTP(S) URLs through the system default browser in group and website order. The browser controls whether URLs reuse an existing window or open new tabs, so exact window grouping is best-effort.
+Launch requests go through the active `website-launcher` module action and the host-owned `website.launch` capability. The Windows adapter opens HTTP(S) URLs through the system default browser in group and website order. Direct Chromium and Firefox launches redirect and drain/discard stdout and stderr asynchronously until the child exits, so opening a browser does not block the request or write browser output to the backend protocol stream. Unknown browser associations retain the Windows shell URL-handler fallback. The browser controls whether URLs reuse an existing window or open new tabs, so exact window grouping is best-effort.
 
 ## Code map
 

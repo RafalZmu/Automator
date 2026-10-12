@@ -25,9 +25,11 @@ export type AutomationServices = {
   files: {
     pickScriptFile(interpreter: ScriptRunnerInterpreter): Promise<string | null>;
     pickPath(kind: 'file' | 'directory'): Promise<string | null>;
+    pickCodexScopePath(kind: 'file' | 'directory'): Promise<string | null>;
     resolveDroppedFile(file: File): Promise<string>;
     pickWorkingDirectory(): Promise<string | null>;
     pickBrowserProjectDirectory(): Promise<string | null>;
+    exportCodexDraft(id: string): Promise<boolean>;
     saveWorkTimeCsv(csvText: string): Promise<boolean>;
   };
   dispose(): Promise<void>;
@@ -224,6 +226,11 @@ export function createAutomationServices(
         if (disposed) throw new Error('Automation service context has been disposed.');
         return bridge.pickPath(kind);
       },
+      async pickCodexScopePath(kind) {
+        if (moduleId !== 'codex') throw new Error(`Module '${moduleId}' cannot select Codex task scope paths.`);
+        if (disposed) throw new Error('Automation service context has been disposed.');
+        return bridge.pickCodexScopePath(kind);
+      },
       async resolveDroppedFile(file) {
         if (moduleId !== 'script-runner') throw new Error(`Module '${moduleId}' cannot resolve dropped paths.`);
         if (disposed) throw new Error('Automation service context has been disposed.');
@@ -233,6 +240,11 @@ export function createAutomationServices(
         if (moduleId !== 'browser-automation') throw new Error(`Module '${moduleId}' cannot open the Playwright project picker.`);
         if (disposed) throw new Error('Automation service context has been disposed.');
         return bridge.pickBrowserProjectDirectory();
+      },
+      async exportCodexDraft(id) {
+        if (moduleId !== 'codex') throw new Error(`Module '${moduleId}' cannot export Codex drafts.`);
+        if (disposed) throw new Error('Automation service context has been disposed.');
+        return bridge.exportCodexDraft(id);
       },
       async saveWorkTimeCsv(csvText) {
         if (moduleId !== 'focus-sessions') throw new Error('CSV export is only available to Work Time.');

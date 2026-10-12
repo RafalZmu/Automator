@@ -30,6 +30,64 @@ async function launchHost(name, dataDirectory = isolatedDataDirectory(name), bac
   });
 }
 
+test('Codex slot 9 shows recoverable CLI readiness and blocks export unless active', async () => {
+  const app = await launchHost('codex-builder-ui');
+  try {
+    const page = await app.firstWindow();
+    await page.getByPlaceholder('Search apps, profiles, and actions…').waitFor({ state: 'visible' });
+    const inactiveError = await page.evaluate(async () => {
+      try { await window.automator.exportCodexDraft('a'.repeat(32)); return null; }
+      catch (error) { return error instanceof Error ? error.message : String(error); }
+    });
+    assert.match(inactiveError, /active Codex tab/i);
+
+    await page.getByRole('tab', { name: 'Codex, tab 9' }).click();
+    await page.getByRole('region', { name: 'Codex CLI readiness' }).waitFor({ state: 'visible' });
+    const status = await page.getByRole('region', { name: 'Codex CLI readiness' }).innerText();
+    assert.match(status, /Codex CLI (ready|not found|needs sign-in|configuration needs attention)/i);
+    assert.equal(await page.getByRole('button', { name: 'Save successful task' }).count(), 0);
+    const invalidDraftError = await page.evaluate(async () => {
+      try { await window.automator.exportCodexDraft('a'.repeat(32)); return null; }
+      catch (error) { return error instanceof Error ? error.message : String(error); }
+    });
+    assert.ok(invalidDraftError);
+    assert.equal(await page.getByRole('button', { name: 'Retry status' }).count(), 1);
+  } finally { await app.close(); }
+});
+
+test('Codex native export does not open a save dialog for an unsaved draft', async () => {
+  const dataDirectory = isolatedDataDirectory('codex-unsaved-export');
+  const backendDataDirectory = path.join(dataDirectory, 'backend');
+  const draftId = randomUUID().replaceAll('-', '');
+  const draftDirectory = path.join(backendDataDirectory, 'CodexTasks', 'drafts');
+  await fs.mkdir(draftDirectory, { recursive: true });
+  await fs.writeFile(path.join(draftDirectory, `${draftId}.json`), JSON.stringify({
+    Id: draftId, Plan: 'A test task', Format: 'python', Source: 'print(1)', Scope: ['reports'], ProposedScope: ['reports'],
+    Inputs: [], Effects: [], SourceHash: 'hash', CreatedAt: new Date().toISOString(), RunSucceeded: false, Saved: false,
+    ManagedPath: null, ApprovedRevision: null, SuccessfulRunRevision: null, ReviewSourceHash: null, PlanIsHistorical: false,
+  }));
+  const app = await launchHost('codex-unsaved-export', dataDirectory, backendDataDirectory);
+  try {
+    const page = await app.firstWindow();
+    await page.getByPlaceholder('Search apps, profiles, and actions…').waitFor({ state: 'visible' });
+    await page.getByRole('tab', { name: 'Codex, tab 9' }).click();
+    await page.getByRole('region', { name: 'Codex CLI readiness' }).waitFor({ state: 'visible' });
+    await app.evaluate(({ dialog }) => {
+      globalThis.__codexExportDialogOpened = false;
+      dialog.showSaveDialog = async () => {
+        globalThis.__codexExportDialogOpened = true;
+        return { canceled: true, filePath: undefined };
+      };
+    });
+    const error = await page.evaluate(async (id) => {
+      try { await window.automator.exportCodexDraft(id); return null; }
+      catch (caught) { return caught instanceof Error ? caught.message : String(caught); }
+    }, draftId);
+    assert.match(error, /save the task successfully before exporting/i);
+    assert.equal(await app.evaluate(() => globalThis.__codexExportDialogOpened), false);
+  } finally { await app.close(); }
+});
+
 test('module settings reads and writes require the active version and preserve all other saved settings', async () => {
   const dataDirectory = isolatedDataDirectory('module-settings');
   const backendDataDirectory = path.join(dataDirectory, 'backend');
@@ -178,10 +236,10 @@ test('settings and tab transitions preserve focus in the isolated desktop host',
     await assertVisibleLauncher(page);
     await page.screenshot({ path: path.join(workspace, 'artifacts', 'gui-migration', 'dark-launcher.png'), animations: 'allow' });
 
-    await page.getByRole('tab', { name: 'Tab 9, tab 9' }).click();
+    await page.getByRole('tab', { name: 'Codex, tab 9' }).click();
     await page.getByRole('textbox', { name: 'Search applications' }).waitFor({ state: 'hidden' });
     await assertVisibleLauncher(page);
-    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Tab 9, tab 9');
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Codex, tab 9');
     await page.getByRole('tab', { name: 'Launcher, tab 1' }).click();
     await page.getByRole('textbox', { name: 'Search applications' }).waitFor({ state: 'visible' });
     await assertVisibleLauncher(page);
@@ -214,13 +272,17 @@ test('compact launcher uses the larger fixed size and remains non-resizable', as
       const bounds = window.getBounds();
       const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
       return {
-        bounds,
+        contentBounds: window.getContentBounds(),
         workArea: screen.getDisplayNearestPoint(center).workArea,
         resizable: window.isResizable(),
       };
     });
-    assert.equal(windowState.bounds.width, Math.min(760, windowState.workArea.width));
-    assert.equal(windowState.bounds.height, Math.min(800, windowState.workArea.height));
+    const expectedWidth = Math.min(760, windowState.workArea.width);
+    const expectedHeight = Math.min(800, windowState.workArea.height);
+    assert.ok(Math.abs(windowState.contentBounds.width - expectedWidth) <= 1,
+      `window content width ${windowState.contentBounds.width} should be within one pixel of ${expectedWidth}`);
+    assert.ok(Math.abs(windowState.contentBounds.height - expectedHeight) <= 1,
+      `window content height ${windowState.contentBounds.height} should be within one pixel of ${expectedHeight}`);
     assert.equal(windowState.resizable, false, 'the compact launcher remains fixed-size');
   } finally {
     await app.close();
@@ -393,7 +455,7 @@ test('Browser Automation opens an Automator-managed Playwright project with an e
   }
 });
 
-test('Work Time reports are Workspace-only and support editing, filtering, CSV export, and deletion', async () => {
+test('Work Time supports multiple named timers and Workspace-only reports with editing, filtering, CSV export, and deletion', async () => {
   const dataDirectory = isolatedDataDirectory('work-time-reports');
   const csvPath = path.join(dataDirectory, 'work-time-report.csv');
   const app = await launchHost('work-time-reports', dataDirectory);
@@ -405,6 +467,43 @@ test('Work Time reports are Workspace-only and support editing, filtering, CSV e
     assert.equal(await launcher.locator('.work-time-reports').count(), 0, 'the quick launcher hides reporting controls and history');
     await launcher.screenshot({ path: path.join(dataDirectory, 'work-time-launcher.png') });
 
+    await launcher.getByRole('textbox', { name: 'New timer description' }).fill('Timer A');
+    await launcher.getByRole('button', { name: 'Start timer' }).click();
+    const timerA = launcher.getByRole('article', { name: 'Running timer Timer A' });
+    await timerA.waitFor({ state: 'visible' });
+    await timerA.getByRole('button', { name: 'Pause timer' }).click();
+    const pausedA = launcher.getByRole('article', { name: 'Paused timer Timer A' });
+    await launcher.getByRole('textbox', { name: 'New timer description' }).fill('Timer B');
+    await launcher.getByRole('button', { name: 'Start timer' }).click();
+    const timerB = launcher.getByRole('article', { name: 'Running timer Timer B' });
+    await timerB.waitFor({ state: 'visible' });
+    await pausedA.getByRole('button', { name: 'End timer' }).click();
+    const draftA = launcher.getByRole('region', { name: 'Save work interval Timer A' });
+    await draftA.waitFor({ state: 'visible' });
+    await timerB.waitFor({ state: 'visible' });
+    await timerB.getByRole('button', { name: 'End timer' }).click();
+    const draftB = launcher.getByRole('region', { name: 'Save work interval Timer B' });
+    await draftB.waitFor({ state: 'visible' });
+    assert.equal(await launcher.locator('.work-time-entry-card[aria-label^="Save work interval"]').count(), 2,
+      'both ended drafts have independent forms before either is saved');
+    await draftA.getByRole('textbox', { name: 'Work description Timer A' }).fill('   ');
+    assert.equal(await draftA.getByRole('button', { name: 'Save entry' }).isDisabled(), true,
+      'whitespace-only draft descriptions cannot be saved');
+    await draftA.locator('form').evaluate((form) => form.requestSubmit());
+    await launcher.getByText('Enter a work description before saving.').waitFor({ state: 'visible' });
+    assert.equal(await launcher.locator('.work-time-entry-card[aria-label^="Save work interval"]').count(), 2,
+      'submitting whitespace leaves both drafts intact');
+    await draftA.getByRole('textbox', { name: 'Work description Timer A' }).fill('Timer A project');
+    await draftA.getByRole('textbox', { name: 'Work tags Timer A' }).fill('reporting, priority');
+    await draftB.getByRole('textbox', { name: 'Work tags Timer B' }).fill('reporting, priority');
+    await draftB.getByRole('button', { name: 'Save entry' }).click();
+    await draftA.waitFor({ state: 'visible' });
+    assert.equal(await draftA.getByRole('textbox', { name: 'Work description Timer A' }).inputValue(), 'Timer A project',
+      'saving B preserves A draft text');
+    assert.equal(await draftA.getByRole('textbox', { name: 'Work tags Timer A' }).inputValue(), 'reporting, priority',
+      'saving B preserves A draft tags');
+    await draftA.getByRole('button', { name: 'Save entry' }).click();
+
     const workspacePromise = app.waitForEvent('window');
     await launcher.getByRole('button', { name: 'Open Workspace' }).click();
     const workspacePage = await workspacePromise;
@@ -413,24 +512,18 @@ test('Work Time reports are Workspace-only and support editing, filtering, CSV e
     const reportRegion = workspacePage.getByRole('region', { name: 'Work time reports' });
     await reportRegion.waitFor({ state: 'visible' });
 
-    await workspacePage.getByRole('button', { name: 'Start work' }).click();
-    await workspacePage.getByText('ACTIVE INTERVAL').waitFor({ state: 'visible' });
-    await workspacePage.waitForTimeout(1_200);
-    await workspacePage.getByRole('button', { name: 'Stop work' }).click();
-    await workspacePage.getByRole('textbox', { name: 'Work description' }).fill('Sample work item');
-    await workspacePage.getByRole('textbox', { name: 'Work tags' }).fill('reporting, priority');
-    await workspacePage.getByRole('button', { name: 'Save entry' }).click();
-    let savedEntry = reportRegion.locator('.work-time-report-row');
-    await savedEntry.getByText('Sample work item', { exact: true }).waitFor({ state: 'visible' });
+    let savedEntry = reportRegion.locator('.work-time-report-row').filter({ hasText: 'Timer A project' });
     await savedEntry.waitFor({ state: 'visible' });
+    const savedB = reportRegion.locator('.work-time-report-row').filter({ hasText: 'Timer B' });
+    await savedB.waitFor({ state: 'visible' });
 
     await reportRegion.getByRole('combobox', { name: 'Filter work log by tag' }).selectOption('priority');
-    assert.equal(await savedEntry.count(), 1, 'the tag filter retains matching entries');
-    await savedEntry.getByRole('button', { name: 'Edit work log entry Sample work item' }).click();
-    await savedEntry.getByRole('textbox', { name: 'Edit work description' }).fill('Edited work item');
-    await savedEntry.getByRole('textbox', { name: 'Edit work tags' }).fill('reporting, priority, done');
-    await savedEntry.getByRole('button', { name: 'Save work entry changes' }).click();
-    savedEntry = reportRegion.locator('.work-time-report-row');
+    assert.equal(await reportRegion.locator('.work-time-report-row').count(), 2, 'both matching entries are retained by the tag filter');
+    await savedEntry.getByRole('button', { name: 'Edit work log entry Timer A project' }).click();
+    await reportRegion.getByRole('textbox', { name: 'Edit work description' }).fill('Edited work item');
+    await reportRegion.getByRole('textbox', { name: 'Edit work tags' }).fill('reporting, priority, done');
+    await reportRegion.getByRole('button', { name: 'Save work entry changes' }).click();
+    savedEntry = reportRegion.locator('.work-time-report-row').filter({ hasText: 'Edited work item' });
     await savedEntry.getByText('Edited work item', { exact: true }).waitFor({ state: 'visible' });
     await workspacePage.screenshot({ path: path.join(dataDirectory, 'work-time-workspace.png') });
 

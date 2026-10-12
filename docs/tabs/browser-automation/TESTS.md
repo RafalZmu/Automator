@@ -96,3 +96,18 @@ Run after npm.cmd run build:desktop with node --experimental-strip-types --test 
 ## Additional backend coverage
 
 Module discovery, project selection, tag handling, safe section-file operations, and browser execution are covered by Application and Browser Infrastructure specification projects. Run them with npm.cmd run test:dotnet.
+
+Codex-generated Playwright containment, declared-input validation, source-hash checks, and reapproval are covered by the Codex Application specifications listed in [Codex TESTS](../codex/TESTS.md). Workflow input forwarding is supported by the saved-profile handler and Workflow mappings; scheduling uses the existing saved-Workflow target.
+
+## Shared numbered-tab icon coverage — tests/electron/tab-happy-path-visibility.test.cjs
+
+### numbered tabs show an identifying icon in the launcher and Workspace
+
+**Source:** tests/electron/tab-happy-path-visibility.test.cjs
+
+**Steps**
+
+1. Launch the isolated compact host and locate slots 1–8 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
+2. Open Workspace and verify slots 2–8 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
+
+**Expected result:** The numbered tabs retain their accessible names and show one visible icon in both windows.

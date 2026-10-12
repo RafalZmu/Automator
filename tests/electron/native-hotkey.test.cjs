@@ -161,7 +161,7 @@ test('real Right Ctrl and Escape input reaches the global hook from an owned for
 
     await sendKey(0x39);
     await waitFor(async () => (await page.evaluate(() => window.automator.getInitialState())).state?.selectedTab === 9, 'the native 9 shortcut to select tab 9');
-    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Tab 9, tab 9');
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Codex, tab 9');
     await sendKey(0x31);
     await waitFor(async () => (await page.evaluate(() => window.automator.getInitialState())).state?.selectedTab === 1, 'the native 1 shortcut to return to tab 1');
     await page.waitForFunction(() => document.activeElement?.id === 'search');

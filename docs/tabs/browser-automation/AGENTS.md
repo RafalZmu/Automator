@@ -12,6 +12,8 @@ Read the root AGENTS.md first. This tab contains both saved browser-action profi
 - Preserve the project-root containment and reparse-point checks when creating or editing section files.
 - Run individual tests, a section file, or a tag group through the host process service. Never build a shell command by concatenating project paths or test names.
 - Playwright test runs have no saved profile and are recorded in Run Activity with a null profile ID; keep that field explicit in the activity RPC response.
+- Codex-generated Playwright tasks are stored as `playwright-task` profiles under the managed project's `tests/codex` directory. Keep their relative paths contained in that project, preserve create-new behavior, validate their declared JSON inputs, and reject a source hash that no longer matches its approval. They run through this host-owned Explorer path; do not rewrite tests in a user-selected project or change project dependencies.
+- Generated-task scope is displayed for review and consent, not enforced as an OS boundary. A changed saved source or declared scope/effects requires review and reapproval before a Workflow invokes it.
 - Browser-action profiles must continue using the isolated host browser session and their saved host grant. Do not introduce unbounded navigation or bypass host network policy.
 
 ## Code and checks

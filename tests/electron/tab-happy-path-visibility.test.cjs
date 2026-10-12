@@ -109,6 +109,18 @@ async function openWorkspace(app, launcher) {
   return page;
 }
 
+async function assertTabIcons(page, tabs) {
+  for (const { name, slot } of tabs) {
+    const tab = page.getByRole('tab', { name: `${name}, tab ${slot}`, exact: true });
+    await tab.waitFor({ state: 'visible' });
+    const icon = tab.locator('svg[aria-hidden="true"]');
+    assert.equal(await icon.count(), 1, `${name} tab must show one decorative icon`);
+    const bounds = await icon.boundingBox();
+    assert.ok(bounds && bounds.width >= 12 && bounds.height >= 12,
+      `${name} tab icon must have visible dimensions`);
+  }
+}
+
 async function saveScriptFixture(page, dataDirectory) {
   await selectTab(page, 'Script Runner', 2);
   await clickButton(page, page, 'New profile');
@@ -126,11 +138,30 @@ async function saveScriptFixture(page, dataDirectory) {
   await page.getByRole('button', { name: 'Edit Visibility script', exact: true }).waitFor({ state: 'visible' });
 }
 
+test('numbered tabs show an identifying icon in the launcher and Workspace', async () => {
+  const { app, page } = await launchHost('tab-icons');
+  const tabs = [
+    { name: 'Launcher', slot: 1 },
+    { name: 'Script Runner', slot: 2 },
+    { name: 'API', slot: 3 },
+    { name: 'Browser Automation', slot: 4 },
+    { name: 'Workflows', slot: 5 },
+    { name: 'Scheduler', slot: 6 },
+    { name: 'Work Time', slot: 7 },
+    { name: 'Website Launcher', slot: 8 },
+  ];
+  try {
+    await assertTabIcons(page, tabs);
+    const workspacePage = await openWorkspace(app, page);
+    await assertTabIcons(workspacePage, tabs.slice(1));
+  } finally { await app.close(); }
+});
+
 test('happy-path visibility rejects hidden viewport-clipped and ancestor-clipped buttons', async () => {
   const { app, page } = await launchHost('visibility-guard');
   try {
     await page.getByRole('tab', { name: 'Work Time, tab 7' }).click();
-    const button = page.getByRole('button', { name: 'Start work', exact: true, includeHidden: true });
+    const button = page.getByRole('button', { name: 'Start timer', exact: true, includeHidden: true });
     await button.waitFor({ state: 'visible' });
     await assertButtonInView(button);
     await button.evaluate((element) => { element.style.visibility = 'hidden'; });
@@ -335,18 +366,22 @@ test('Scheduler save happy path keeps create calendar and editor buttons within 
   } finally { await app.close(); }
 });
 
-test('Work Time entry happy path keeps timer save and report buttons within visible bounds', async () => {
+test('Work Time named timer and report happy path keeps controls within visible bounds', async () => {
   const { app, page: launcher, dataDirectory } = await launchHost('work-time');
   try {
     const page = await openWorkspace(app, launcher);
     await selectTab(page, 'Work Time', 7);
-    await clickButton(page, page, 'Start work');
-    await page.getByText('ACTIVE INTERVAL', { exact: true }).waitFor({ state: 'visible' });
+    await page.getByLabel('New timer description').fill('Visibility work item');
+    await clickButton(page, page, 'Start timer');
+    const timer = page.getByRole('article', { name: 'Running timer Visibility work item' });
+    await timer.waitFor({ state: 'visible' });
     await page.waitForTimeout(1_200);
-    await clickButton(page, page, 'Stop work');
-    await page.getByLabel('Work description', { exact: true }).fill('Visibility work item');
-    await page.getByLabel('Work tags', { exact: true }).fill('visibility');
-    await clickButton(page, page, 'Save entry');
+    await clickButton(page, timer, 'Pause timer');
+    const paused = page.getByRole('article', { name: 'Paused timer Visibility work item' });
+    await clickButton(page, paused, 'End timer');
+    const draft = page.getByRole('region', { name: 'Save work interval Visibility work item' });
+    await draft.getByLabel('Work tags Visibility work item').fill('visibility');
+    await clickButton(page, draft, 'Save entry');
     const report = page.getByRole('region', { name: 'Work time reports' });
     await clickButton(page, report, 'Edit work log entry Visibility work item');
     await report.getByLabel('Edit work description').fill('Edited visibility work item');

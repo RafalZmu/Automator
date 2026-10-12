@@ -90,7 +90,7 @@ public sealed class AutomationModuleRegistry
         if (!_modules.TryGetValue(moduleId, out var module))
             throw new InvalidOperationException($"Automation module '{moduleId}' is not registered.");
         var definition = module.Definition;
-        if (contractVersion != definition.ContractVersion || contractVersion != AutomationTabContract.CurrentVersion)
+        if (contractVersion != definition.ContractVersion)
             throw new InvalidOperationException($"Automation module '{moduleId}' contract version {contractVersion} is not supported.");
         var action = definition.Actions.FirstOrDefault(candidate => string.Equals(candidate.Id, actionId, StringComparison.Ordinal))
             ?? throw new InvalidOperationException($"Action '{actionId}' is not registered for module '{moduleId}'.");
@@ -221,7 +221,7 @@ public sealed class AutomationModuleRegistry
                 || string.IsNullOrWhiteSpace(definition.IconKey) || definition.IconKey.Length > 64
                 || string.IsNullOrWhiteSpace(definition.ViewKind) || definition.ViewKind.Length > 64)
                 throw new InvalidOperationException($"Automation module '{definition.Id}' has invalid view metadata.");
-            if (definition.ContractVersion != AutomationTabContract.CurrentVersion || definition.SettingsVersion <= 0)
+            if (definition.ContractVersion != (definition.Id == FocusSessionsModule.IdValue ? 2 : AutomationTabContract.CurrentVersion) || definition.SettingsVersion <= 0)
                 throw new InvalidOperationException($"Automation module '{definition.Id}' uses an unsupported contract or settings version.");
 
             _capabilities.ValidateRequirements(definition.Id, definition.Capabilities);

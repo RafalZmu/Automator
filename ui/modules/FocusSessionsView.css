@@ -48,8 +48,11 @@
 .work-time-field { display: flex; flex-direction: column; gap: 4px; color: var(--muted-strong); font-size: 8px; font-weight: 620; }
 .work-time-field > span { display: flex; align-items: center; gap: 6px; }
 .work-time-field b { color: var(--muted); font-size: 7px; font-weight: 500; }
-.work-time-field textarea, .work-time-tags-input { width: 100%; min-height: 32px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; outline: none; color: var(--ink); background: var(--control); font: inherit; font-size: 9px; resize: vertical; }
-.work-time-field textarea:focus, .work-time-tags-input:focus-within { border-color: rgba(24,130,152,.48); box-shadow: 0 0 0 2px rgba(25,139,162,.09); }
+.work-time-field textarea, .work-time-field .work-time-start-input, .work-time-tags-input { width: 100%; min-height: 32px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; outline: none; color: var(--ink); background: var(--control); font: inherit; font-size: 9px; resize: vertical; }
+.work-time-field textarea:focus, .work-time-field .work-time-start-input:focus, .work-time-tags-input:focus-within { border-color: rgba(24,130,152,.48); box-shadow: 0 0 0 2px rgba(25,139,162,.09); }
+.work-time-timer-list { flex: none; display: flex; flex-direction: column; gap: 8px; }
+.work-time-current-card.is-timer-paused { border-style: dashed; }
+.work-time-current-copy .work-time-entry-actions { margin-top: 9px; }
 .work-time-field textarea::placeholder, .work-time-tags-input input::placeholder { color: var(--muted); }
 .work-time-tags-input { display: flex; align-items: center; gap: 6px; }
 .work-time-tags-input > svg { flex: none; color: var(--accent); }

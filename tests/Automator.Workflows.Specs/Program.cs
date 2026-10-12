@@ -15,6 +15,7 @@ var tests = new (string Name, Func<Task> Run)[]
     ("workflow accepts root variable mappings and rejects empty pointer segments", AcceptsRootVariableMappingsAndRejectsEmptyPointerSegments),
     ("workflow profiles persist typed variables and default legacy records to an empty object", PersistsVariablesAndDefaultsLegacyRecords),
     ("workflow runs map saved variables and transient legacy input without storing values in history", RunsWithSavedVariablesAndSafeHistory),
+    ("workflow drafts run transiently using only currently saved profile IDs", RunsTransientWorkflowDraft),
 };
 
 var failures = new List<string>();
@@ -300,6 +301,26 @@ static async Task RunsWithSavedVariablesAndSafeHistory()
         throw new InvalidOperationException("Workflow variables and transient run input must not be persisted to run history.");
 }
 
+static async Task RunsTransientWorkflowDraft()
+{
+    var store = new MemoryLibraryStore();
+    var probe = new CapturingWorkflowProfileHandler("known-profile");
+    var engine = new AutomationWorkflowEngine(store, new AutomationSavedProfileExecutor([probe]));
+    using var input = JsonDocument.Parse("{\"token\":\"one-run\"}");
+    var draft = new AutomationWorkflowProfile("transient-draft", "Transient draft",
+        [new AutomationWorkflowStep("first", "api", "known-profile", [])]);
+    var result = await engine.RunTransientAsync(draft, input.RootElement, CancellationToken.None);
+    Equal(AutomationStatus.Success, result.Summary.Status);
+    Equal("one-run", probe.Inputs["known-profile"]!.Value.GetProperty("token").GetString());
+    Equal(1, store.WriteCountAfterSeed);
+    var history = await store.ListAsync("workflows", "run-history", CancellationToken.None);
+    Equal(1, history.Count);
+    if (history[0].Data.GetRawText().Contains("one-run", StringComparison.Ordinal))
+        throw new InvalidOperationException("Transient workflow input must not be stored in history.");
+    var invalid = draft with { Id = "other", Steps = [new AutomationWorkflowStep("first", "api", "missing-profile", [])] };
+    await ThrowsAsync<InvalidDataException>(() => engine.RunTransientAsync(invalid, null, CancellationToken.None));
+}
+
 static (AutomationCapabilityRegistry Registry, AutomationServicesContext Context) CreateContext(
     WorkflowModule module, MemoryLibraryStore store, FakeWorkflowRunner runner)
 {
@@ -319,6 +340,13 @@ static void Contains(string expected, string actual)
 {
     if (!actual.Contains(expected, StringComparison.OrdinalIgnoreCase))
         throw new InvalidOperationException($"Expected '{actual}' to contain '{expected}'.");
+}
+
+static async Task ThrowsAsync<T>(Func<Task> action) where T : Exception
+{
+    try { await action(); }
+    catch (T) { return; }
+    throw new InvalidOperationException($"Expected {typeof(T).Name}.");
 }
 
 sealed class MemoryLibraryStore : IAutomationLibraryStore

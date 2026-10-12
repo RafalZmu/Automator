@@ -10,6 +10,9 @@ namespace Automator.Application.Automation;
 /// <summary>Host-owned Playwright Test project discovery, metadata, file creation, and execution.</summary>
 internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutomationProcessService processes)
 {
+    public PlaywrightTestExplorer(IAutomationLibraryStore libraryStore, IAutomationProcessService processService)
+        : this(new BrowserLibraryFacade(libraryStore), processService) { }
+
     private const string ExplorerCollection = "test-explorer";
     private const string ProjectRecordId = "active-project";
     private const string TagCollection = "test-tags";
@@ -28,6 +31,77 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
     {
         PropertyNameCaseInsensitive = true,
     };
+
+    public static string? ConfiguredManagedProjectRoot => GetConfiguredManagedProjectRoot();
+
+    public async Task<string> CreateCodexTaskAsync(string draftId, string source, CancellationToken cancellationToken)
+    {
+        CodexTaskService.ValidateDraftId(draftId);
+        if (source is null || Encoding.UTF8.GetByteCount(source) > 256 * 1024)
+            throw new InvalidDataException("Generated Playwright source is missing or exceeds the 256 KiB limit.");
+        var root = GetConfiguredManagedProjectRoot() ?? throw new InvalidDataException("Automator's managed Playwright project is unavailable.");
+        await EnsureManagedProjectAsync(root, cancellationToken).ConfigureAwait(false);
+        var relative = $"tests/codex/{draftId}.spec.ts";
+        var target = ResolveProjectFile(root, relative, inspectExistingSegments: true);
+        EnsureNoReparsePoints(root, relative, includeFile: false);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        EnsureNoReparsePoints(root, relative, includeFile: false);
+        try
+        {
+            await using var stream = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, true);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(source), cancellationToken).ConfigureAwait(false);
+        }
+        catch (IOException) when (File.Exists(target))
+        {
+            throw new InvalidDataException("A generated Playwright file already exists for this draft.");
+        }
+        return relative;
+    }
+
+    public async Task<(AutomationStatus Status, JsonElement Output, string Message)> RunCodexTaskAsync(
+        string relativePath, string expectedSource, JsonElement? input, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(relativePath) || !IsValidTestPath(relativePath) || !relativePath.StartsWith("tests/codex/", StringComparison.Ordinal)
+            || !Path.GetFileName(relativePath).EndsWith(".spec.ts", StringComparison.Ordinal))
+            throw new InvalidDataException("Generated Playwright path is invalid.");
+        var root = GetConfiguredManagedProjectRoot() ?? throw new InvalidDataException("Automator's managed Playwright project is unavailable.");
+        var target = ResolveProjectFile(root, relativePath, inspectExistingSegments: true);
+        EnsureNoReparsePoints(root, relativePath, includeFile: true);
+        var info = new FileInfo(target);
+        if (!info.Exists || info.Length > 256 * 1024) throw new InvalidDataException("Generated Playwright source is unavailable or too large.");
+        var actualSource = await File.ReadAllTextAsync(target, cancellationToken).ConfigureAwait(false);
+        if (!string.Equals(actualSource, expectedSource, StringComparison.Ordinal))
+            throw new InvalidDataException("The managed Playwright source changed after review. Review and approve the current source before running it.");
+        var runner = ResolveRunner(root);
+        if (!runner.Available) throw new InvalidDataException(runner.Message);
+        var env = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["AUTOMATOR_WORKFLOW_INPUT_JSON"] = input?.GetRawText() ?? "{}"
+        };
+        var process = await processes.ExecuteAsync(new AutomationProcessRequest(runner.NodePath!,
+            [runner.CliPath!, "test", "--workers=1", "--reporter=json", relativePath], root,
+            TimeSpan.FromMinutes(10), EnvironmentVariables: env), cancellationToken).ConfigureAwait(false);
+        var status = process.TimedOut ? AutomationStatus.Warning : process.ExitCode == 0 ? AutomationStatus.Success : AutomationStatus.Error;
+        var message = process.TimedOut ? "Generated Playwright task exceeded its 10-minute limit."
+            : process.ExitCode == 0 ? "Generated Playwright task completed." : "Generated Playwright task failed.";
+        var output = JsonSerializer.SerializeToElement(new { exitCode = process.ExitCode, timedOut = process.TimedOut,
+            stdout = process.StandardOutput, stderr = process.StandardError, stdoutTruncated = process.StandardOutputTruncated,
+            stderrTruncated = process.StandardErrorTruncated, durationMilliseconds = process.DurationMilliseconds });
+        return (status, output, message);
+    }
+
+    public async Task<string> ReadCodexTaskSourceAsync(string relativePath, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(relativePath) || !IsValidTestPath(relativePath) || !relativePath.StartsWith("tests/codex/", StringComparison.Ordinal)
+            || !Path.GetFileName(relativePath).EndsWith(".spec.ts", StringComparison.Ordinal))
+            throw new InvalidDataException("Generated Playwright path is invalid.");
+        var root = GetConfiguredManagedProjectRoot() ?? throw new InvalidDataException("Automator's managed Playwright project is unavailable.");
+        var target = ResolveProjectFile(root, relativePath, inspectExistingSegments: true);
+        EnsureNoReparsePoints(root, relativePath, includeFile: true);
+        var info = new FileInfo(target);
+        if (!info.Exists || info.Length > 256 * 1024) throw new InvalidDataException("Generated Playwright source is unavailable or too large.");
+        return await File.ReadAllTextAsync(target, cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task<AutomationResult> GetStateAsync(CancellationToken cancellationToken)
     {
@@ -707,4 +781,17 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         IReadOnlyList<string> Tags, IReadOnlyList<StaleTagSummary> StaleTags, PlaywrightRunnerSummary Runner);
     private sealed record PlaywrightTestIdentity(string Id, string? Project, string File, int Line, int? Column,
         IReadOnlyList<string> TitlePath, string ListEntry, IReadOnlyList<string> Tags);
+
+    private sealed class BrowserLibraryFacade(IAutomationLibraryStore store) : IAutomationLibrary
+    {
+        private const string Module = "browser-automation";
+        public Task<IReadOnlyList<AutomationLibraryRecord>> ListAsync(string collection, CancellationToken cancellationToken) =>
+            store.ListAsync(Module, collection, cancellationToken);
+        public Task<AutomationLibraryRecord?> GetAsync(string collection, string id, CancellationToken cancellationToken) =>
+            store.GetAsync(Module, collection, id, cancellationToken);
+        public Task UpsertAsync(string collection, string id, int schemaVersion, JsonElement data, CancellationToken cancellationToken) =>
+            store.UpsertAsync(new AutomationLibraryRecord(Module, collection, id, schemaVersion, data, DateTimeOffset.UtcNow), cancellationToken);
+        public Task<bool> DeleteAsync(string collection, string id, CancellationToken cancellationToken) =>
+            store.DeleteAsync(Module, collection, id, cancellationToken);
+    }
 }

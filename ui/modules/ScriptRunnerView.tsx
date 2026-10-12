@@ -2,27 +2,17 @@ import { GlobalVariableHints } from '../variables/GlobalVariables';
 import {
   Braces, Check, Clock3, FileCode2, Pencil, Play, Plus, Save, Square, Terminal, Trash2, X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AutomationServices } from '../automationServices';
 import type { BackendUiState, ModuleSettingsUpdateRequest } from '../../contracts/rpc';
+import { FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID } from '../../contracts/fileExplorer';
 import type { ScriptRunnerInterpreter } from '../../contracts/scriptRunner';
 import { parseScriptTemplateCatalog, validateScriptTemplateValues, type ScriptTemplateDescriptor, type ScriptTemplateValue } from '../../contracts/scriptRunner';
-import { clearSensitiveTemplateValues, filterScriptTemplates, resetTemplateValues, templateDetailParameters, updateScriptPath } from './scriptTemplateViewModel';
+import { clearSensitiveTemplateValues, createPowerShellProfileDraft, filterScriptTemplates, resetTemplateValues, templateDetailParameters, updateScriptPath, type ScriptProfile } from './scriptTemplateViewModel';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import { PathField } from '../components/PathField';
-
-type ScriptProfile = {
-  id: string;
-  name: string;
-  interpreter: ScriptRunnerInterpreter;
-  interpreterPath: string;
-  scriptPath: string;
-  arguments: string[];
-  workingDirectory: string;
-  outputMode: 'text' | 'json';
-  timeoutSeconds: number;
-  templateOrigin?: { id: string; version: number } | null;
-};
+import { ExplorerActionsPanel } from './ExplorerActionsPanel';
+import { FileExplorerLaunchContext } from '../FileExplorerLaunchContext';
 
 type ViewProps = {
   tab: BackendUiState['tabs'][number];
@@ -90,6 +80,7 @@ function readInterpreterDefaults(value: unknown): InterpreterDefaults {
 }
 
 export function ScriptRunnerView({ tab, services }: ViewProps) {
+  const fileExplorerLaunch = useContext(FileExplorerLaunchContext);
   const [profiles, setProfiles] = useState<ScriptProfile[]>([]);
   const [interpreterDefaults, setInterpreterDefaults] = useState<InterpreterDefaults>(emptyInterpreterDefaults);
   const [settingsReady, setSettingsReady] = useState(false);
@@ -99,6 +90,9 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   const [notice, setNotice] = useState('');
   const [templates, setTemplates] = useState<ScriptTemplateDescriptor[]>([]);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [explorerOpen, setExplorerOpen] = useState(false);
+  const openExplorer = useCallback(() => { setExplorerOpen(true); setEditing(null); setLibraryOpen(false); setSelectedTemplate(null); setTemplateProfile(null); setTemplateValues({}); }, []);
+  const explorerResult = useCallback((data: unknown) => { if (data && typeof data === 'object' && 'profileId' in data) setOutput(data as RunOutput); }, []);
   const [templateQuery, setTemplateQuery] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<ScriptTemplateDescriptor | null>(null);
   const [templateProfile, setTemplateProfile] = useState<ScriptProfile | null>(null);
@@ -159,6 +153,25 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     return () => runController.current?.abort();
   }, [refresh]);
 
+  useEffect(() => {
+    const request = fileExplorerLaunch.request;
+    if (!settingsReady || editing || runningId !== null || !request || request.actionId !== FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID) return;
+    try {
+      setEditing(createPowerShellProfileDraft(request.filePath, interpreterDefaults.powershell, profiles.map(profile => profile.id)));
+      setOutput(null);
+      setExplorerOpen(false);
+      setLibraryOpen(false);
+      setSelectedTemplate(null);
+      setTemplateProfile(null);
+      setTemplateValues({});
+      setNotice('');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The selected PowerShell script could not be registered.');
+    } finally {
+      fileExplorerLaunch.consume();
+    }
+  }, [fileExplorerLaunch.request, fileExplorerLaunch.consume, settingsReady, editing, runningId, interpreterDefaults.powershell, profiles]);
+
   const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editing) return;
@@ -188,8 +201,8 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
         const detail = error instanceof Error ? error.message : 'Unknown settings error.';
         settingsWarning = ` The profile was saved, but its interpreter default could not be remembered: ${detail}`;
       }
-      setEditing(null);
       await refresh();
+      setEditing(null);
       setNotice(settingsWarning ? `${result.message}${settingsWarning}` : result.message);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not save this profile.');
@@ -316,18 +329,20 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
           <span className="script-module-icon"><Terminal size={16} /></span>
           <div><h1>Script Runner</h1><p>Saved Python, Bash, and PowerShell tasks</p></div>
         </div>
-        <div className="script-editor-actions"><button className="secondary-button" type="button" onClick={() => libraryOpen ? closeTemplateLibrary() : setLibraryOpen(true)}>Library</button><button className="primary-button" type="button" disabled={!settingsReady} onClick={() => { setOutput(null); setEditing(blankProfile(interpreterDefaults)); }}>
+        <div className="script-editor-actions"><button className="secondary-button" type="button" disabled={runningId !== null} onClick={() => setExplorerOpen(current => !current)}>Explorer actions</button><button className="secondary-button" type="button" onClick={() => libraryOpen ? closeTemplateLibrary() : setLibraryOpen(true)}>Library</button><button className="primary-button" type="button" disabled={!settingsReady || runningId !== null} onClick={() => { setOutput(null); setEditing(blankProfile(interpreterDefaults)); }}>
           <Plus size={14} /> New profile
         </button></div>
       </div>
 
       {notice && <p className="script-notice" role="status">{notice}</p>}
 
+      <ExplorerActionsPanel services={services} profiles={profiles} templates={templates} open={explorerOpen} onOpen={openExplorer} busy={runningId !== null} onRunning={setRunningId} onResult={explorerResult} />
+
       {libraryOpen && <section className="script-editor" aria-label="Script template library">
         <div className="script-editor-heading"><FileCode2 size={16} /><strong>Script Library</strong><button className="icon-button" type="button" aria-label="Close library" onClick={closeTemplateLibrary}><X size={15} /></button></div>
         <label className="script-field-wide"><span>Search templates</span><input type="search" value={templateQuery} placeholder="Name, description, or tag" onChange={(event) => setTemplateQuery(event.target.value)} /></label>
         <div className="script-profile-list">{filterScriptTemplates(templates, templateQuery).map((template) => {
-          const targetDatabaseParameter = template.id === 'firebird-3-backup-zip'
+          const targetDatabaseParameter = (template.id === 'firebird-3-backup-zip' || template.id === 'firebird-3-backup')
             ? template.parameters.find((parameter) => parameter.key === 'database')
             : undefined;
           const installedProfile = profiles.find((profile) => profile.templateOrigin?.id === template.id

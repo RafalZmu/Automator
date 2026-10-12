@@ -8,6 +8,8 @@ using Automator.Windows;
 
 var checks = new (string Name, Action Run)[]
 {
+    ("Explorer menu reconciles only owned entries", FileExplorerMenuSpecs.ReconcilesOwnedMenus),
+    ("Explorer disabled hosts and collisions do not write", FileExplorerMenuSpecs.DisabledHostsAndCollisionsDoNotWrite),
     ("keyboard normalizer emits stable key codes and modifier sides", NormalizerMapsStableKeysAndModifiers),
     ("keyboard normalizer tracks transitions repeats and system-key messages", NormalizerTracksTransitionsAndSystemKeys),
     ("hook reset clears held modifier state", NormalizerResetClearsHeldModifiers),
@@ -16,6 +18,7 @@ var checks = new (string Name, Action Run)[]
     ("invalid app paths return no icon instead of breaking backend state", InvalidIconPathIsIgnored),
     ("schema 1 settings load upgrades atomically while preserving launcher fields", LegacySettingsUpgradeIsAtomic),
     ("failed module settings migration leaves the saved file untouched", FailedModuleMigrationPreservesSource),
+    ("website launcher redirects direct browser output", WebsiteLauncherRedirectsDirectBrowserOutput),
     ("website launcher capability is module scoped and opens only HTTP URLs in group order", WebsiteLauncherOpensValidatedGroups),
 };
 
@@ -174,6 +177,19 @@ static void FailedModuleMigrationPreservesSource()
     finally { Directory.Delete(dataDirectory, recursive: true); }
 }
 
+static void WebsiteLauncherRedirectsDirectBrowserOutput()
+{
+    var starts = new List<System.Diagnostics.ProcessStartInfo>();
+    var adapter = new WindowsAutomationWebsiteLauncher(starts.Add, "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe");
+
+    adapter.LaunchAsync([[new Uri("https://example.test")]], CancellationToken.None).GetAwaiter().GetResult();
+
+    Check.Equal(1, starts.Count);
+    Check.False(starts[0].UseShellExecute);
+    Check.True(starts[0].RedirectStandardOutput);
+    Check.True(starts[0].RedirectStandardError);
+}
+
 static void WebsiteLauncherOpensValidatedGroups()
 {
     var starts = new List<System.Diagnostics.ProcessStartInfo>();
@@ -221,6 +237,7 @@ static void WebsiteLauncherOpensValidatedGroups()
     Check.Equal("https://example.test/two", starts[0].ArgumentList[3]);
     Check.Equal("-new-window", starts[1].ArgumentList[0]);
     Check.Equal("https://example.test/three", starts[1].ArgumentList[1]);
+    Check.True(starts.All(start => !start.UseShellExecute && start.RedirectStandardOutput && start.RedirectStandardError));
 
     starts.Clear();
     var unknown = new WindowsAutomationWebsiteLauncher(starts.Add, "C:\\Program Files\\UnknownBrowser\\browser.exe");
@@ -232,6 +249,7 @@ static void WebsiteLauncherOpensValidatedGroups()
     Check.Equal("https://example.test/two", starts[1].FileName);
     Check.Equal("https://example.test/three", starts[2].FileName);
     Check.True(starts.All(start => start.UseShellExecute));
+    Check.True(starts.All(start => !start.RedirectStandardOutput && !start.RedirectStandardError));
 
     context.DisposeAsync().AsTask().GetAwaiter().GetResult();
     Check.Throws<ObjectDisposedException>(() => context.WebsiteLauncher!.LaunchAsync(

@@ -37,3 +37,7 @@ Before changing a tab or a shared workspace surface, read both its contributor i
 The docs tree is organized by user-visible surface, while source code remains in the existing `ui`, `electron`, `contracts`, and `src` projects. Each README describes current behavior and points to the implementation and tests. Each AGENTS file adds the invariants and workflow specific to that surface. Treat the root instructions here as applying everywhere.
 
 When adding or moving a tab or shared surface, add or update its documentation pair and update the index in the root README. When behavior or code boundaries change, update both files for the affected surface in the same change. Do not describe planned behavior as current behavior.
+
+## Subagent model selection
+
+Never spawn a subagent using a model with a higher capability tier than the original chat's model. Prefer inheriting the original chat's model; if selecting a model explicitly, use the same or a lower tier.

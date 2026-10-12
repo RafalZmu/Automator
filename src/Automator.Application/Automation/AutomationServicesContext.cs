@@ -46,7 +46,8 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         IAutomationSecretManager? secrets = null, IAutomationApiProfileRunner? apiProfiles = null,
         IAutomationBrowserService? browser = null, IAutomationWorkflowRunner? workflows = null,
         IAutomationSchedulerCoordinator? scheduler = null, IAutomationFocusSessionCoordinator? focusSessions = null,
-        IAutomationWorkTimeCoordinator? workTime = null, IAutomationWebsiteLauncher? websiteLauncher = null)
+        IAutomationWorkTimeCoordinator? workTime = null, IAutomationWebsiteLauncher? websiteLauncher = null,
+        IAutomationCodexTaskService? codexTasks = null, IAutomationFileExplorerMenu? fileExplorerMenu = null)
     {
         ModuleId = moduleId;
         _lifetimeToken = _lifetime.Token;
@@ -61,7 +62,9 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         Scheduler = scheduler is null ? null : new ContextSchedulerCoordinator(this, scheduler);
         FocusSessions = focusSessions is null ? null : new ContextFocusCoordinator(this, focusSessions);
         WorkTime = workTime is null ? null : new ContextWorkTimeCoordinator(this, workTime);
+        FileExplorerMenu = fileExplorerMenu is null ? null : new ContextFileExplorerMenu(this, fileExplorerMenu);
         WebsiteLauncher = websiteLauncher is null ? null : new ContextWebsiteLauncher(this, websiteLauncher);
+        CodexTasks = moduleId == "codex" && codexTasks is not null ? new ContextCodexTaskService(this, codexTasks) : null;
     }
 
     public string ModuleId { get; }
@@ -76,7 +79,9 @@ public sealed class AutomationServicesContext : IAsyncDisposable
     public IAutomationSchedulerCoordinator? Scheduler { get; }
     public IAutomationFocusSessionCoordinator? FocusSessions { get; }
     public IAutomationWorkTimeCoordinator? WorkTime { get; }
+    public IAutomationFileExplorerMenu? FileExplorerMenu { get; }
     public IAutomationWebsiteLauncher? WebsiteLauncher { get; }
+    public IAutomationCodexTaskService? CodexTasks { get; }
     public CancellationToken LifetimeToken => _lifetimeToken;
     public bool HasCapability(string capabilityId) => capabilityId switch
     {
@@ -91,7 +96,9 @@ public sealed class AutomationServicesContext : IAsyncDisposable
         AutomationCapabilityIds.SchedulerManagement => Scheduler is not null,
         AutomationCapabilityIds.FocusManagement => FocusSessions is not null,
         AutomationCapabilityIds.WorkTimeManagement => WorkTime is not null,
+        AutomationCapabilityIds.FileExplorerMenu => FileExplorerMenu is not null,
         AutomationCapabilityIds.WebsiteLaunch => WebsiteLauncher is not null,
+        AutomationCapabilityIds.CodexTaskBuilder => CodexTasks is not null,
         _ => false,
     };
 
@@ -365,22 +372,34 @@ public sealed class AutomationServicesContext : IAsyncDisposable
             return await inner.GetSnapshotAsync(linked.Token).ConfigureAwait(false);
         }
 
-        public async Task<AutomationWorkTimeSnapshot> StartAsync(CancellationToken cancellationToken)
+        public async Task<AutomationWorkTimeSnapshot> StartAsync(string description, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);
-            return await inner.StartAsync(linked.Token).ConfigureAwait(false);
+            return await inner.StartAsync(description, linked.Token).ConfigureAwait(false);
         }
 
-        public async Task<AutomationWorkTimeSnapshot> StopAsync(CancellationToken cancellationToken)
+        public async Task<AutomationWorkTimeSnapshot> PauseAsync(string id, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);
-            return await inner.StopAsync(linked.Token).ConfigureAwait(false);
+            return await inner.PauseAsync(id, linked.Token).ConfigureAwait(false);
         }
 
-        public async Task<AutomationWorkTimeSnapshot> SaveEntryAsync(string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
+        public async Task<AutomationWorkTimeSnapshot> ResumeAsync(string id, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);
-            return await inner.SaveEntryAsync(description, tags, linked.Token).ConfigureAwait(false);
+            return await inner.ResumeAsync(id, linked.Token).ConfigureAwait(false);
+        }
+
+        public async Task<AutomationWorkTimeSnapshot> EndAsync(string id, CancellationToken cancellationToken)
+        {
+            using var linked = Link(context, cancellationToken);
+            return await inner.EndAsync(id, linked.Token).ConfigureAwait(false);
+        }
+
+        public async Task<AutomationWorkTimeSnapshot> SaveEntryAsync(string id, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
+        {
+            using var linked = Link(context, cancellationToken);
+            return await inner.SaveEntryAsync(id, description, tags, linked.Token).ConfigureAwait(false);
         }
 
         public async Task<AutomationWorkTimeSnapshot> UpdateEntryAsync(string id, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken)
@@ -395,17 +414,18 @@ public sealed class AutomationServicesContext : IAsyncDisposable
             return await inner.DeleteEntryAsync(id, linked.Token).ConfigureAwait(false);
         }
 
-        public async Task<AutomationWorkTimeSnapshot> ResumePendingAsync(CancellationToken cancellationToken)
+        public async Task<AutomationWorkTimeSnapshot> DiscardTimerAsync(string id, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);
-            return await inner.ResumePendingAsync(linked.Token).ConfigureAwait(false);
+            return await inner.DiscardTimerAsync(id, linked.Token).ConfigureAwait(false);
         }
 
-        public async Task<AutomationWorkTimeSnapshot> DiscardPendingAsync(CancellationToken cancellationToken)
+        public async Task<AutomationWorkTimeSnapshot> DiscardPendingAsync(string id, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);
-            return await inner.DiscardPendingAsync(linked.Token).ConfigureAwait(false);
+            return await inner.DiscardPendingAsync(id, linked.Token).ConfigureAwait(false);
         }
+
     }
 
     private sealed class ContextWebsiteLauncher(AutomationServicesContext context, IAutomationWebsiteLauncher inner) : IAutomationWebsiteLauncher
@@ -415,6 +435,15 @@ public sealed class AutomationServicesContext : IAsyncDisposable
             ObjectDisposedException.ThrowIf(Volatile.Read(ref context._disposed) != 0, context);
             using var linked = Link(context, cancellationToken);
             await inner.LaunchAsync(groups, linked.Token).ConfigureAwait(false);
+        }
+    }
+
+    private sealed class ContextFileExplorerMenu(AutomationServicesContext context, IAutomationFileExplorerMenu inner) : IAutomationFileExplorerMenu
+    {
+        public async Task ReconcileAsync(IReadOnlyList<ExplorerActionDefinition> entries, string executablePath, CancellationToken cancellationToken)
+        {
+            using var linked = Link(context, cancellationToken);
+            await inner.ReconcileAsync(entries, executablePath, linked.Token).ConfigureAwait(false);
         }
     }
 
@@ -429,5 +458,17 @@ public sealed class AutomationServicesContext : IAsyncDisposable
             try { await inner.DisposeAsync().ConfigureAwait(false); }
             finally { linked.Dispose(); }
         }
+    }
+
+    private sealed class ContextCodexTaskService(AutomationServicesContext context, IAutomationCodexTaskService inner) : IAutomationCodexTaskService
+    {
+        public async Task<CodexTaskStatus> GetStatusAsync(CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.GetStatusAsync(linked.Token).ConfigureAwait(false); }
+        public async Task<CodexTaskDraft> GenerateDraftAsync(CodexTaskGenerateRequest request, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.GenerateDraftAsync(request, linked.Token).ConfigureAwait(false); }
+        public async Task<CodexTaskDraft?> GetDraftAsync(string id, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.GetDraftAsync(id, linked.Token).ConfigureAwait(false); }
+        public async Task<IReadOnlyList<CodexTaskDraftSummary>> ListDraftsAsync(CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.ListDraftsAsync(linked.Token).ConfigureAwait(false); }
+        public async Task<CodexTaskRunResult> RunDraftAsync(string id, bool effectConfirmed, JsonElement? taskInput, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.RunDraftAsync(id, effectConfirmed, taskInput, linked.Token).ConfigureAwait(false); }
+        public async Task<CodexTaskSaveResult> SaveDraftAsync(string id, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.SaveDraftAsync(id, linked.Token).ConfigureAwait(false); }
+        public async Task<CodexTaskDraft> ApproveChangesAsync(string id, string? expectedReviewSourceHash, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.ApproveChangesAsync(id, expectedReviewSourceHash, linked.Token).ConfigureAwait(false); }
+        public async Task<string> ExportDraftAsync(string id, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.ExportDraftAsync(id, linked.Token).ConfigureAwait(false); }
     }
 }

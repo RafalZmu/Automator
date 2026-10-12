@@ -14,6 +14,7 @@ import {
   automationResultSchema,
   globalVariableSnapshotSchema,
   backendNotificationSchema,
+  fileExplorerLaunchRequestSchema,
   settingsImportResultSchema,
   type AutomationHttpRequest,
   type BackendUiState,
@@ -26,6 +27,8 @@ function listen<T>(channel: string, listener: (value: T) => void): () => void {
   ipcRenderer.on(channel, handler);
   return () => ipcRenderer.removeListener(channel, handler);
 }
+
+let fileExplorerSubscriberCount = 0;
 
 const api: AutomatorBridge = Object.freeze({
   getInitialState: () => ipcRenderer.invoke('automator:get-initial-state') as Promise<InitialState>,
@@ -44,12 +47,14 @@ const api: AutomatorBridge = Object.freeze({
   addCustomApp: () => ipcRenderer.invoke('automator:add-custom-app'),
   pickScriptFile: (interpreter: Parameters<AutomatorBridge['pickScriptFile']>[0]) => ipcRenderer.invoke('automator:pick-script-file', interpreter) as Promise<string | null>,
   pickPath: (kind: Parameters<AutomatorBridge['pickPath']>[0]) => ipcRenderer.invoke('automator:pick-path', kind) as Promise<string | null>,
+  pickCodexScopePath: (kind: Parameters<AutomatorBridge['pickCodexScopePath']>[0]) => ipcRenderer.invoke('automator:pick-codex-scope-path', kind) as Promise<string | null>,
   resolveDroppedFile: (file: File) => {
     try { return Promise.resolve(webUtils.getPathForFile(file)); }
     catch { return Promise.resolve(''); }
   },
   pickWorkingDirectory: () => ipcRenderer.invoke('automator:pick-working-directory') as Promise<string | null>,
   pickBrowserProjectDirectory: () => ipcRenderer.invoke('automator:pick-browser-project-directory') as Promise<string | null>,
+  exportCodexDraft: (id: string) => ipcRenderer.invoke('automator:export-codex-draft', id) as Promise<boolean>,
   saveWorkTimeCsv: async (csvText: string) => {
     const result = await ipcRenderer.invoke('automator:save-work-time-csv', csvText);
     if (typeof result !== 'boolean') throw new Error('Automator returned an invalid Work Time CSV export result.');
@@ -159,6 +164,20 @@ const api: AutomatorBridge = Object.freeze({
     const parsed = runActivitySnapshotSchema.safeParse(result);
     if (!parsed.success) throw new Error('Automator returned invalid run activity.');
     return parsed.data;
+  },
+  onFileExplorerLaunch: (listener: Parameters<AutomatorBridge['onFileExplorerLaunch']>[0]) => {
+    const unsubscribe = listen<unknown>('automator:file-explorer-launch', (value) => {
+      const parsed = fileExplorerLaunchRequestSchema.safeParse(value);
+      if (parsed.success) listener(parsed.data);
+    });
+    if (++fileExplorerSubscriberCount === 1) void ipcRenderer.invoke('automator:file-explorer-listener-ready');
+    let subscribed = true;
+    return () => {
+      if (!subscribed) return;
+      subscribed = false;
+      unsubscribe();
+      if (--fileExplorerSubscriberCount === 0) void ipcRenderer.invoke('automator:file-explorer-listener-closed');
+    };
   },
   onStateChanged: (listener: Parameters<AutomatorBridge['onStateChanged']>[0]) => listen<BackendUiState>('automator:state-changed', listener),
   onFocusPrimaryControl: (listener: Parameters<AutomatorBridge['onFocusPrimaryControl']>[0]) => listen<FocusRequest>('automator:focus-primary-control', listener),

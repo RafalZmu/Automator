@@ -37,6 +37,16 @@ public static partial class ScriptRunnerTemplateCatalog
 
     private static readonly IReadOnlyList<ScriptRunnerTemplateDescriptor> Templates =
     [
+        new("firebird-3-backup", 1, "Firebird 3 database backup",
+            "Create a Firebird database backup.", ["database", "backup", "firebird"],
+            ScriptRunnerInterpreter.Powershell, "firebird-3-backup", ScriptRunnerOutputMode.Text, 3600,
+            [
+                new("database", "Target database", ScriptRunnerTemplateParameterType.File, true, 0),
+                new("backup", "Backup file", ScriptRunnerTemplateParameterType.File, true, 1),
+                new("gbak", "gbak executable", ScriptRunnerTemplateParameterType.File, true, 2),
+                new("username", "Username", ScriptRunnerTemplateParameterType.Text, true, 3),
+                new("password", "Password", ScriptRunnerTemplateParameterType.Text, true, 4, Sensitive: true),
+            ]),
         new("firebird-3-backup-zip", 1, "Firebird 3 database backup and ZIP",
             "Create a Firebird database backup and ZIP archive.", ["database", "backup", "firebird"],
             ScriptRunnerInterpreter.Powershell, "firebird-3-backup-zip", ScriptRunnerOutputMode.Text, 3600,

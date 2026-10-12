@@ -18,6 +18,11 @@ if (args.Length > 0 && args[0] == "--automation-child-stdin")
     Console.Write(await Console.In.ReadToEndAsync());
     return 0;
 }
+if (args.Length > 0 && args[0] == "--automation-child-env")
+{
+    Console.Write(Environment.GetEnvironmentVariable("AUTOMATOR_WORKFLOW_INPUT_JSON"));
+    return 0;
+}
 if (args.Length > 0 && args[0] == "--automation-child-sleep")
 {
     await Task.Delay(int.Parse(args[1]));
@@ -35,6 +40,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("SQLite automation library persists versioned records and keeps modules isolated", StoresLibraryRecords),
     ("process execution preserves argument boundaries, bounds output and cancels children", RunsBoundedProcesses),
     ("process execution writes bounded structured standard input and closes the stream", PassesStandardInput),
+    ("process execution forwards bounded environment variables without shell interpolation", PassesEnvironmentVariables),
     ("HTTP request maps method headers and textual body", MapsRequestFields),
     ("HTTP non-success statuses are returned as ordinary results", ReturnsNonSuccessResult),
     ("HTTP host policy normalizes exact hostnames and rejects other hosts", EnforcesExactHostAllowlist),
@@ -128,6 +134,20 @@ static async Task PassesStandardInput()
     await Check.ThrowsAsync<InvalidDataException>(() => service.ExecuteAsync(new AutomationProcessRequest(executable,
         [.. prefix, "--automation-child-stdin"], Directory.GetCurrentDirectory(), TimeSpan.FromSeconds(5), tooLarge),
         CancellationToken.None));
+}
+
+static async Task PassesEnvironmentVariables()
+{
+    var service = new LocalProcessExecutionService();
+    var (executable, prefix) = ChildExecutable();
+    const string json = "{\"name\":\"A B; $x\"}";
+    var result = await service.ExecuteAsync(new AutomationProcessRequest(executable,
+        [.. prefix, "--automation-child-env"], Directory.GetCurrentDirectory(), TimeSpan.FromSeconds(5),
+        EnvironmentVariables: new Dictionary<string, string> { ["AUTOMATOR_WORKFLOW_INPUT_JSON"] = json }), CancellationToken.None);
+    Check.Equal(json, result.StandardOutput);
+    await Check.ThrowsAsync<InvalidDataException>(() => service.ExecuteAsync(new AutomationProcessRequest(executable,
+        [.. prefix, "--automation-child-env"], Directory.GetCurrentDirectory(), TimeSpan.FromSeconds(5),
+        EnvironmentVariables: new Dictionary<string, string> { ["BAD=KEY"] = "x" }), CancellationToken.None));
 }
 
 static async Task StoresLibraryRecords()
