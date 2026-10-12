@@ -6,6 +6,7 @@ namespace Automator.Application.Automation;
 /// <summary>Discovers and invokes the installed Claude Code CLI using structured process arguments.</summary>
 public sealed class ClaudeCliClient : IAuthoringCliClient
 {
+    public const string Model = "claude-haiku-5-5";
     private readonly string _requestRoot;
     private readonly string? _launcherPath;
     private readonly IAutomationProcessService _processService;
@@ -49,7 +50,7 @@ public sealed class ClaudeCliClient : IAuthoringCliClient
             // No tools, MCP servers, slash commands, hooks, or saved sessions: the call only turns text into structured text.
             var args = new List<string>
             {
-                "-p", "--output-format", "json", "--json-schema", CodexCliClient.TaskSchema,
+                "-p", "--model", Model, "--output-format", "json", "--json-schema", CodexCliClient.TaskSchema,
                 "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence",
                 "--settings", "{\"disableAllHooks\":true}",
             };
