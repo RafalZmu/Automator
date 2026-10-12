@@ -1,6 +1,6 @@
 # Activity and Notifications
 
-Run Activity lists recent cross-module runs with the module, action/profile, status, origin, time, and duration. The Workspace activity view can filter runs, open the related tab, and display a run's result while its renderer-session output is still available.
+Run Activity lists recent cross-module runs with the module, action/profile, status, origin, time, and duration. Playwright test runs have no saved profile and appear with a null profile ID. The Workspace activity view can filter runs, open the related tab, and display a run's result while its renderer-session output is still available.
 
 The structured result viewer supports readable status, text/JSON data, workflow step output, and validated follow-up buttons. A follow-up runs only after the user clicks it. Raw output is transient and is cleared when Automator restarts; persisted activity retains metadata only.
 

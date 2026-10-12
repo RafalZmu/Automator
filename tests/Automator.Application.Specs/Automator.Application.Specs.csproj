@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Automator.Application\Automator.Application.csproj" />
+    <ProjectReference Include="..\..\src\Automator.Protocol\Automator.Protocol.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="..\..\contracts\bundled-tab-view-kinds.json" Link="bundled-tab-view-kinds.json" CopyToOutputDirectory="PreserveNewest" />

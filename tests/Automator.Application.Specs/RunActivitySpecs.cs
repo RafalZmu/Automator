@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Automator.Application.Automation;
 using Automator.Core.Plugins;
+using Automator.Protocol;
 
 internal static class RunActivitySpecs
 {
@@ -38,6 +39,18 @@ internal static class RunActivitySpecs
         if (JsonSerializer.Serialize(snapshot).Contains("private content")) throw new Exception("Historical output leaked into activity.");
         if (AutomationRunActivityService.ReadProfileId(JsonSerializer.SerializeToElement(new { id = "https://secret/body" })) is not null)
             throw new Exception("Activity target IDs must be bounded metadata keys.");
+
+        var playwrightLibrary = new MemoryLibrary();
+        var playwrightActivity = new AutomationRunActivityService(playwrightLibrary);
+        await playwrightActivity.RecordAsync(new("playwright-run", "browser-automation", "runTests", null,
+            start, start.AddSeconds(1), AutomationStatus.Success, 1000, AutomationExecutionOrigin.Manual), CancellationToken.None);
+        using (var playwrightSnapshot = JsonDocument.Parse(RpcProtocol.Serialize(await playwrightActivity.GetSnapshotAsync(CancellationToken.None))))
+        {
+            var playwrightEntry = playwrightSnapshot.RootElement.GetProperty("entries").EnumerateArray()
+                .Single(entry => entry.GetProperty("id").GetString() == "playwright-run");
+            if (!playwrightEntry.TryGetProperty("profileId", out var profileId) || profileId.ValueKind != JsonValueKind.Null)
+                throw new Exception("Playwright test activity must keep its nullable profileId on the RPC wire.");
+        }
         try
         {
             await service.RecordAsync(new("bad", "api", "saveProfile", "x", start, start, AutomationStatus.Success, 0, AutomationExecutionOrigin.Manual), CancellationToken.None);

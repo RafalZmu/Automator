@@ -7,6 +7,8 @@ The tab has two related surfaces:
 
 When the configured managed project is first created, Automator creates a tests directory and an example spec file. For an existing project, choose its project root; Automator does not install or change that project's dependencies.
 
+Runs started from the Playwright Test Explorer are listed in Run Activity without a saved profile identifier.
+
 ## Code map
 
 - ui/modules/BrowserAutomationView.tsx renders project selection, discovered files/tests, tag editing, grouped runs, and browser profiles.

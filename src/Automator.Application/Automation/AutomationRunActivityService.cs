@@ -6,7 +6,8 @@ using Automator.Core.Plugins;
 namespace Automator.Application.Automation;
 
 public sealed record AutomationRunActivityEntry(
-    string Id, string ModuleId, string ActionId, string? ProfileId,
+    string Id, string ModuleId, string ActionId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? ProfileId,
     DateTimeOffset StartedUtc, DateTimeOffset FinishedUtc, AutomationStatus Status,
     long DurationMilliseconds, AutomationExecutionOrigin Origin);
 

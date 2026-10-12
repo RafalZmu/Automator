@@ -11,6 +11,7 @@ Read the root AGENTS.md first. This tab contains both saved browser-action profi
 - Store Automator-managed tags as metadata keyed to the test/project identity; do not modify test source to add tags. Keep stale-tag cleanup explicit.
 - Preserve the project-root containment and reparse-point checks when creating or editing section files.
 - Run individual tests, a section file, or a tag group through the host process service. Never build a shell command by concatenating project paths or test names.
+- Playwright test runs have no saved profile and are recorded in Run Activity with a null profile ID; keep that field explicit in the activity RPC response.
 - Browser-action profiles must continue using the isolated host browser session and their saved host grant. Do not introduce unbounded navigation or bypass host network policy.
 
 ## Code and checks
