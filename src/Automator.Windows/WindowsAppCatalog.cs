@@ -84,7 +84,9 @@ public sealed class WindowsAppCatalog
         {
             cancellationToken.ThrowIfCancellationRequested();
             string[] shortcuts;
-            try { shortcuts = Directory.EnumerateFiles(root, "*.lnk", SearchOption.AllDirectories).ToArray(); }
+            // IgnoreInaccessible keeps one protected subfolder from hiding every shortcut in the Start menu.
+            var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+            try { shortcuts = Directory.EnumerateFiles(root, "*.lnk", options).ToArray(); }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
                 _log.Write(ApplicationLogLevel.Warning, "Catalog.StartMenuReadFailed", "Could not enumerate a Start menu folder.", exception,
