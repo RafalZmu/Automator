@@ -5,9 +5,19 @@ using Automator.Core.Automation;
 namespace Automator.Application.Automation;
 
 /// <summary>Discovers and invokes the installed Codex CLI using structured process arguments.</summary>
-public sealed class CodexCliClient
+public sealed class CodexCliClient : IAuthoringCliClient
 {
     public const int MaximumResultBytes = 256 * 1024;
+    internal const string TaskSchema = """
+        {"type":"object","additionalProperties":false,"required":["plan","format","source","scope","inputs","effects"],"properties":{
+          "plan":{"type":"string","minLength":1,"maxLength":12000},
+          "format":{"type":"string","enum":["python","playwright","workflow"]},
+          "source":{"type":"string","minLength":1,"maxLength":65536},
+          "scope":{"type":"array","maxItems":32,"items":{"type":"string","minLength":1,"maxLength":256}},
+          "inputs":{"type":"array","maxItems":32,"items":{"type":"object","additionalProperties":false,"required":["name","description","type","required"],"properties":{"name":{"type":"string","pattern":"^[A-Za-z][A-Za-z0-9_]{0,63}$"},"description":{"type":"string","maxLength":512},"type":{"type":"string","enum":["string","number","boolean","path","json"]},"required":{"type":"boolean"}}}},
+          "effects":{"type":"array","maxItems":32,"items":{"type":"object","additionalProperties":false,"required":["kind","description","target"],"properties":{"kind":{"type":"string","enum":["read","visit","create","modify","overwrite","delete","submit","send","download"]},"description":{"type":"string","maxLength":512},"target":{"type":"string","maxLength":512}}}}
+        }}
+        """;
     private readonly string _requestRoot;
     private readonly string? _launcherPath;
     private readonly IAutomationProcessService _processService;
@@ -54,16 +64,7 @@ public sealed class CodexCliClient
         EnsureNoReparsePath(requestDirectory);
         var schemaPath = Path.Combine(requestDirectory, "schema.json");
         var resultPath = Path.Combine(requestDirectory, "result.json");
-        const string schema = """
-            {"type":"object","additionalProperties":false,"required":["plan","format","source","scope","inputs","effects"],"properties":{
-              "plan":{"type":"string","minLength":1,"maxLength":12000},
-              "format":{"type":"string","enum":["python","playwright","workflow"]},
-              "source":{"type":"string","minLength":1,"maxLength":65536},
-              "scope":{"type":"array","maxItems":32,"items":{"type":"string","minLength":1,"maxLength":256}},
-              "inputs":{"type":"array","maxItems":32,"items":{"type":"object","additionalProperties":false,"required":["name","description","type","required"],"properties":{"name":{"type":"string","pattern":"^[A-Za-z][A-Za-z0-9_]{0,63}$"},"description":{"type":"string","maxLength":512},"type":{"type":"string","enum":["string","number","boolean","path","json"]},"required":{"type":"boolean"}}}},
-              "effects":{"type":"array","maxItems":32,"items":{"type":"object","additionalProperties":false,"required":["kind","description","target"],"properties":{"kind":{"type":"string","enum":["read","visit","create","modify","overwrite","delete","submit","send","download"]},"description":{"type":"string","maxLength":512},"target":{"type":"string","maxLength":512}}}}
-            }}
-            """;
+        const string schema = TaskSchema;
         await using (var schemaStream = new FileStream(schemaPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         {
             var schemaBytes = Encoding.UTF8.GetBytes(schema);

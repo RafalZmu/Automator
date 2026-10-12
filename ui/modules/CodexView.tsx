@@ -11,18 +11,24 @@ import {
   codexTaskSaveSchema,
   codexTaskRunInputSchema,
   type CodexTaskFormat,
+  type CodexTaskProvider,
 } from '../../contracts/codex';
 import './CodexView.css';
 
 type Props = { tab: BackendUiState['tabs'][number]; services: AutomationServices };
 type TaskDraft = ReturnType<typeof codexTaskDraftSchema.parse>;
 type TaskStatus = ReturnType<typeof codexTaskStatusSchema.parse>;
+const providerNames: Record<CodexTaskProvider, string> = { codex: 'Codex', claude: 'Claude' };
 const formats: Array<{ value: CodexTaskFormat | ''; label: string }> = [
-  { value: '', label: 'Let Codex recommend' },
+  { value: '', label: 'Let the assistant recommend' },
   { value: 'python', label: 'Python script' },
   { value: 'playwright', label: 'Playwright task' },
   { value: 'workflow', label: 'Workflow' },
 ];
+const providerStorageKey = 'automator.codex.provider';
+function initialProvider(): CodexTaskProvider {
+  try { return localStorage.getItem(providerStorageKey) === 'claude' ? 'claude' : 'codex'; } catch { return 'codex'; }
+}
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -38,6 +44,8 @@ function resultData(result: Awaited<ReturnType<AutomationServices['modules']['di
 }
 
 export function CodexView({ tab, services }: Props) {
+  const [provider, setProvider] = useState<CodexTaskProvider>(initialProvider);
+  const providerName = providerNames[provider];
   const [status, setStatus] = useState<TaskStatus | null>(null);
   const [prompt, setPrompt] = useState('');
   const [scopeText, setScopeText] = useState('');
@@ -75,11 +83,11 @@ export function CodexView({ tab, services }: Props) {
   const reloadStatus = useCallback(async () => {
     setBusy('status'); setError('');
     try {
-      const data = resultData(await services.modules.dispatch('getStatus', {}));
+      const data = resultData(await services.modules.dispatch('getStatus', { provider }));
       setStatus(codexTaskStatusSchema.parse(data));
     } catch (cause) { setError(errorText(cause)); }
     finally { setBusy(null); }
-  }, [services]);
+  }, [services, provider]);
 
   useEffect(() => { void reloadStatus(); }, [reloadStatus]);
   const reloadDrafts = useCallback(async () => {
@@ -108,15 +116,15 @@ export function CodexView({ tab, services }: Props) {
     event.preventDefault();
     if (!status?.available || !prompt.trim() || scope.length === 0) return;
     controller.current = new AbortController();
-    setBusy('generate'); setError(''); setNotice('Asking Codex to prepare a task plan and source…');
+    setBusy('generate'); setError(''); setNotice(`Asking ${providerName} to prepare a task plan and source…`);
     setDraft(null); setRunSucceeded(false); setRunOutput(null); setFirstRunApproved(false); setReviewedSavedTask(false); setAcceptedProposedScope([]);
     try {
-      const input = { prompt: prompt.trim(), scope, ...(preferredFormat ? { preferredFormat } : {}) };
+      const input = { prompt: prompt.trim(), scope, provider, ...(preferredFormat ? { preferredFormat } : {}) };
       const data = resultData(await services.modules.dispatch('generateDraft', input, { signal: controller.current.signal }));
       const parsed = codexTaskDraftSchema.parse(data);
       setDraft(parsed); setTaskInput(Object.fromEntries(parsed.inputs.map((item) => [item.name, ''])));
       await reloadDrafts();
-      setNotice(`Draft ready. Codex recommends ${parsed.format}. Review the plan and source before approving a run.`);
+      setNotice(`Draft ready. ${providerName} recommends ${parsed.format}. Review the plan and source before approving a run.`);
     } catch (cause) { if (errorText(cause) !== 'The module action was aborted.') setError(errorText(cause)); setNotice(''); }
     finally { controller.current = null; setBusy(null); }
   };
@@ -188,7 +196,7 @@ export function CodexView({ tab, services }: Props) {
     if (expandedScope.length > 32) { setError('The expanded task scope exceeds the 32 item limit.'); return; }
     controller.current = new AbortController(); setBusy('generate'); setError(''); setNotice('Regenerating the plan for the accepted scope…');
     try {
-      const input = { prompt: prompt.trim(), scope: expandedScope, ...(preferredFormat ? { preferredFormat } : {}) };
+      const input = { prompt: prompt.trim(), scope: expandedScope, provider, ...(preferredFormat ? { preferredFormat } : {}) };
       const data = resultData(await services.modules.dispatch('generateDraft', input, { signal: controller.current.signal }));
       const regenerated = codexTaskDraftSchema.parse(data);
       setDraft(regenerated); setScopeText(expandedScope.join('\n')); setTaskInput(Object.fromEntries(regenerated.inputs.map((item) => [item.name, ''])));
@@ -227,9 +235,9 @@ export function CodexView({ tab, services }: Props) {
     {error && <p role="alert" className="codex-alert"><CircleAlert size={14} />{error}</p>}
     {notice && <p role="status" className="codex-notice">{notice}</p>}
 
-    {!status && <p className="codex-status">{busy === 'status' ? 'Checking the local Codex CLI…' : 'Codex CLI status is unavailable.'}</p>}
-    {status && <section className={`codex-status ${status.available ? 'is-ready' : 'is-unavailable'}`} aria-label="Codex CLI readiness">
-      <strong>{status.available ? 'Codex CLI ready' : status.state === 'signedOut' ? 'Codex CLI needs sign-in' : status.state === 'configurationError' ? 'Codex CLI configuration needs attention' : 'Codex CLI not found'}</strong>
+    {!status && <p className="codex-status">{busy === 'status' ? `Checking the local ${providerName} CLI…` : `${providerName} CLI status is unavailable.`}</p>}
+    {status && <section className={`codex-status ${status.available ? 'is-ready' : 'is-unavailable'}`} aria-label={`${providerName} CLI readiness`}>
+      <strong>{status.available ? `${providerName} CLI ready` : status.state === 'signedOut' ? `${providerName} CLI needs sign-in` : status.state === 'configurationError' ? `${providerName} CLI configuration needs attention` : `${providerName} CLI not found`}</strong>
       <span>{status.message}</span>{status.version && <small>{status.version}</small>}
       {!status.available && <button className="secondary-button" type="button" onClick={() => void reloadStatus()} disabled={busy !== null}>Retry</button>}
     </section>}
@@ -239,19 +247,20 @@ export function CodexView({ tab, services }: Props) {
       <label><span>What should the task do?</span><textarea required maxLength={12000} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="For example: read the monthly CSV files, summarize totals, and create a report." /></label>
       <label><span>Files, folders, or sites in scope <small>Browse for local paths or enter one item per line; enter websites as URLs</small></span><textarea required maxLength={8192} value={scopeText} onChange={(event) => setScopeText(event.target.value)} placeholder={'C:\\Reports\\monthly\\\nhttps://example.com'} /></label>
       <div className="codex-scope-picker"><button className="secondary-button" type="button" disabled={busy !== null || scope.length >= 32} onClick={() => void pickScopePath('file')}><FilePlus2 size={13} /> Browse file</button><button className="secondary-button" type="button" disabled={busy !== null || scope.length >= 32} onClick={() => void pickScopePath('directory')}><FolderOpen size={13} /> Browse folder</button></div>
-      <p className="codex-warning" role="note">The task description and selected scope are sent as text to the local Codex CLI. Drafting uses its existing sign-in and default model; Automator disables its known shell, browser, app, MCP, plugin, and search features and enables read-only mode. Tasks run through Automator only after you review and approve them.</p>
+      <p className="codex-warning" role="note">The task description and selected scope are sent as text to the local {providerName} CLI. Drafting uses its existing sign-in and default model; Automator disables its known shell, browser, app, MCP, plugin, and search features and runs it without tools. Tasks run through Automator only after you review and approve them.</p>
+      <label><span>Assistant</span><select aria-label="Assistant" value={provider} disabled={busy !== null} onChange={(event) => { const next: CodexTaskProvider = event.target.value === 'claude' ? 'claude' : 'codex'; try { localStorage.setItem(providerStorageKey, next); } catch { /* preference is optional */ } setStatus(null); setProvider(next); }}>{(Object.keys(providerNames) as CodexTaskProvider[]).map((key) => <option key={key} value={key}>{providerNames[key]}</option>)}</select></label>
       <label><span>Format</span><select value={preferredFormat} onChange={(event) => setPreferredFormat(codexTaskFormatSchema.safeParse(event.target.value).success ? event.target.value as CodexTaskFormat : '')}>{formats.map((format) => <option key={format.value || 'auto'} value={format.value}>{format.label}</option>)}</select></label>
       {scope.length > 32 && <p className="codex-warning" role="alert">Choose 32 or fewer scope items before generating the task.</p>}
       <div className="codex-actions">{busy === 'generate' ? <button className="secondary-button" type="button" onClick={() => controller.current?.abort()}><Square size={13} /> Cancel generation</button> : <button className="primary-button" type="submit" disabled={!status?.available || busy !== null || !prompt.trim() || scope.length === 0 || scope.length > 32}><Sparkles size={13} /> Generate task draft</button>}</div>
     </form>
 
-    {status && !status.available && <p className="codex-help">Install and configure the Codex CLI on this computer, then use Retry. Automator does not ask for a separate API key or login.</p>}
+    {status && !status.available && <p className="codex-help">Install and configure the {providerName} CLI on this computer, then use Retry. Automator does not ask for a separate API key or login.</p>}
     {draft && <>
       <section className="codex-review" aria-label="Review generated task">
-        <div className="codex-review-heading"><Code2 size={15} /><h2>Review before running</h2><span>Codex recommends {draft.format}</span></div>
+        <div className="codex-review-heading"><Code2 size={15} /><h2>Review before running</h2><span>{providerName} recommends {draft.format}</span></div>
         {draft.planIsHistorical && <p className="codex-warning" role="note">This plan is historical. The saved source or declared scope changed; review the current task below.</p>}
         <div className="codex-scope"><h3>Selected scope</h3><ul>{draft.scope.map((item) => <li key={item}>{item}</li>)}</ul>
-          {proposedExpansion.length > 0 && <fieldset className="codex-scope-expansion"><legend>Codex proposes additional scope</legend><p>Accept each additional item you want this task to use. Then generate a new draft for the accepted scope and review that version before running.</p>{proposedExpansion.map((item) => <label key={item}><input type="checkbox" checked={acceptedProposedScope.includes(item)} onChange={(event) => setAcceptedProposedScope((current) => event.target.checked ? [...current, item] : current.filter((value) => value !== item))} />{item}</label>)}{new Set([...draft.scope, ...acceptedProposedScope]).size > 32 && <p role="alert">Choose 32 or fewer total scope items.</p>}<button className="secondary-button" type="button" disabled={busy !== null || acceptedProposedScope.length === 0 || new Set([...draft.scope, ...acceptedProposedScope]).size > 32} onClick={() => void regenerateWithAcceptedScope()}><RefreshCw size={13} /> Regenerate with accepted scope</button></fieldset>}
+          {proposedExpansion.length > 0 && <fieldset className="codex-scope-expansion"><legend>{providerName} proposes additional scope</legend><p>Accept each additional item you want this task to use. Then generate a new draft for the accepted scope and review that version before running.</p>{proposedExpansion.map((item) => <label key={item}><input type="checkbox" checked={acceptedProposedScope.includes(item)} onChange={(event) => setAcceptedProposedScope((current) => event.target.checked ? [...current, item] : current.filter((value) => value !== item))} />{item}</label>)}{new Set([...draft.scope, ...acceptedProposedScope]).size > 32 && <p role="alert">Choose 32 or fewer total scope items.</p>}<button className="secondary-button" type="button" disabled={busy !== null || acceptedProposedScope.length === 0 || new Set([...draft.scope, ...acceptedProposedScope]).size > 32} onClick={() => void regenerateWithAcceptedScope()}><RefreshCw size={13} /> Regenerate with accepted scope</button></fieldset>}
         </div>
         {draft.inputs.length > 0 && <fieldset className="codex-inputs"><legend>Inputs this task needs</legend>{draft.inputs.map((input) => <label key={input.name}><span>{input.name}{input.required ? ' *' : ''}<small>{input.description} · {input.type}</small></span>{input.type === 'boolean'
           ? <select required={input.required} value={String(taskInput[input.name] ?? '')} onChange={(event) => setTaskInput((current) => ({ ...current, [input.name]: event.target.value }))}><option value="">Choose…</option><option value="true">Yes</option><option value="false">No</option></select>
