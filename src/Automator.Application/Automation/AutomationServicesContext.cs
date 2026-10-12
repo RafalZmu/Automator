@@ -438,6 +438,7 @@ public sealed class AutomationServicesContext : IAsyncDisposable
     private sealed class ContextCodexTaskService(AutomationServicesContext context, IAutomationCodexTaskService inner) : IAutomationCodexTaskService
     {
         public async Task<CodexTaskStatus> GetStatusAsync(CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.GetStatusAsync(linked.Token).ConfigureAwait(false); }
+        public async Task<CodexTaskStatus> GetStatusAsync(string? provider, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.GetStatusAsync(provider, linked.Token).ConfigureAwait(false); }
         public async Task<CodexTaskDraft> GenerateDraftAsync(CodexTaskGenerateRequest request, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.GenerateDraftAsync(request, linked.Token).ConfigureAwait(false); }
         public async Task<CodexTaskDraft?> GetDraftAsync(string id, CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.GetDraftAsync(id, linked.Token).ConfigureAwait(false); }
         public async Task<IReadOnlyList<CodexTaskDraftSummary>> ListDraftsAsync(CancellationToken cancellationToken) { using var linked = Link(context, cancellationToken); return await inner.ListDraftsAsync(linked.Token).ConfigureAwait(false); }

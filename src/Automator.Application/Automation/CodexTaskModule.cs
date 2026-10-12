@@ -31,8 +31,8 @@ public sealed class CodexTaskModule : ILauncherTabModuleProvider
         ValidateInput(actionId, input);
         object data = actionId switch
         {
-            "getStatus" => await service.GetStatusAsync(cancellationToken).ConfigureAwait(false),
-            "generateDraft" => await service.GenerateDraftAsync(new(input.GetProperty("prompt").GetString()!, ReadScope(input), ReadOptionalString(input, "preferredFormat")), cancellationToken).ConfigureAwait(false),
+            "getStatus" => await service.GetStatusAsync(ReadProvider(input), cancellationToken).ConfigureAwait(false),
+            "generateDraft" => await service.GenerateDraftAsync(new(input.GetProperty("prompt").GetString()!, ReadScope(input), ReadOptionalString(input, "preferredFormat"), ReadProvider(input)), cancellationToken).ConfigureAwait(false),
             "getDraft" => (object?)await service.GetDraftAsync(ReadId(input), cancellationToken).ConfigureAwait(false) ?? new { found = false },
             "listDrafts" => await service.ListDraftsAsync(cancellationToken).ConfigureAwait(false),
             "runDraft" => await service.RunDraftAsync(ReadId(input), ReadOptionalBoolean(input, "effectConfirmed"), input.TryGetProperty("taskInput", out var taskInput) ? taskInput.Clone() : null, cancellationToken).ConfigureAwait(false),
@@ -52,8 +52,9 @@ public sealed class CodexTaskModule : ILauncherTabModuleProvider
         if (input.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("Codex action payload must be an object.");
         var allowed = action switch
         {
-            "getStatus" or "listDrafts" => Array.Empty<string>(),
-            "generateDraft" => ["prompt", "scope", "preferredFormat"],
+            "listDrafts" => Array.Empty<string>(),
+            "getStatus" => ["provider"],
+            "generateDraft" => ["prompt", "scope", "preferredFormat", "provider"],
             "getDraft" or "saveDraft" or "exportDraft" => ["id"],
             "approveChanges" => ["id", "expectedReviewSourceHash"],
             "runDraft" => ["id", "effectConfirmed", "taskInput"],
@@ -82,11 +83,14 @@ public sealed class CodexTaskModule : ILauncherTabModuleProvider
                 || id.GetString() is not { Length: 32 } value || !value.All(Uri.IsHexDigit))
                 throw new InvalidOperationException("Codex draft ID is invalid.");
         }
+        if (input.TryGetProperty("provider", out var provider) && (provider.ValueKind != JsonValueKind.String || provider.GetString() is not ("codex" or "claude")))
+            throw new InvalidOperationException("AI provider must be codex or claude.");
         if (action == "approveChanges" && input.TryGetProperty("expectedReviewSourceHash", out var expectedHash)
             && (expectedHash.ValueKind != JsonValueKind.String || expectedHash.GetString() is not { Length: 64 } hash || !hash.All(Uri.IsHexDigit)))
             throw new InvalidOperationException("Expected review source hash is invalid.");
     }
 
+    private static string? ReadProvider(JsonElement input) => ReadOptionalString(input, "provider");
     private static string ReadId(JsonElement input) => input.GetProperty("id").GetString()!;
     private static bool ReadOptionalBoolean(JsonElement input, string name) => input.TryGetProperty(name, out var value) && value.GetBoolean();
     private static string? ReadOptionalString(JsonElement input, string name) => input.TryGetProperty(name, out var value) ? value.GetString() : null;

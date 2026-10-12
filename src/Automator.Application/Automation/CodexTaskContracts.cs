@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Automator.Application.Automation;
 
 public sealed record CodexTaskStatus(bool Available, string State, string Message, string? Version = null);
-public sealed record CodexTaskGenerateRequest(string Prompt, IReadOnlyList<string> Scope, string? PreferredFormat = null);
+public sealed record CodexTaskGenerateRequest(string Prompt, IReadOnlyList<string> Scope, string? PreferredFormat = null, string? Provider = null);
 public sealed record CodexTaskInputDeclaration(string Name, string Description, string Type, bool Required);
 public sealed record CodexTaskEffectDeclaration(string Kind, string Description, string Target);
 public sealed record CodexTaskDraft(string Id, string Plan, string Format, string Source, IReadOnlyList<string> Scope,
@@ -20,6 +20,7 @@ public sealed record CodexTaskSaveResult(bool Saved, string Message);
 public interface IAutomationCodexTaskService
 {
     Task<CodexTaskStatus> GetStatusAsync(CancellationToken cancellationToken);
+    Task<CodexTaskStatus> GetStatusAsync(string? provider, CancellationToken cancellationToken) => GetStatusAsync(cancellationToken);
     Task<CodexTaskDraft> GenerateDraftAsync(CodexTaskGenerateRequest request, CancellationToken cancellationToken);
     Task<CodexTaskDraft?> GetDraftAsync(string id, CancellationToken cancellationToken);
     Task<IReadOnlyList<CodexTaskDraftSummary>> ListDraftsAsync(CancellationToken cancellationToken);

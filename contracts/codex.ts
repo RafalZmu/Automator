@@ -53,10 +53,14 @@ export const codexTaskRunSchema = z.strictObject({
   status: z.enum(['success', 'information', 'warning', 'error']),
 });
 export const codexTaskSaveSchema = z.strictObject({ saved: z.boolean(), message: z.string().max(4096) });
+export const codexTaskProviderSchema = z.enum(['codex', 'claude']);
+export type CodexTaskProvider = z.infer<typeof codexTaskProviderSchema>;
+export const codexTaskStatusInputSchema = z.strictObject({ provider: codexTaskProviderSchema.optional() });
 export const codexTaskGenerateInputSchema = z.strictObject({
   prompt: z.string().trim().min(1).max(12000),
   scope: z.array(z.string().trim().min(1).max(256)).min(1).max(32),
   preferredFormat: codexTaskFormatSchema.optional(),
+  provider: codexTaskProviderSchema.optional(),
 });
 export const codexTaskIdInputSchema = z.strictObject({ id: z.string().regex(/^[0-9a-f]{32}$/i) });
 export const codexTaskRunInputSchema = codexTaskIdInputSchema.extend({

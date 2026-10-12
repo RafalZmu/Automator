@@ -20,6 +20,7 @@ public static class CodexTaskSpecs
         await CliStatusClassifiesConfigurationErrors();
         await CliStatusHandlesTruncationQuickly();
         await CliGenerationDisablesTaskToolsAndUsesPromptStdin();
+        await ClaudeCliUsesStructuredOutputWithoutTools();
         await CliGenerationBoundsAndPersistsStructuredResults();
         await PythonTaskRequiresEffectApprovalAndSavesOnlyTheRunRevision();
         await PlaywrightReapprovalReviewsCurrentSavedSource();
@@ -191,6 +192,32 @@ public static class CodexTaskSpecs
         Check.True(request.StandardInput!.Contains("print a file", StringComparison.Ordinal));
         Check.True(!request.Arguments.Any(argument => argument.Contains("print a file", StringComparison.Ordinal)));
         Check.Equal(TimeSpan.FromMinutes(20), request.Timeout);
+    }
+
+    private static async Task ClaudeCliUsesStructuredOutputWithoutTools()
+    {
+        var process = new FakeProcessService
+        {
+            Handler = request => request.Arguments.SequenceEqual(["--version"]) ? new(0, false, "2.0.0 (Claude Code)", "", false, false, 1)
+                : request.Arguments.SequenceEqual(["auth", "status"]) ? new(0, false, "{\"loggedIn\":true}", "", false, false, 1)
+                : new(0, false, "{\"type\":\"result\",\"is_error\":false,\"structured_output\":" + ValidResult("files") + "}", "", false, false, 1)
+        };
+        var cli = new ClaudeCliClient(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")), process, "C:/Claude/claude.exe");
+        Check.Equal("ready", (await cli.GetStatusAsync(CancellationToken.None)).State);
+        var result = await cli.GenerateAsync("print a file", CancellationToken.None);
+        Check.Equal("python", result.GetProperty("format").GetString());
+        var request = process.Requests.Last();
+        Check.True(request.Arguments.Contains("-p") && request.Arguments.Contains("--json-schema"));
+        var toolsIndex = request.Arguments.ToList().IndexOf("--tools");
+        Check.True(toolsIndex >= 0 && request.Arguments[toolsIndex + 1] == "");
+        Check.True(request.Arguments.Contains("--strict-mcp-config") && request.Arguments.Contains("--no-session-persistence"));
+        Check.True(request.StandardInput!.Contains("print a file", StringComparison.Ordinal));
+        Check.True(!request.Arguments.Any(argument => argument.Contains("print a file", StringComparison.Ordinal)));
+        Check.True(ClaudeCliClient.ExtractStructuredOutput("{\"result\":\"{}\"}") == "{}");
+        Check.Throws<InvalidDataException>(() => ClaudeCliClient.ExtractStructuredOutput("{\"type\":\"result\"}"));
+        var signedOut = new FakeProcessService { Handler = _ => new(1, false, "", "Not logged in", false, false, 1) };
+        var status = await new ClaudeCliClient(Path.GetTempPath(), signedOut, "C:/Claude/claude.exe").GetStatusAsync(CancellationToken.None);
+        Check.Equal("unavailable", status.State);
     }
 
     private static async Task CliStatusClassifiesConfigurationErrors()

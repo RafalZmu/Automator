@@ -12,13 +12,14 @@ public sealed class CodexTaskService : IAutomationCodexTaskService
     private const int MaximumDraftBytes = 512 * 1024;
     private readonly string _draftDirectory;
     private readonly CodexCliClient _cli;
+    private readonly ClaudeCliClient _claude;
     private readonly IAutomationLibraryStore? _library;
     private readonly IAutomationProcessService? _processes;
     private readonly AutomationWorkflowEngine? _workflows;
     private readonly string _dataDirectory;
 
     public CodexTaskService(string dataDirectory, IAutomationProcessService processService, CodexCliClient? cli = null,
-        IAutomationLibraryStore? library = null, AutomationWorkflowEngine? workflows = null, IAutomationVariableProvider? variables = null)
+        IAutomationLibraryStore? library = null, AutomationWorkflowEngine? workflows = null, IAutomationVariableProvider? variables = null, ClaudeCliClient? claude = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         _draftDirectory = Path.GetFullPath(Path.Combine(dataDirectory, "CodexTasks", "drafts"));
@@ -27,9 +28,18 @@ public sealed class CodexTaskService : IAutomationCodexTaskService
         _processes = processService;
         _workflows = workflows;
         _cli = cli ?? new CodexCliClient(Path.Combine(dataDirectory, "CodexTasks", "requests"), processService);
+        _claude = claude ?? new ClaudeCliClient(Path.Combine(dataDirectory, "ClaudeTasks", "requests"), processService);
     }
 
     public Task<CodexTaskStatus> GetStatusAsync(CancellationToken cancellationToken) => _cli.GetStatusAsync(cancellationToken);
+    public Task<CodexTaskStatus> GetStatusAsync(string? provider, CancellationToken cancellationToken) => Select(provider).GetStatusAsync(cancellationToken);
+
+    private IAuthoringCliClient Select(string? provider) => provider switch
+    {
+        null or "codex" => _cli,
+        "claude" => _claude,
+        _ => throw new InvalidDataException("Requested AI provider is unsupported."),
+    };
 
     public async Task<CodexTaskDraft> GenerateDraftAsync(CodexTaskGenerateRequest request, CancellationToken cancellationToken)
     {
@@ -45,7 +55,7 @@ public sealed class CodexTaskService : IAutomationCodexTaskService
             if (preferredFormat is not ("python" or "playwright" or "workflow")) throw new InvalidDataException("Requested task format is unsupported.");
             generationPrompt += $"\n\nThe user explicitly requested the {preferredFormat} format. Generate this task in that format unless it cannot represent the task; if it cannot, explain why in the plan.";
         }
-        var json = await _cli.GenerateAsync(generationPrompt, cancellationToken).ConfigureAwait(false);
+        var json = await Select(request.Provider).GenerateAsync(generationPrompt, cancellationToken).ConfigureAwait(false);
         var format = json.GetProperty("format").GetString()!;
         var source = json.GetProperty("source").GetString()!;
         var requestedScope = request.Scope.Distinct(StringComparer.Ordinal).ToArray();
