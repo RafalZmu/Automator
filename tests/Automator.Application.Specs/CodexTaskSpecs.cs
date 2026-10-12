@@ -208,6 +208,8 @@ public static class CodexTaskSpecs
         Check.Equal("python", result.GetProperty("format").GetString());
         var request = process.Requests.Last();
         Check.True(request.Arguments.Contains("-p") && request.Arguments.Contains("--json-schema"));
+        var modelIndex = request.Arguments.ToList().IndexOf("--model");
+        Check.True(modelIndex >= 0 && request.Arguments[modelIndex + 1] == "claude-haiku-5-5");
         var toolsIndex = request.Arguments.ToList().IndexOf("--tools");
         Check.True(toolsIndex >= 0 && request.Arguments[toolsIndex + 1] == "");
         Check.True(request.Arguments.Contains("--strict-mcp-config") && request.Arguments.Contains("--no-session-persistence"));
