@@ -216,3 +216,21 @@ test('work-time edits keep the stored instant when a time field is untouched', a
   assert.deepEqual(resolveWorkTimeInterval('2026-10-07T10:30:00', '2026-10-07T10:00:00', original, now),
     { error: 'The end time must be after the start time.' });
 });
+
+test('work-time manual duration ends now and starts the duration earlier', async () => {
+  const { resolveWorkTimeDuration, workTimeDurationMilliseconds } = await import(modelUrl);
+  const now = Date.parse('2026-10-07T12:00:00.000Z');
+
+  assert.equal(workTimeDurationMilliseconds('1', '5'), 65 * 60_000);
+  assert.equal(workTimeDurationMilliseconds('', '45'), 45 * 60_000, 'a blank field counts as zero');
+  assert.equal(workTimeDurationMilliseconds('2', ''), 120 * 60_000);
+  assert.deepEqual(resolveWorkTimeDuration('1', '5', now), {
+    startedUtc: '2026-10-07T10:55:00.000Z',
+    stoppedUtc: '2026-10-07T12:00:00.000Z',
+  });
+
+  for (const [hours, minutes] of [['', ''], ['0', '0'], ['1', '60'], ['-1', '5'], ['1.5', '0'], ['abc', '5'], ['100', '0']]) {
+    assert.equal(workTimeDurationMilliseconds(hours, minutes), null, `${hours}h ${minutes}m is rejected`);
+    assert.ok('error' in resolveWorkTimeDuration(hours, minutes, now));
+  }
+});

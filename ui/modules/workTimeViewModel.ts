@@ -206,6 +206,22 @@ export function resolveWorkTimeInterval(
   return error ? { error } : { startedUtc, stoppedUtc };
 }
 
+/** Parses hour and minute fields into a positive duration; blank fields count as zero. Returns null when invalid or zero. */
+export function workTimeDurationMilliseconds(hours: string, minutes: string): number | null {
+  const h = hours.trim() === '' ? 0 : Number(hours);
+  const m = minutes.trim() === '' ? 0 : Number(minutes);
+  if (!Number.isInteger(h) || !Number.isInteger(m) || h < 0 || h > 99 || m < 0 || m > 59) return null;
+  const total = (h * 60 + m) * 60_000;
+  return total > 0 ? total : null;
+}
+
+/** A manual entry for a duration ends at `now` and starts `duration` earlier. */
+export function resolveWorkTimeDuration(hours: string, minutes: string, now = Date.now()): WorkTimeIntervalInput {
+  const duration = workTimeDurationMilliseconds(hours, minutes);
+  if (duration === null) return { error: 'Enter a duration of at least one minute (hours 0–99, minutes 0–59).' };
+  return { startedUtc: new Date(now - duration).toISOString(), stoppedUtc: new Date(now).toISOString() };
+}
+
 export function formatWorkTimeDuration(milliseconds: number): string {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1_000));
   if (totalSeconds < 60) return `${totalSeconds}s`;

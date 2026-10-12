@@ -112,6 +112,16 @@ Run focused model cases with node --experimental-strip-types --test --test-concu
 
 **Expected result:** Unchanged fields keep the exact original instants including milliseconds; a changed field is converted from local time; a reversed edit is rejected.
 
+### work-time manual duration ends now and starts the duration earlier
+
+**Steps**
+
+1. Parse hour and minute fields such as 1 hour 5 minutes, a blank hours field, and a blank minutes field.
+2. Resolve 1 hour 5 minutes against a fixed current time.
+3. Try empty, zero, 60-minute, negative, fractional, non-numeric, and over-99-hour values.
+
+**Expected result:** A valid duration produces an end at the current time and a start exactly that duration earlier; blank fields count as zero; every invalid value is rejected with an error and no timestamps.
+
 ## Legacy Focus Sessions view-model compatibility — tests/electron/focus-sessions-model.test.cjs
 
 The test filename and view-model module retain the old Focus Sessions name for compatibility. These cases cover countdown formatting and snapshot parsing used by the legacy model; they are not the current Work Time interval report flow.

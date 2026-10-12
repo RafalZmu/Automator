@@ -15,6 +15,7 @@ import {
   isWorkTimeDescriptionValid,
   localDateTimeInputValue,
   readWorkTimeSnapshot,
+  resolveWorkTimeDuration,
   resolveWorkTimeInterval,
   workTimeEntryDurationMilliseconds,
   type WorkTimeReportFilter,
@@ -44,8 +45,8 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
   const [editDescription, setEditDescription] = useState('');
   const [editTags, setEditTags] = useState('');
   const [deleteCandidateId, setDeleteCandidateId] = useState<string | null>(null);
-  const [manualStart, setManualStart] = useState('');
-  const [manualStop, setManualStop] = useState('');
+  const [manualHours, setManualHours] = useState('');
+  const [manualMinutes, setManualMinutes] = useState('');
   const [manualDescription, setManualDescription] = useState('');
   const [manualTags, setManualTags] = useState('');
   const startDescriptionRef = useRef<HTMLInputElement>(null);
@@ -167,15 +168,16 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
     if (ok) setEditingEntryId(null);
   };
 
-  const manualInterval = manualStart && manualStop ? resolveWorkTimeInterval(manualStart, manualStop, null, now) : null;
-  const manualError = manualInterval && 'error' in manualInterval ? manualInterval.error : '';
-  const manualDurationLabel = manualInterval && 'startedUtc' in manualInterval
+  const manualHasDuration = manualHours.trim() !== '' || manualMinutes.trim() !== '';
+  const manualInterval = resolveWorkTimeDuration(manualHours, manualMinutes, now);
+  const manualError = manualHasDuration && 'error' in manualInterval ? manualInterval.error : '';
+  const manualDurationLabel = 'startedUtc' in manualInterval
     ? formatWorkTimeDuration(Date.parse(manualInterval.stoppedUtc) - Date.parse(manualInterval.startedUtc))
     : '';
   const manualDescriptionValue = manualDescription.trim();
   const submitManualEntry = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const interval = resolveWorkTimeInterval(manualStart, manualStop, null, Date.now());
+    const interval = resolveWorkTimeDuration(manualHours, manualMinutes, Date.now());
     if ('error' in interval) {
       setNotice(interval.error);
       return;
@@ -187,8 +189,8 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
       tags: manualTags.split(',').map((tag) => tag.trim()).filter(Boolean),
     });
     if (!ok) return;
-    setManualStart('');
-    setManualStop('');
+    setManualHours('');
+    setManualMinutes('');
     setManualDescription('');
     setManualTags('');
   };
@@ -218,7 +220,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
   const commands = useMemo(() => [
     { id: 'toggle-work', label: 'Work timer shortcut', keywords: ['start pause shortcut s'], disabled: !!busy || !snapshot, run: toggleWorkTimer },
     { id: 'start-work', label: 'Start work timer', keywords: ['begin named timer'], disabled: !!busy || !snapshot || !!runningTimer || !cleanedStartDescription, run: startTimer },
-    { id: 'add-work-entry-manually', label: 'Add work entry manually', keywords: ['register time without timer log past interval'], disabled: !!busy || !snapshot, run: () => { document.getElementById('work-time-manual-start')?.focus(); } },
+    { id: 'add-work-entry-manually', label: 'Add work entry manually', keywords: ['register time without timer log past interval'], disabled: !!busy || !snapshot, run: () => { document.getElementById('work-time-manual-hours')?.focus(); } },
     ...(runningTimer ? [{ id: `pause-work-${runningTimer.id}`, label: `Pause ${runningTimer.description}`, keywords: ['pause timer'], disabled: !!busy, run: async () => { await dispatch('pause', { id: runningTimer.id }); } }] : []),
     ...((snapshot?.timers ?? []).filter((timer) => timer.status === 'paused').flatMap((timer) => [
       { id: `resume-work-${timer.id}`, label: `Resume ${timer.description}`, keywords: ['continue timer'], disabled: !!busy || !!runningTimer, run: async () => { await dispatch('resume', { id: timer.id }); } },
@@ -271,18 +273,18 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
       </section>
 
       <section className="work-time-entry-card work-time-manual-card" aria-label="Add a work entry manually">
-        <header><div><Clock3 size={14} /><h2>Add time without the timer</h2></div><span>{manualDurationLabel}</span></header>
+        <header><div><Clock3 size={14} /><h2>Add time without the timer</h2></div><span>{manualDurationLabel ? `${manualDurationLabel}, ending now` : 'Ends now'}</span></header>
         <form onSubmit={(event) => void submitManualEntry(event)}>
           <div className="work-time-manual-times">
             <label className="work-time-field">
-              <span>Start <b>Required</b></span>
-              <input id="work-time-manual-start" aria-label="Manual entry start" type="datetime-local" step={1} value={manualStart}
-                disabled={!!busy} onChange={(event) => setManualStart(event.target.value)} />
+              <span>Hours</span>
+              <input id="work-time-manual-hours" aria-label="Manual entry hours" type="number" inputMode="numeric" min={0} max={99} step={1} placeholder="0" value={manualHours}
+                disabled={!!busy} onChange={(event) => setManualHours(event.target.value)} />
             </label>
             <label className="work-time-field">
-              <span>End <b>Required</b></span>
-              <input aria-label="Manual entry end" type="datetime-local" step={1} value={manualStop}
-                disabled={!!busy} onChange={(event) => setManualStop(event.target.value)} />
+              <span>Minutes</span>
+              <input aria-label="Manual entry minutes" type="number" inputMode="numeric" min={0} max={59} step={1} placeholder="0" value={manualMinutes}
+                disabled={!!busy} onChange={(event) => setManualMinutes(event.target.value)} />
             </label>
           </div>
           {manualError && <p className="work-time-field-error" role="alert">{manualError}</p>}
@@ -297,7 +299,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
               disabled={!!busy} onChange={(event) => setManualTags(event.target.value)} /><small>Separate with commas</small></div>
           </label>
           <div className="work-time-entry-actions">
-            <button className="primary-button" type="submit" disabled={!!busy || !manualDescriptionValue || !manualStart || !manualStop || !!manualError}><Check size={13} /> Add entry</button>
+            <button className="primary-button" type="submit" disabled={!!busy || !manualDescriptionValue || 'error' in manualInterval}><Check size={13} /> Add entry</button>
           </div>
         </form>
       </section>
