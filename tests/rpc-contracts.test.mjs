@@ -138,6 +138,15 @@ test('module settings writes enforce active module identifiers, schema versions 
   }).success, false);
 });
 
+test('launcher window context treats textEntryFocused as an optional flag defaulting to false', () => {
+  const base = { windowHandleHex: '0x000000000001ABCD', visible: true, rendererFocused: true, nativeDialogActive: false, mode: 'launcher' };
+  const omitted = validateRpcRequest({ jsonrpc: '2.0', id: 3, method: 'launcher/setWindowContext', params: base });
+  assert.equal(omitted.params.textEntryFocused, false);
+  const focused = validateRpcRequest({ jsonrpc: '2.0', id: 3, method: 'launcher/setWindowContext', params: { ...base, textEntryFocused: true } });
+  assert.equal(focused.params.textEntryFocused, true);
+  assert.throws(() => validateRpcRequest({ jsonrpc: '2.0', id: 3, method: 'launcher/setWindowContext', params: { ...base, textEntryFocused: 'yes' } }));
+});
+
 test('shared C# and TypeScript request fixtures agree on valid and invalid parameters', () => {
   for (const { name, request } of fixture.validRequests) {
     assert.deepEqual(validateRpcRequest(request), request, `valid fixture ${name}`);

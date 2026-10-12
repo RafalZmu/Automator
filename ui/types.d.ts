@@ -55,6 +55,7 @@ export interface AutomatorBridge {
   close(): Promise<BackendUiState>;
   selectTab(tab: number): Promise<BackendUiState>;
   setQuery(query: string): Promise<BackendUiState>;
+  setTextEntryFocused(focused: boolean): Promise<boolean>;
   openCatalog(): Promise<BackendUiState>;
   selectCatalogBinding(bindingId: string): Promise<BackendUiState>;
   selectBinding(bindingId: string): Promise<BackendUiState>;

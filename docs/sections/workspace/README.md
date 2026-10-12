@@ -6,6 +6,8 @@ Each numbered tab displays a small icon beside its number to help identify the t
 
 The compact panel remains optimized for quick access. Workspace changes should reuse module views and host capabilities rather than fork feature behavior.
 
+If a renderer crashes repeatedly, the host reloads it automatically at most three times per minute per window (`electron/reloadBudget.ts`); after that it logs `Workspace.ReloadBudgetExhausted` or `Renderer.ReloadBudgetExhausted` and stops reloading.
+
 ## Code map
 
 - electron/main.ts creates and manages the launcher and Workspace windows.

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AutomationServices } from '../automationServices';
 import type { BackendUiState } from '../../contracts/rpc';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
+import { InlineConfirmButton } from '../components/InlineConfirmButton';
 import './WorkflowsView.css';
 import { GlobalVariableHints } from '../variables/GlobalVariables';
 import {
@@ -375,7 +376,7 @@ export function WorkflowsView({ services, tab }: ViewProps) {
               <div className="workflow-row-copy"><strong>{workflow.name}</strong><span>{workflow.stepCount} step{workflow.stepCount === 1 ? '' : 's'} · {workflow.id}</span></div>
               <button className="icon-button" type="button" aria-label={`Run ${workflow.name}`} disabled={running} title="Run workflow" onClick={() => void runWorkflow(workflow.id)}>{running ? <Square size={14} /> : <Play size={14} />}</button>
               <button className="icon-button" type="button" aria-label={`Edit ${workflow.name}`} disabled={running} title="Edit workflow" onClick={() => void editWorkflow(workflow)}><Save size={13} /></button>
-              <button className="icon-button" type="button" aria-label={`Remove ${workflow.name}`} disabled={running} title="Remove workflow" onClick={() => void deleteWorkflow(workflow)}><Trash2 size={13} /></button>
+              <InlineConfirmButton className="icon-button" label={`Remove ${workflow.name}`} confirmLabel={`Yes, remove ${workflow.name}`} title="Remove workflow" disabled={running} onConfirm={() => deleteWorkflow(workflow)}><Trash2 size={13} /></InlineConfirmButton>
             </article>
           ))}
           {!loading && workflows.length === 0 && !draft && <div className="workflow-empty">

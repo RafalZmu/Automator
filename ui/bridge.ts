@@ -111,6 +111,7 @@ class BrowserPreviewBridge implements AutomatorBridge {
   async confirmPrimaryFocus() { return true; }
   async close() { return this.update({ visible: false }); }
   async selectTab(tab: number) { return this.update({ selectedTab: tab, query: '', mode: 'launcher', aliasEditCandidate: null, error: null }); }
+  async setTextEntryFocused() { return true; }
   async setQuery(query: string) {
     const match = this.state.selectedTab === 1 && this.state.mode === 'launcher'
       ? this.state.bindings.filter((binding) => binding.alias && binding.alias.toLowerCase().startsWith(query.trim().toLowerCase()))

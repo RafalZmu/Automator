@@ -28,6 +28,7 @@ import { isScriptRunnerInterpreter, scriptFileFilter } from '../contracts/script
 import { authorizeAutomationServiceCall, type AutomationWindowContext } from './automationServiceAuthorization';
 import { injectHostWindowContext } from './hostWindowContext';
 import { projectStateForWindow, WindowContextRegistry } from './windowContextRegistry';
+import { createReloadBudget } from './reloadBudget';
 import { getScriptRunnerPathPickerSpec } from './scriptRunnerPathPicker';
 import { getCodexScopePathPickerSpec } from './codexScopePathPicker';
 import { authorizeCodexExport, extensionForCodexFormat, writeCodexSourceCreateNew } from './codexExport';
@@ -73,6 +74,9 @@ let sessionId: string = randomUUID();
 let mainWindow: BrowserWindow | undefined;
 let workspaceWindow: BrowserWindow | undefined;
 const windowContexts = new WindowContextRegistry<object>();
+// Each window gets its own budget so a crash loop in one renderer cannot exhaust the other.
+const workspaceReloadBudget = createReloadBudget();
+const launcherReloadBudget = createReloadBudget();
 let tray: Tray | undefined;
 let backend: BackendProcess | undefined;
 let currentState: BackendUiState | undefined;
@@ -102,6 +106,8 @@ async function deliverExplorerLaunches(): Promise<void> {
   } catch (error) { writeLog('Explorer.LaunchFailed', 'Could not deliver the Explorer action.', { error: String(error) }); }
 }
 let nativeDialogActive = false;
+let lastRendererFocused = false;
+let launcherTextEntryFocused = false;
 let primaryFocusPending = false;
 let focusSequenceRunning = false;
 let focusRequestPending = false;
@@ -539,6 +545,17 @@ function registerIpc(): void {
     });
     pendingFocusNonce = undefined;
     return focused;
+  });
+
+  ipcMain.handle('automator:set-text-entry-focused', async (event, request: { focused?: unknown }) => {
+    const context = assertMainFrame(event, ['launcher', 'workspace']);
+    // Only the launcher panel's global digit and slash handling depends on text entry.
+    if (context.role !== 'launcher') return false;
+    const focused = request?.focused === true;
+    if (focused === launcherTextEntryFocused) return true;
+    launcherTextEntryFocused = focused;
+    await updateWindowContext(lastRendererFocused);
+    return true;
   });
 
   for (const [command, method] of Object.entries(backendMethods)) {
@@ -1009,6 +1026,7 @@ async function verifyNativeForeground(maxAttempts = 24): Promise<{ matches: bool
 }
 
 async function updateWindowContext(rendererFocused: boolean): Promise<void> {
+  lastRendererFocused = rendererFocused;
   if (quitRequested || !mainWindow || mainWindow.isDestroyed() || !backend || backendStatus !== 'ready' || !currentState) return;
   try {
     await backend.request('launcher/setWindowContext', {
@@ -1017,6 +1035,7 @@ async function updateWindowContext(rendererFocused: boolean): Promise<void> {
       rendererFocused,
       nativeDialogActive,
       mode: currentState.mode,
+      textEntryFocused: launcherTextEntryFocused,
     });
   } catch (error) {
     writeLog('Panel.ContextUpdateFailed', 'Could not update the native launcher context.', { error: String(error) });
@@ -1118,6 +1137,11 @@ function createWorkspaceWindow(): void {
     if (!isAllowedRendererUrl(url, packagedRendererUrl, allowedDev)) event.preventDefault();
   });
   owned.webContents.on('render-process-gone', (_event, details) => {
+    if (!workspaceReloadBudget.tryConsume()) {
+      // Stop reloading instead of looping; the window keeps its last state until the user restarts Automator.
+      writeLog('Workspace.ReloadBudgetExhausted', 'Workspace renderer keeps exiting; automatic reloads are paused.', { reason: details.reason, exitCode: details.exitCode });
+      return;
+    }
     writeLog('Workspace.RendererCrashed', 'Workspace renderer exited; reloading the frontend.', { reason: details.reason, exitCode: details.exitCode });
     if (!owned.isDestroyed()) setTimeout(() => { if (!owned.isDestroyed()) void loadRenderer(owned, packagedRendererUrl, 'workspace'); }, 250);
   });
@@ -1194,9 +1218,14 @@ function createWindow(): void {
     if (primaryFocusPending && currentState?.visible) void verifyAndRequestFocus();
   });
   owned.webContents.on('render-process-gone', (_event, details) => {
-    writeLog('Renderer.Crashed', 'Renderer process exited; reloading the frontend.', { reason: details.reason, exitCode: details.exitCode });
     rendererReady = false;
     explorerListenerReady = false;
+    if (!launcherReloadBudget.tryConsume()) {
+      // Stop reloading instead of looping; the launcher stays hidden or unchanged until the user restarts Automator.
+      writeLog('Renderer.ReloadBudgetExhausted', 'Launcher renderer keeps exiting; automatic reloads are paused.', { reason: details.reason, exitCode: details.exitCode });
+      return;
+    }
+    writeLog('Renderer.Crashed', 'Renderer process exited; reloading the frontend.', { reason: details.reason, exitCode: details.exitCode });
     if (!owned.isDestroyed()) setTimeout(() => { if (!owned.isDestroyed()) void loadRenderer(owned, packagedRendererUrl); }, 250);
   });
   owned.webContents.on('did-fail-load', (_event, code, description, validatedUrl, isMainFrame) => {

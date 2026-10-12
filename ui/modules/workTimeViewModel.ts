@@ -28,8 +28,19 @@ export type WorkTimePending = WorkTimeEntry;
 export type WorkTimeSnapshot = {
   timers: WorkTimeTimer[];
   pendingEntries: WorkTimePending[];
+  // The newest entries only; historyTotal counts every saved entry the backend stores.
   history: WorkTimeEntry[];
+  historyTotal: number;
 };
+
+export type WorkTimeHistoryPage = {
+  entries: WorkTimeEntry[];
+  total: number;
+  offset: number;
+};
+
+// Must match FocusSessionsModule.SnapshotHistoryPageSize in src/Automator.Application/Automation.
+export const WORK_TIME_HISTORY_PAGE_SIZE = 250;
 
 type JsonObject = Record<string, unknown>;
 
@@ -95,7 +106,26 @@ export function readWorkTimeSnapshot(value: unknown): WorkTimeSnapshot | null {
   if (!value.history.every((entry) => readEntry(entry) !== null)) return null;
   const allIds = [...timers, ...pendingEntries, ...value.history.map((entry) => readEntry(entry)!)].map((item) => item!.id);
   if (new Set(allIds).size !== allIds.length) return null;
-  return { timers: timers as WorkTimeTimer[], pendingEntries: pendingEntries as WorkTimePending[], history: value.history.map((entry) => readEntry(entry)!).slice(-500) };
+  const history = value.history.map((entry) => readEntry(entry)!);
+  // Older snapshots without historyTotal carried their whole history, so the sent length is the total.
+  const historyTotal = value.historyTotal === undefined ? history.length : value.historyTotal;
+  if (!Number.isSafeInteger(historyTotal) || (historyTotal as number) < history.length) return null;
+  return { timers: timers as WorkTimeTimer[], pendingEntries: pendingEntries as WorkTimePending[], history, historyTotal: historyTotal as number };
+}
+
+export function readWorkTimeHistoryPage(value: unknown): WorkTimeHistoryPage | null {
+  if (!isObject(value) || !Array.isArray(value.entries) || !Number.isSafeInteger(value.total) || !Number.isSafeInteger(value.offset)) return null;
+  const entries = value.entries.map((entry) => readEntry(entry));
+  if (entries.some((entry) => entry === null)) return null;
+  return { entries: entries as WorkTimeEntry[], total: value.total as number, offset: value.offset as number };
+}
+
+/** Combines the newest snapshot entries with older pages, de-duplicated by id and ordered oldest to newest. Entries in `preferred` win. */
+export function mergeWorkTimeHistory(preferred: readonly WorkTimeEntry[], older: readonly WorkTimeEntry[]): WorkTimeEntry[] {
+  const byId = new Map<string, WorkTimeEntry>();
+  for (const entry of older) byId.set(entry.id, entry);
+  for (const entry of preferred) byId.set(entry.id, entry);
+  return [...byId.values()].sort((a, b) => Date.parse(a.stoppedUtc) - Date.parse(b.stoppedUtc));
 }
 
 export function elapsedWorkTimeMilliseconds(timer: WorkTimeTimer, now = Date.now()): number {

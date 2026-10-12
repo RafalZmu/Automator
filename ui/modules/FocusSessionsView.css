@@ -108,6 +108,7 @@
 .work-time-clear-filters:hover { color: var(--ink); border-color: rgba(24,130,152,.28); }
 .work-time-report-count { margin-left: auto; padding-bottom: 6px; color: var(--muted); font-size: 8px; }
 .work-time-report-list { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.work-time-history-more { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 9px; padding: 10px 3px; color: var(--muted); font-size: 8px; }
 .work-time-report-row { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 10px 3px; border-bottom: 1px solid var(--line); }
 .work-time-report-main { min-width: 120px; flex: 1; display: flex; flex-direction: column; gap: 4px; }
 .work-time-report-main > strong { overflow-wrap: anywhere; color: var(--ink); font-size: 9px; font-weight: 640; }

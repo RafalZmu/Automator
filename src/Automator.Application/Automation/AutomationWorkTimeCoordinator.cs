@@ -8,7 +8,7 @@ public sealed class AutomationWorkTimeCoordinator : IAutomationWorkTimeCoordinat
     public const string ModuleId = FocusSessionsModule.IdValue;
     public const string StateCollection = "work-time";
     public const string HistoryCollection = "work-time-history";
-    public const int MaximumHistoryEntries = 500;
+    public const int MaximumHistoryEntries = 5000;
     private const string CurrentId = "current";
     private const int RecordSchemaVersion = 2;
     private const string UntitledTimer = "Untitled timer";
@@ -46,11 +46,19 @@ public sealed class AutomationWorkTimeCoordinator : IAutomationWorkTimeCoordinat
             _history.Clear();
             foreach (var record in history)
             {
-                var entry = record.SchemaVersion == 1
-                    ? MigrateEntry(Deserialize<LegacyEntry>(record, "work-time history entry"))
-                    : Deserialize<AutomationWorkTimeEntry>(record, "work-time history entry");
-                ValidateEntry(entry);
-                _history.Add(entry);
+                // One corrupt history entry is skipped so the remaining saved history still loads; the state record stays strict.
+                try
+                {
+                    var entry = record.SchemaVersion == 1
+                        ? MigrateEntry(Deserialize<LegacyEntry>(record, "work-time history entry"))
+                        : Deserialize<AutomationWorkTimeEntry>(record, "work-time history entry");
+                    ValidateEntry(entry);
+                    _history.Add(entry);
+                }
+                catch (InvalidDataException)
+                {
+                    continue;
+                }
             }
             _history.Sort((a, b) => a.StoppedUtc.CompareTo(b.StoppedUtc));
             // A history write may have succeeded immediately before shutdown interrupted draft removal.
@@ -67,6 +75,24 @@ public sealed class AutomationWorkTimeCoordinator : IAutomationWorkTimeCoordinat
 
     public Task<AutomationWorkTimeSnapshot> GetSnapshotAsync(CancellationToken cancellationToken) =>
         OperateAsync((_, _) => Task.CompletedTask, cancellationToken);
+
+    public async Task<AutomationWorkTimeHistoryPage> GetHistoryPageAsync(int offset, int limit, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(offset);
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        if (Volatile.Read(ref _initialized) == 0) throw new InvalidOperationException("The work-time coordinator has not been initialized.");
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+        await _stateGate.WaitAsync(linked.Token).ConfigureAwait(false);
+        try
+        {
+            // History is stored oldest to newest; the offset counts back from the newest entry.
+            var end = Math.Max(0, _history.Count - offset);
+            var start = Math.Max(0, end - limit);
+            return new AutomationWorkTimeHistoryPage(_history.Count, _history.GetRange(start, end - start).Select(CopyEntry).ToArray());
+        }
+        finally { _stateGate.Release(); }
+    }
 
     public Task<AutomationWorkTimeSnapshot> StartAsync(string description, CancellationToken cancellationToken)
     {

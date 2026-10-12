@@ -228,6 +228,7 @@ const methodParams = {
     rendererFocused: z.boolean(),
     nativeDialogActive: z.boolean(),
     mode,
+    textEntryFocused: z.boolean().default(false),
   }),
   'launcher/verifyForeground': z.strictObject({ windowHandleHex: hwnd }),
   'launcher/acquireForeground': emptyParams,

@@ -11,7 +11,10 @@ namespace Automator.Application.Automation;
 public sealed class FocusSessionsModule : ILauncherTabModuleProvider
 {
     public const string IdValue = "focus-sessions";
-    public const int MaximumHistoryEntries = 500;
+    /// <summary>Shares the Work Time retention cap; the coordinator stores up to this many entries.</summary>
+    public const int MaximumHistoryEntries = AutomationWorkTimeCoordinator.MaximumHistoryEntries;
+    /// <summary>Newest history entries sent with each snapshot, and the largest page getHistory returns. Keeps results under the module data limit.</summary>
+    public const int SnapshotHistoryPageSize = 250;
 
     private static readonly AutomationCapabilityRequirement WorkTimeCapability = new(AutomationCapabilityIds.WorkTimeManagement, 1);
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
@@ -38,6 +41,7 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
             new("deleteEntry", 2, [WorkTimeCapability]),
             new("discardTimer", 2, [WorkTimeCapability]),
             new("discardPending", 2, [WorkTimeCapability]),
+            new("getHistory", 2, [WorkTimeCapability]),
         ]);
 
     public int ContractVersion => Definition.ContractVersion;
@@ -89,6 +93,7 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
                 "deleteEntry" => await DeleteEntryAsync(coordinator, input, cancellationToken).ConfigureAwait(false),
                 "discardTimer" => SnapshotResult(await coordinator.DiscardTimerAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Paused timer discarded."),
                 "discardPending" => SnapshotResult(await coordinator.DiscardPendingAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Pending interval discarded."),
+                "getHistory" => await GetHistoryAsync(coordinator, input, cancellationToken).ConfigureAwait(false),
                 _ => Result(AutomationStatus.Error, "Unknown Work Time action.", new { }),
             };
         }
@@ -215,8 +220,32 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
         {
             timers = snapshot.Timers,
             pendingEntries = snapshot.PendingEntries,
-            history = snapshot.History.TakeLast(MaximumHistoryEntries).ToArray(),
+            history = snapshot.History.TakeLast(SnapshotHistoryPageSize).ToArray(),
+            historyTotal = snapshot.History.Count,
         });
+
+    private static async ValueTask<AutomationResult> GetHistoryAsync(
+        IAutomationWorkTimeCoordinator coordinator,
+        JsonElement input,
+        CancellationToken cancellationToken)
+    {
+        var (offset, limit) = ReadHistoryPageInput(input);
+        var page = await coordinator.GetHistoryPageAsync(offset, limit, cancellationToken).ConfigureAwait(false);
+        return Result(AutomationStatus.Success, "Older work entries loaded.", new { entries = page.Entries, total = page.Total, offset });
+    }
+
+    private static (int Offset, int Limit) ReadHistoryPageInput(JsonElement input)
+    {
+        if (input.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("History page input must be an object.");
+        if (!input.TryGetProperty("offset", out var offsetValue) || offsetValue.ValueKind != JsonValueKind.Number
+            || !offsetValue.TryGetInt32(out var offset) || offset < 0)
+            throw new InvalidDataException("History page offset must be a non-negative whole number.");
+        if (!input.TryGetProperty("limit", out var limitValue) || limitValue.ValueKind != JsonValueKind.Number
+            || !limitValue.TryGetInt32(out var limit) || limit is < 1 or > SnapshotHistoryPageSize)
+            throw new InvalidDataException($"History page limit must be a whole number from 1 to {SnapshotHistoryPageSize}.");
+        return (offset, limit);
+    }
 
     private static AutomationResult Result(AutomationStatus status, string message, object data) =>
         new(AutomationTabContract.CurrentVersion, status, message, JsonSerializer.SerializeToElement(data, JsonOptions), []);

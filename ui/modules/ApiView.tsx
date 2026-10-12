@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type { AutomationServices } from '../automationServices';
 import type { AutomationModuleActionRequest, BackendUiState } from '../../contracts/rpc';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
+import { InlineConfirmButton } from '../components/InlineConfirmButton';
 import {
   decodeApiResponse, parseApiCurlImport, readApiProfiles, validateApiProfile, type ApiProfile, type ApiResponseMode,
 } from '../contracts/api';
@@ -466,7 +467,7 @@ export function ApiView({ services }: ViewProps) {
               <span className="api-profile-time"><Clock3 size={12} /> {profile.timeoutSeconds}s</span>
               <button className="icon-button script-row-action" type="button" aria-label={runningId === profile.id ? `Cancel ${profile.name}` : `Run ${profile.name}`} title={runningId === profile.id ? 'Cancel request' : 'Run profile'} disabled={runningId !== null && runningId !== profile.id} onClick={() => void runProfile(profile)}>{runningId === profile.id ? <Square size={14} /> : <Play size={15} />}</button>
               <button className="icon-button script-row-action" type="button" aria-label={`Edit ${profile.name}`} title="Edit" disabled={runningId !== null} onClick={() => { setOutput(null); setPendingImportedSecrets({}); setEditing(profileDraft(profile)); }}><Pencil size={14} /></button>
-              <button className="icon-button script-row-action" type="button" aria-label={`Remove ${profile.name}`} title="Remove" disabled={runningId !== null} onClick={() => void deleteProfile(profile)}><Trash2 size={14} /></button>
+              <InlineConfirmButton className="icon-button script-row-action" label={`Remove ${profile.name}`} confirmLabel={`Yes, remove ${profile.name}`} title="Remove" disabled={runningId !== null} warning="This also deletes the stored credentials." onConfirm={() => deleteProfile(profile)}><Trash2 size={14} /></InlineConfirmButton>
             </div>
             <div className="api-run-input api-profile-input">
               <label htmlFor={`api-run-input-${profile.id}`}><span><Braces size={13} /> Request JSON input</span><small>Defaults to this profile’s saved input</small></label>

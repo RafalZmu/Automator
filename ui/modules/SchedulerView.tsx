@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import type { AutomationServices } from '../automationServices';
 import type { AutomationModuleActionRequest, BackendUiState } from '../../contracts/rpc';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
+import { InlineConfirmButton } from '../components/InlineConfirmButton';
 import { describeRecurrence, readSchedulerSnapshot, scheduleWeekdays, validateSchedule, type ScheduleDefinition, type ScheduleRecurrence, type ScheduleTargetKind, type SchedulerSnapshot } from '../contracts/scheduler';
 import { buildCalendarMonth, buildUpcomingScheduleEntries } from './schedulerAgendaViewModel';
 
@@ -200,7 +201,7 @@ export function SchedulerView({ services }: ViewProps) {
             <button className="secondary-button" disabled={!!busy || !!state?.running} onClick={() => void action('setEnabled', { scheduleId: schedule.id, enabled: !schedule.enabled }, schedule.id)}>{schedule.enabled ? 'Pause' : 'Enable'}</button>
             <button className="icon-button" title="Run now" aria-label={`Run ${schedule.name} now`} disabled={!!busy || !!state?.running || !targetProfile} onClick={() => void action('runNow', { scheduleId: schedule.id }, schedule.id)}><Play size={13} /></button>
             <button className="icon-button" title="Edit" aria-label={`Edit ${schedule.name}`} disabled={!!busy || !!state?.running} onClick={() => edit(schedule)}><Pencil size={13} /></button>
-            <button className="icon-button" title="Delete schedule" aria-label={`Delete ${schedule.name}`} disabled={!!busy || !!state?.running} onClick={() => void action('deleteSchedule', { scheduleId: schedule.id }, schedule.id)}><Trash2 size={13} /></button>
+            <InlineConfirmButton className="icon-button" title="Delete schedule" label={`Delete ${schedule.name}`} confirmLabel={`Yes, delete ${schedule.name}`} disabled={!!busy || !!state?.running} onConfirm={() => action('deleteSchedule', { scheduleId: schedule.id }, schedule.id)}><Trash2 size={13} /></InlineConfirmButton>
           </div>
           <div className="scheduler-meta"><span className="scheduler-state">{state?.running ? 'Running' : schedule.enabled ? 'Enabled' : 'Paused'}</span><span><Clock3 size={10} />{state?.nextRunAtUtc && schedule.enabled ? new Date(state.nextRunAtUtc).toLocaleString() : 'No upcoming run'}</span>{last && <span>Last: {last.category} · {last.durationMilliseconds} ms</span>}{schedule.runOnceAfterRestart && <span>Catch-up enabled</span>}</div>
         </article>;

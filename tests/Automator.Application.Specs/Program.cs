@@ -12,6 +12,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("opening resets launcher state and captures the previous foreground HWND", OpeningResetsStateAndCapturesContext),
     ("global tab keys require the visible foreground launcher context", GlobalTabKeysRequireLauncherContext),
     ("global navigation consumes only focused unmodified launcher keys", NavigationKeyPolicyRequiresFocusedUnmodifiedLauncher),
+    ("global navigation yields digits and slash while text entry is focused", NavigationKeyPolicyYieldsDigitsAndSlashToTextEntry),
     ("hotkey recording ignores stale, unfocused and native-dialog input", RecordingRequiresVisibleFocusedContext),
     ("a view-mode transition cancels pending alias activation", ModeTransitionCancelsPendingActivation),
     ("stale catalog completion is ignored after the view changes", StaleCatalogCompletionIsIgnored),
@@ -155,6 +156,23 @@ static Task NavigationKeyPolicyRequiresFocusedUnmodifiedLauncher()
     Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x32));
     session.EnterMode(LauncherMode.Settings);
     Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x1B));
+    return Task.CompletedTask;
+}
+
+static Task NavigationKeyPolicyYieldsDigitsAndSlashToTextEntry()
+{
+    var session = new LauncherSession(CreateSettings());
+    session.ShowPanel("0x11");
+    var state = session.NavigationState;
+    Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(state, true, true, false, 0x32, textEntryFocused: false));
+    Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(state, true, true, false, 0x32, textEntryFocused: true));
+    Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(state, true, true, false, 0x61, textEntryFocused: true));
+    Check.Equal(NavigationKeyAction.OpenCatalog, NavigationKeyPolicy.Decide(state, true, true, false, 0xBF, textEntryFocused: false));
+    Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(state, true, true, false, 0xBF, textEntryFocused: true));
+    Check.Equal(NavigationKeyAction.Close, NavigationKeyPolicy.Decide(state, true, true, false, 0x1B, textEntryFocused: true));
+    session.OpenCatalog([]);
+    Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x32, textEntryFocused: true));
+    Check.Equal(NavigationKeyAction.Close, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x1B, textEntryFocused: true));
     return Task.CompletedTask;
 }
 
@@ -630,7 +648,7 @@ static async Task FocusSessionModuleDispatchesCoordinatorActions()
     Check.Equal(2, module.Definition.ContractVersion);
     Check.Equal("focus-sessions", module.Definition.ViewKind);
     Check.True(module.Definition.Actions.Select(action => action.Id)
-        .SequenceEqual(["getSnapshot", "start", "pause", "resume", "end", "saveEntry", "createEntry", "updateEntry", "deleteEntry", "discardTimer", "discardPending"]));
+        .SequenceEqual(["getSnapshot", "start", "pause", "resume", "end", "saveEntry", "createEntry", "updateEntry", "deleteEntry", "discardTimer", "discardPending", "getHistory"]));
     Check.True(module.Definition.Actions.All(action => action.RequiredCapabilities.Contains(
         new AutomationCapabilityRequirement(AutomationCapabilityIds.WorkTimeManagement, 1))));
 
@@ -1537,6 +1555,13 @@ sealed class RecordingWorkTimeCoordinator : IAutomationWorkTimeCoordinator
         cancellationToken.ThrowIfCancellationRequested();
         Calls.Add("getSnapshot");
         return Task.FromResult(Snapshot());
+    }
+
+    public Task<AutomationWorkTimeHistoryPage> GetHistoryPageAsync(int offset, int limit, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Calls.Add("getHistory");
+        return Task.FromResult(new AutomationWorkTimeHistoryPage(0, []));
     }
 
     public Task<AutomationWorkTimeSnapshot> StartAsync(string description, CancellationToken cancellationToken)

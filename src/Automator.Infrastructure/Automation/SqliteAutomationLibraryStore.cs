@@ -37,7 +37,18 @@ public sealed class SqliteAutomationLibraryStore : IAutomationLibraryStore
             statement.BindText(1, moduleId);
             statement.BindText(2, collection);
             var records = new List<AutomationLibraryRecord>();
-            while (statement.Step() == SqliteNative.Row) records.Add(ReadRecord(statement.Handle));
+            while (statement.Step() == SqliteNative.Row)
+            {
+                // A row with corrupt JSON or timestamp is skipped so one bad record cannot hide the rest of its collection.
+                try
+                {
+                    records.Add(ReadRecord(statement.Handle));
+                }
+                catch (Exception exception) when (exception is JsonException or FormatException)
+                {
+                    continue;
+                }
+            }
             return (IReadOnlyList<AutomationLibraryRecord>)records;
         }, cancellationToken);
 

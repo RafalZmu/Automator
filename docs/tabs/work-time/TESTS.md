@@ -347,17 +347,40 @@ The coordinator and API cases below are executed by `npm.cmd run test:dotnet`. R
 
 **Expected result:** Failed or canceled state operations preserve in-memory state. Restart keeps the saved history entry and removes its duplicate draft.
 
+### work time module snapshot sends the newest page with the stored total
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Seed 600 legacy history entries and initialize the Work Time module with a registry context.
+2. Run getSnapshot.
+
+**Expected result:** The snapshot sends 250 history entries, reports `historyTotal` 600, and the result stays under 512 KiB.
+
+### work time history pages are consistent, non-overlapping, and bounded for 5000 stored entries
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Seed 5000 heavy legacy entries (200-character descriptions, five tags each) and initialize the module.
+2. Run getSnapshot, then page through getHistory with offset 0, 250, … and limit 250.
+3. Run invalid pages (limit 0, limit 251, negative offset, missing offset) and an offset of 5000.
+
+**Expected result:** The snapshot holds the newest 250 entries and `historyTotal` 5000. Pages cover all 5000 entries once, oldest to newest, and match the snapshot. Invalid inputs return an error. Offset 5000 returns no entries. Each result stays under 512 KiB.
+
 ### work time history is bounded and corrupt versions are rejected
 
 **Source:** tests/Automator.Focus.Specs/Program.cs
 
 **Steps**
 
-1. Seed 501 legacy history entries with ordered timestamps and initialize the coordinator.
+1. Seed 5001 legacy history entries with ordered timestamps and initialize the coordinator.
 2. Inspect the retained count and deletion of the oldest record.
 3. Try initializing an unsupported schema 99 state record.
 
-**Expected result:** Only the newest 500 entries remain, and unsupported persisted schemas raise InvalidDataException.
+**Expected result:** Only the newest 5000 entries remain, and unsupported persisted schemas raise InvalidDataException.
 
 ### work-time log actions validate metadata and delegate to the host coordinator
 

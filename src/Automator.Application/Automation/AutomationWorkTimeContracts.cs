@@ -25,10 +25,15 @@ public sealed record AutomationWorkTimeSnapshot(
     IReadOnlyList<AutomationWorkTimeEntry> PendingEntries,
     IReadOnlyList<AutomationWorkTimeEntry> History);
 
+/// <summary>A slice of saved history, oldest to newest, with the total number of stored entries.</summary>
+public sealed record AutomationWorkTimeHistoryPage(int Total, IReadOnlyList<AutomationWorkTimeEntry> Entries);
+
 /// <summary>Backend-owned named timers and durable work log for slot seven.</summary>
 public interface IAutomationWorkTimeCoordinator
 {
     Task<AutomationWorkTimeSnapshot> GetSnapshotAsync(CancellationToken cancellationToken);
+    /// <summary>Reads saved history without changing state. Offset counts back from the newest entry.</summary>
+    Task<AutomationWorkTimeHistoryPage> GetHistoryPageAsync(int offset, int limit, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> StartAsync(string description, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> PauseAsync(string id, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> ResumeAsync(string id, CancellationToken cancellationToken);

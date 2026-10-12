@@ -20,6 +20,8 @@ var checks = new (string Name, Action Run)[]
     ("failed module settings migration leaves the saved file untouched", FailedModuleMigrationPreservesSource),
     ("website launcher redirects direct browser output", WebsiteLauncherRedirectsDirectBrowserOutput),
     ("website launcher capability is module scoped and opens only HTTP URLs in group order", WebsiteLauncherOpensValidatedGroups),
+    ("settings backups keep only the newest ten copies", SettingsBackupsAreCappedToNewest),
+    ("settings export writes atomically, replaces targets, and leaves no temp files on failure", ExportIsAtomic),
 };
 
 static void NormalizerMapsStableKeysAndModifiers()
@@ -150,6 +152,67 @@ static void LegacySettingsUpgradeIsAtomic()
         Check.Equal("--profile work", loaded.Settings.Bindings[0].Arguments);
         Check.Equal(2, SettingsSerializer.ReadSchemaVersion(File.ReadAllText(settingsPath)));
         Check.Equal(1, Directory.GetFiles(dataDirectory, "settings.json.bak-*").Length);
+    }
+    finally { Directory.Delete(dataDirectory, recursive: true); }
+}
+
+static void ExportIsAtomic()
+{
+    var directory = Path.Combine(Path.GetTempPath(), "automator-export-spec-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory);
+    try
+    {
+        var store = new WindowsSettingsStore(true, directory, NullApplicationLog.Instance);
+        var settings = new LauncherSettings();
+        var target = Path.Combine(directory, "export.json");
+
+        store.Export(target, settings);
+        Check.Equal(SettingsSerializer.Serialize(settings), File.ReadAllText(target));
+        Check.Equal(0, Directory.GetFiles(directory, "*.tmp-*").Length);
+
+        File.WriteAllText(target, "stale export");
+        store.Export(target, settings);
+        Check.Equal(SettingsSerializer.Serialize(settings), File.ReadAllText(target));
+        Check.Equal(0, Directory.GetFiles(directory, "*.tmp-*").Length);
+
+        var failed = false;
+        try
+        {
+            store.Export(Path.Combine(directory, "missing", "export.json"), settings);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            failed = true;
+        }
+        Check.True(failed);
+        Check.Equal(0, Directory.GetFiles(directory, "*.tmp-*", SearchOption.AllDirectories).Length);
+    }
+    finally { Directory.Delete(directory, recursive: true); }
+}
+
+static void SettingsBackupsAreCappedToNewest()
+{
+    var dataDirectory = Path.Combine(Path.GetTempPath(), "automator-settings-spec-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(dataDirectory);
+    try
+    {
+        var store = new WindowsSettingsStore(true, dataDirectory, NullApplicationLog.Instance);
+        store.Save(new LauncherSettings());
+        var created = new List<string>();
+        for (var index = 0; index < 15; index++)
+        {
+            // Backup names carry millisecond timestamps; a short pause keeps each save's name unique and ordered.
+            Thread.Sleep(3);
+            var before = Directory.GetFiles(dataDirectory, "settings.json.bak-*").ToHashSet();
+            store.Save(new LauncherSettings());
+            created.AddRange(Directory.GetFiles(dataDirectory, "settings.json.bak-*").Where(path => !before.Contains(path)));
+        }
+
+        var remaining = Directory.GetFiles(dataDirectory, "settings.json.bak-*").Select(Path.GetFileName).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        var newest = created.Select(Path.GetFileName).OrderBy(name => name, StringComparer.Ordinal).TakeLast(WindowsSettingsStore.MaximumBackups).ToArray();
+        Check.Equal(WindowsSettingsStore.MaximumBackups, remaining.Length);
+        Check.Equal(15, created.Count);
+        Check.True(remaining.SequenceEqual(newest));
     }
     finally { Directory.Delete(dataDirectory, recursive: true); }
 }

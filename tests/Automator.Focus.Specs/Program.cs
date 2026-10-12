@@ -25,6 +25,9 @@ var checks = new (string Name, Func<Task> Run)[]
     ("resumed legacy timer preserves elapsed without fabricating paused segments", WorkTimeLegacyResumedSegments),
     ("work time state writes are atomic and cancellation leaves state intact", WorkTimeFailedWritesPreserveState),
     ("work time history is bounded and corrupt versions are rejected", WorkTimeHistoryIsBounded),
+    ("work time history skips corrupt entries and still loads the valid ones", WorkTimeHistorySkipsCorruptEntries),
+    ("work time module snapshot sends the newest page with the stored total", WorkTimeModuleSnapshotExceedsOldCap),
+    ("work time history pages are consistent, non-overlapping, and bounded for 5000 stored entries", WorkTimeHistoryPagesCoverStoredEntries),
 };
 
 var failures = 0;
@@ -616,7 +619,7 @@ static async Task WorkTimeHistoryIsBounded()
 {
     var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero));
     var store = new FocusLibraryStore();
-    for (var i = 0; i < 501; i++)
+    for (var i = 0; i < 5001; i++)
     {
         var start = time.GetUtcNow().AddSeconds(i);
         await store.UpsertAsync(new AutomationLibraryRecord("focus-sessions", "work-time-history", $"entry-{i}", 1,
@@ -624,12 +627,125 @@ static async Task WorkTimeHistoryIsBounded()
                 durationMilliseconds = 1_000L, description = "Legacy", tags = Array.Empty<string>() }), start), CancellationToken.None);
     }
     await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
-    Check.Equal(500, (await lease.Coordinator.GetSnapshotAsync(CancellationToken.None)).History.Count);
+    Check.Equal(AutomationWorkTimeCoordinator.MaximumHistoryEntries, (await lease.Coordinator.GetSnapshotAsync(CancellationToken.None)).History.Count);
+    Check.Equal(5000, AutomationWorkTimeCoordinator.MaximumHistoryEntries);
     Check.Equal(null, store.LastRecord("focus-sessions", "work-time-history", "entry-0"));
     var corrupt = new FocusLibraryStore();
     await corrupt.UpsertAsync(new AutomationLibraryRecord("focus-sessions", "work-time", "current", 99,
         JsonSerializer.SerializeToElement(new { }), time.GetUtcNow()), CancellationToken.None);
     await Check.ThrowsAsync<InvalidDataException>(async () => { await using var invalid = await WorkTimeCoordinatorHarness.CreateAsync(corrupt, time); });
+}
+
+static async Task WorkTimeHistorySkipsCorruptEntries()
+{
+    var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero));
+    var store = new FocusLibraryStore();
+    var start = time.GetUtcNow();
+    await store.UpsertAsync(new AutomationLibraryRecord("focus-sessions", "work-time-history", "valid-first", 1,
+        JsonSerializer.SerializeToElement(new { id = "valid-first", startedUtc = start, stoppedUtc = start.AddSeconds(1),
+            durationMilliseconds = 1_000L, description = "First", tags = Array.Empty<string>() }), start), CancellationToken.None);
+    // Stops before it starts, so validation rejects it.
+    await store.UpsertAsync(new AutomationLibraryRecord("focus-sessions", "work-time-history", "invalid-interval", 1,
+        JsonSerializer.SerializeToElement(new { id = "invalid-interval", startedUtc = start, stoppedUtc = start.AddSeconds(-5),
+            durationMilliseconds = 1_000L, description = "Broken", tags = Array.Empty<string>() }), start), CancellationToken.None);
+    // Wrong JSON shape for an entry, so deserialization fails.
+    await store.UpsertAsync(new AutomationLibraryRecord("focus-sessions", "work-time-history", "invalid-shape", 1,
+        JsonSerializer.SerializeToElement("not an entry"), start), CancellationToken.None);
+    await store.UpsertAsync(new AutomationLibraryRecord("focus-sessions", "work-time-history", "valid-second", 1,
+        JsonSerializer.SerializeToElement(new { id = "valid-second", startedUtc = start.AddMinutes(1), stoppedUtc = start.AddMinutes(2),
+            durationMilliseconds = 60_000L, description = "Second", tags = Array.Empty<string>() }), start.AddMinutes(2)), CancellationToken.None);
+
+    await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    var history = (await lease.Coordinator.GetSnapshotAsync(CancellationToken.None)).History;
+
+    Check.Equal(2, history.Count);
+    Check.Equal("valid-first", history[0].Id);
+    Check.Equal("valid-second", history[1].Id);
+}
+
+static async Task WorkTimeModuleSnapshotExceedsOldCap()
+{
+    var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero));
+    var store = new FocusLibraryStore();
+    for (var i = 0; i < 600; i++)
+    {
+        var start = time.GetUtcNow().AddMinutes(i);
+        await store.UpsertAsync(new AutomationLibraryRecord("focus-sessions", "work-time-history", $"entry-{i}", 1,
+            JsonSerializer.SerializeToElement(new { id = $"entry-{i}", startedUtc = start, stoppedUtc = start.AddSeconds(30),
+                durationMilliseconds = 30_000L, description = "Legacy", tags = Array.Empty<string>() }), start), CancellationToken.None);
+    }
+    await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    var capabilities = new AutomationCapabilityRegistry(workTimeCoordinatorFactory: _ => lease.Coordinator);
+    var module = new FocusSessionsModule();
+    await using var context = capabilities.CreateContext(new AutomationModuleDescriptor(module.Id, module.Definition.Capabilities));
+
+    var result = await module.ExecuteAsync("getSnapshot", JsonSerializer.SerializeToElement(new { }), module.CreateDefaultSettings(), context, CancellationToken.None);
+
+    Check.Equal(Automator.Core.Plugins.AutomationStatus.Success, result.Status);
+    Check.Equal(250, result.Data.GetProperty("history").GetArrayLength());
+    Check.Equal(600, result.Data.GetProperty("historyTotal").GetInt32());
+    // The module result must stay under the 512 KiB structured-data limit enforced by the registry and UI contract.
+    Check.True(System.Text.Encoding.UTF8.GetByteCount(result.Data.GetRawText()) < 512 * 1024, "600 history entries must fit the module result data limit.");
+}
+
+static async Task WorkTimeHistoryPagesCoverStoredEntries()
+{
+    var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero));
+    var store = new FocusLibraryStore();
+    // Heavy entries: 200-character descriptions and five tags each, so the page budget is checked near its worst typical size.
+    var description = new string('x', 200);
+    var tags = new[] { "tag-0", "tag-1", "tag-2", "tag-3", "tag-4" };
+    for (var i = 0; i < 5000; i++)
+    {
+        var start = time.GetUtcNow().AddMinutes(i);
+        await store.UpsertAsync(new AutomationLibraryRecord("focus-sessions", "work-time-history", $"entry-{i:D4}", 1,
+            JsonSerializer.SerializeToElement(new { id = $"entry-{i:D4}", startedUtc = start, stoppedUtc = start.AddSeconds(30),
+                durationMilliseconds = 30_000L, description, tags }), start), CancellationToken.None);
+    }
+    await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    var capabilities = new AutomationCapabilityRegistry(workTimeCoordinatorFactory: _ => lease.Coordinator);
+    var module = new FocusSessionsModule();
+    await using var context = capabilities.CreateContext(new AutomationModuleDescriptor(module.Id, module.Definition.Capabilities));
+    var settings = module.CreateDefaultSettings();
+    async Task<JsonElement> Act(string action, object input, Automator.Core.Plugins.AutomationStatus expected)
+    {
+        var result = await module.ExecuteAsync(action, JsonSerializer.SerializeToElement(input), settings, context, CancellationToken.None);
+        Check.Equal(expected, result.Status);
+        return result.Data;
+    }
+
+    var snapshot = await Act("getSnapshot", new { }, Automator.Core.Plugins.AutomationStatus.Success);
+    var snapshotIds = snapshot.GetProperty("history").EnumerateArray().Select(entry => entry.GetProperty("id").GetString()!).ToArray();
+    Check.Equal(250, snapshotIds.Length);
+    Check.Equal(5000, snapshot.GetProperty("historyTotal").GetInt32());
+    Check.True(System.Text.Encoding.UTF8.GetByteCount(snapshot.GetRawText()) < 512 * 1024, "A 250-entry heavy snapshot must fit the module result data limit.");
+
+    // Pages count back from the newest entry; prepending each older page rebuilds the oldest-to-newest order.
+    var collected = new List<string>();
+    for (var offset = 0; offset < 5000; offset += 250)
+    {
+        var page = await Act("getHistory", new { offset, limit = 250 }, Automator.Core.Plugins.AutomationStatus.Success);
+        Check.Equal(5000, page.GetProperty("total").GetInt32());
+        Check.Equal(offset, page.GetProperty("offset").GetInt32());
+        var ids = page.GetProperty("entries").EnumerateArray().Select(entry => entry.GetProperty("id").GetString()!).ToArray();
+        Check.Equal(250, ids.Length);
+        Check.True(System.Text.Encoding.UTF8.GetByteCount(page.GetRawText()) < 512 * 1024, "A 250-entry heavy page must fit the module result data limit.");
+        collected.InsertRange(0, ids);
+    }
+    Check.Equal(5000, collected.Count);
+    Check.Equal(5000, collected.Distinct(StringComparer.Ordinal).Count());
+    for (var i = 0; i < 5000; i++) Check.Equal($"entry-{i:D4}", collected[i]);
+    // The snapshot's history is the first page, so both views agree on the newest entries.
+    Check.True(snapshotIds.SequenceEqual(collected.Skip(4750)));
+
+    var beyond = await Act("getHistory", new { offset = 5000, limit = 250 }, Automator.Core.Plugins.AutomationStatus.Success);
+    Check.Equal(0, beyond.GetProperty("entries").GetArrayLength());
+    Check.Equal(5000, beyond.GetProperty("total").GetInt32());
+
+    foreach (var invalid in new object[] { new { offset = 0, limit = 0 }, new { offset = 0, limit = 251 }, new { offset = -1, limit = 10 }, new { limit = 10 } })
+        await Act("getHistory", invalid, Automator.Core.Plugins.AutomationStatus.Error);
+    // Reads must not change state.
+    Check.Equal(5000, (await Act("getSnapshot", new { }, Automator.Core.Plugins.AutomationStatus.Success)).GetProperty("historyTotal").GetInt32());
 }
 
 static async Task WorkTimeMultipleTimers()

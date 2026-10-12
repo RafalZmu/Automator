@@ -38,6 +38,7 @@ if (args.Length > 0 && args[0] == "--automation-child-exit") return int.Parse(ar
 var checks = new (string Name, Func<Task> Run)[]
 {
     ("SQLite automation library persists versioned records and keeps modules isolated", StoresLibraryRecords),
+    ("SQLite automation library skips corrupt rows and still lists the valid ones", ListSkipsCorruptRows),
     ("process execution preserves argument boundaries, bounds output and cancels children", RunsBoundedProcesses),
     ("process execution writes bounded structured standard input and closes the stream", PassesStandardInput),
     ("process execution forwards bounded environment variables without shell interpolation", PassesEnvironmentVariables),
@@ -617,6 +618,58 @@ static HttpResponseMessage TextResponse(HttpStatusCode statusCode, string body)
 static Task<HttpResponseMessage> WaitForCancellation(CancellationToken cancellationToken) =>
     Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ContinueWith<HttpResponseMessage>(
         static _ => throw new OperationCanceledException(), cancellationToken, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+
+static async Task ListSkipsCorruptRows()
+{
+    var directory = Path.Combine(Path.GetTempPath(), "automator-library-corrupt-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory);
+    try
+    {
+        var databasePath = Path.Combine(directory, "library.db");
+        var store = new SqliteAutomationLibraryStore(databasePath);
+        await store.UpsertAsync(new AutomationLibraryRecord("corrupt-module", "items", "good", 1,
+            JsonSerializer.SerializeToElement(new { value = 1 }), DateTimeOffset.FromUnixTimeSeconds(1_782_000_000)), CancellationToken.None);
+        // The public upsert API rejects invalid JSON, so the corrupt rows are written directly to the same database file.
+        RawSqlite.Execute(databasePath,
+            "INSERT INTO library_records(module_id, collection_name, record_id, schema_version, payload_json, updated_utc) VALUES('corrupt-module','items','bad-json',1,'{not json','2026-10-12T10:00:00.0000000+00:00');" +
+            "INSERT INTO library_records(module_id, collection_name, record_id, schema_version, payload_json, updated_utc) VALUES('corrupt-module','items','bad-date',1,'{\"value\":2}','not-a-date');");
+
+        var records = await store.ListAsync("corrupt-module", "items", CancellationToken.None);
+
+        Check.Equal(1, records.Count);
+        Check.Equal("good", records[0].Id);
+        Check.Equal(1, records[0].Data.GetProperty("value").GetInt32());
+    }
+    finally { Directory.Delete(directory, recursive: true); }
+}
+
+static class RawSqlite
+{
+    private const string Library = "winsqlite3";
+    private const int OpenReadWriteCreate = 0x00000002 | 0x00000004;
+
+    [System.Runtime.InteropServices.DllImport(Library, CallingConvention = System.Runtime.InteropServices.CallingConvention.Cdecl, EntryPoint = "sqlite3_open_v2", CharSet = System.Runtime.InteropServices.CharSet.Ansi)]
+    private static extern int sqlite3_open_v2([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPUTF8Str)] string filename, out IntPtr database, int flags, IntPtr vfs);
+    [System.Runtime.InteropServices.DllImport(Library, CallingConvention = System.Runtime.InteropServices.CallingConvention.Cdecl, EntryPoint = "sqlite3_exec", CharSet = System.Runtime.InteropServices.CharSet.Ansi)]
+    private static extern int sqlite3_exec(IntPtr database, [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPUTF8Str)] string sql, IntPtr callback, IntPtr argument, out IntPtr error);
+    [System.Runtime.InteropServices.DllImport(Library, CallingConvention = System.Runtime.InteropServices.CallingConvention.Cdecl, EntryPoint = "sqlite3_close_v2")]
+    private static extern int sqlite3_close_v2(IntPtr database);
+
+    public static void Execute(string path, string sql)
+    {
+        var opened = sqlite3_open_v2(path, out var database, OpenReadWriteCreate, IntPtr.Zero);
+        try
+        {
+            if (opened != 0) throw new InvalidOperationException($"SQLite open failed with result {opened}.");
+            if (sqlite3_exec(database, sql, IntPtr.Zero, IntPtr.Zero, out _) != 0)
+                throw new InvalidOperationException("SQLite test statement failed.");
+        }
+        finally
+        {
+            sqlite3_close_v2(database);
+        }
+    }
+}
 
 sealed class DelegateHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : HttpMessageHandler
 {

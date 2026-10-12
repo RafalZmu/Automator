@@ -39,7 +39,7 @@ html, body, #root {
 body { user-select: none; }
 button, input { font: inherit; }
 button { color: inherit; }
-button:focus-visible, input:focus-visible { outline: 2px solid rgba(24, 136, 158, .72); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [role="option"]:focus-visible, [tabindex]:not([tabindex="-1"]):focus-visible { outline: 2px solid rgba(24, 136, 158, .72); outline-offset: 2px; }
 input { user-select: text; }
 
 .window-shell {

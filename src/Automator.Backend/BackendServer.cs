@@ -1103,7 +1103,7 @@ public sealed class BackendServer : IAsyncDisposable
         // A stale renderer context cannot authorize global navigation after a mode transition.
         var modeMatches = string.Equals(parameters.Mode, currentMode, StringComparison.Ordinal);
         Volatile.Write(ref _windowContext, new LauncherWindowContext(hwnd, parameters.Visible && modeMatches,
-            parameters.RendererFocused && modeMatches, parameters.NativeDialogActive, parameters.Mode));
+            parameters.RendererFocused && modeMatches, parameters.NativeDialogActive, parameters.Mode, parameters.TextEntryFocused));
         if (hwnd != IntPtr.Zero) _nativeChrome.Apply(hwnd);
         RefreshKeyboardDeliveryContext();
     }
@@ -1602,7 +1602,7 @@ public sealed class BackendServer : IAsyncDisposable
         var nativeForeground = modeMatches && !context.NativeDialogActive && context.Visible
             && context.Handle != IntPtr.Zero && WindowsForegroundWindow.CurrentHandle == context.Handle;
         var action = NavigationKeyPolicy.Decide(_session.NavigationState, nativeForeground,
-            context.RendererFocused && modeMatches, hasModifier: false, request.VirtualKey);
+            context.RendererFocused && modeMatches, hasModifier: false, request.VirtualKey, context.TextEntryFocused);
         switch (action)
         {
             case NavigationKeyAction.Close:

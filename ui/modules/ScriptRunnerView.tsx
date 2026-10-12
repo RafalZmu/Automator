@@ -10,6 +10,7 @@ import type { ScriptRunnerInterpreter } from '../../contracts/scriptRunner';
 import { parseScriptTemplateCatalog, validateScriptTemplateValues, type ScriptTemplateDescriptor, type ScriptTemplateValue } from '../../contracts/scriptRunner';
 import { clearSensitiveTemplateValues, createPowerShellProfileDraft, filterScriptTemplates, resetTemplateValues, templateDetailParameters, updateScriptPath, type ScriptProfile } from './scriptTemplateViewModel';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
+import { InlineConfirmButton } from '../components/InlineConfirmButton';
 import { PathField } from '../components/PathField';
 import { ExplorerActionsPanel } from './ExplorerActionsPanel';
 import { FileExplorerLaunchContext } from '../FileExplorerLaunchContext';
@@ -412,7 +413,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
               {runningId === profile.id ? <Square size={14} /> : <Play size={15} />}
             </button>
             <button className="icon-button script-row-action" type="button" aria-label={`Edit ${profile.name}`} title="Edit" disabled={runningId !== null} onClick={() => { setOutput(null); setEditing({ ...profile, arguments: [...profile.arguments], ...(profile.templateOrigin ? { templateOrigin: null } : {}) }); }}><Pencil size={14} /></button>
-            <button className="icon-button script-row-action" type="button" aria-label={`Remove ${profile.name}`} title="Remove" disabled={runningId !== null} onClick={() => void deleteProfile(profile)}><Trash2 size={14} /></button>
+            <InlineConfirmButton className="icon-button script-row-action" label={`Remove ${profile.name}`} confirmLabel={`Yes, remove ${profile.name}`} title="Remove" disabled={runningId !== null} onConfirm={() => deleteProfile(profile)}><Trash2 size={14} /></InlineConfirmButton>
           </article>
         )) : !editing ? <div className="script-empty"><span className="empty-icon"><Terminal size={20} /></span><strong>No script profiles yet</strong><p>Add a saved Python, Bash, or PowerShell command. Each argument is passed as its own value.</p><button className="secondary-button" type="button" disabled={!settingsReady} onClick={() => setEditing(blankProfile(interpreterDefaults))}><Plus size={13} /> Create a profile</button></div> : null}
       </div>

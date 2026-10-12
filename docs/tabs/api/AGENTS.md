@@ -12,6 +12,8 @@ Read the root AGENTS.md first. The API tab runs saved request profiles through h
 - Chrome Copy as cURL import is input parsing only. Never execute imported shell text. Add supported cURL flags to the parser and tests before changing import behavior.
 - Request JSON is per run with an optional saved profile default. Body templates use the documented input placeholder; global variables should remain typed and validated.
 
+Row removal uses `InlineConfirmButton` (`ui/components/InlineConfirmButton.tsx`). Keep the first button's existing accessible name, give the confirm button a distinct `Yes, …` name, and state that stored credentials are deleted in its warning.
+
 ## Code and checks
 
 UI and import parser: `ui/modules/ApiView.tsx` and `contracts/api.ts`.

@@ -12,6 +12,8 @@ Read the root AGENTS.md first. Scheduler runs saved script or workflow profiles 
 - Persist schedule state/claims before notifications or UI events. Keep history metadata bounded and exclude script output, credentials, and HTTP bodies.
 - Add deterministic coordinator specs using a fake clock for recurrence, restart, missed-run, cancellation, and script/workflow target behavior.
 
+Schedule deletion uses `InlineConfirmButton` (`ui/components/InlineConfirmButton.tsx`). Keep the existing `Delete <name>` accessible name, give the confirm button a distinct `Yes, delete <name>` name, and do not reintroduce `window.confirm`.
+
 ## Code and checks
 
 UI and calendar view model: ui/modules/SchedulerView.tsx, ui/modules/schedulerAgendaViewModel.ts, and contracts/scheduler.ts.

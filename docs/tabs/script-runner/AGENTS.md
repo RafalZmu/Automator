@@ -26,6 +26,8 @@ Read the root AGENTS.md first. Script Runner executes saved, trusted user script
 
 Write scripts to accept explicit arguments, use the configured working directory rather than assuming Automator's current directory, validate inputs, and exit promptly. Python scripts should write machine-readable JSON with the standard JSON library; PowerShell scripts should emit one JSON value in JSON mode; Bash scripts should use the configured Bash-compatible syntax and avoid interactive shell state. Test scripts should use isolated temporary files and clean them up.
 
+Row removal uses `InlineConfirmButton` (`ui/components/InlineConfirmButton.tsx`). Keep the first button's existing accessible name, give the confirm button a distinct `Yes, …` name, and do not reintroduce `window.confirm` for row actions.
+
 ## Code and checks
 
 UI: `ui/modules/ScriptRunnerView.tsx`; DTOs: `contracts/scriptRunner.ts`; module and saved-profile runner: `src/Automator.Application/Automation/ScriptRunnerModule.cs` and `ScriptRunnerSavedProfileHandler.cs`; process adapter: `src/Automator.Infrastructure/Automation/LocalProcessExecutionService.cs`.

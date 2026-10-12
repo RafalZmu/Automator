@@ -3,6 +3,7 @@ import { Activity, Check, Clock3, Download, History, Pause, Play, Tag, Trash2, X
 import type { AutomationModuleActionRequest, BackendUiState } from '../../contracts/rpc';
 import type { AutomationServices } from '../automationServices';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
+import { InlineConfirmButton } from '../components/InlineConfirmButton';
 import { isWorkTimeToggleShortcut } from './workTimeShortcut';
 import {
   calculateWorkTimeReportTotals,
@@ -14,10 +15,15 @@ import {
   getWorkTimeTags,
   isWorkTimeDescriptionValid,
   localDateTimeInputValue,
+  mergeWorkTimeHistory,
+  readWorkTimeHistoryPage,
   readWorkTimeSnapshot,
   resolveWorkTimeDuration,
   resolveWorkTimeInterval,
+  WORK_TIME_HISTORY_PAGE_SIZE,
   workTimeEntryDurationMilliseconds,
+  type WorkTimeEntry,
+  type WorkTimeHistoryPage,
   type WorkTimeReportFilter,
   type WorkTimeSnapshot,
 } from './workTimeViewModel';
@@ -32,6 +38,8 @@ type ViewProps = {
 
 export function FocusSessionsView({ tab, services, surface }: ViewProps) {
   const [snapshot, setSnapshot] = useState<WorkTimeSnapshot | null>(null);
+  // Older pages loaded with getHistory; any mutating action resets them to the snapshot's newest page.
+  const [olderHistory, setOlderHistory] = useState<WorkTimeEntry[]>([]);
   const [startDescription, setStartDescription] = useState('');
   const [draftDescriptions, setDraftDescriptions] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -83,6 +91,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
       if (!next) throw new Error('Work Time returned invalid time-log data.');
       if (!alive.current) return false;
       setSnapshot(next);
+      setOlderHistory([]);
       setNotice(result.message);
       return true;
     } catch (error) {
@@ -130,11 +139,34 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
       });
     });
   };
-  const reportEntries = useMemo(() => snapshot
-    ? filterWorkTimeEntries(snapshot.history, reportFilter).slice().reverse()
-    : [], [snapshot, reportFilter]);
-  const reportTags = useMemo(() => getWorkTimeTags(snapshot?.history ?? []), [snapshot]);
-  const reportTotals = useMemo(() => calculateWorkTimeReportTotals(snapshot?.history ?? [], new Date(now), workingPeriodOnly), [snapshot, now, workingPeriodOnly]);
+  const history = useMemo(() => mergeWorkTimeHistory(snapshot?.history ?? [], olderHistory), [snapshot, olderHistory]);
+  const reportEntries = useMemo(() => filterWorkTimeEntries(history, reportFilter).slice().reverse(), [history, reportFilter]);
+  const reportTags = useMemo(() => getWorkTimeTags(history), [history]);
+  const reportTotals = useMemo(() => calculateWorkTimeReportTotals(history, new Date(now), workingPeriodOnly), [history, now, workingPeriodOnly]);
+  const hasSavedHistory = (snapshot?.historyTotal ?? 0) > 0;
+
+  const fetchHistoryPage = async (offset: number): Promise<WorkTimeHistoryPage> => {
+    const result = await services.modules.dispatch('getHistory', { offset, limit: WORK_TIME_HISTORY_PAGE_SIZE });
+    if (result.status === 'error') throw new Error(result.message);
+    const page = readWorkTimeHistoryPage(result.data);
+    if (!page) throw new Error('Work Time returned invalid history data.');
+    return page;
+  };
+
+  const loadOlderEntries = async () => {
+    if (busy || !snapshot) return;
+    setBusy('loadHistory');
+    setNotice('');
+    try {
+      const page = await fetchHistoryPage(snapshot.history.length + olderHistory.length);
+      if (!page.entries.length) throw new Error('No older work entries were returned.');
+      if (alive.current) setOlderHistory((current) => mergeWorkTimeHistory(page.entries, current));
+    } catch (error) {
+      if (alive.current) setNotice(error instanceof Error ? error.message : 'Could not load older work entries.');
+    } finally {
+      if (alive.current) setBusy(null);
+    }
+  };
 
   const beginEdit = (entry: WorkTimeSnapshot['history'][number]) => {
     setEditingEntryId(entry.id);
@@ -145,7 +177,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
     setDeleteCandidateId(null);
   };
 
-  const editingEntry = snapshot?.history.find((entry) => entry.id === editingEntryId) ?? null;
+  const editingEntry = history.find((entry) => entry.id === editingEntryId) ?? null;
   const editInterval = editingEntry ? resolveWorkTimeInterval(editStart, editStop, editingEntry, now) : null;
   const editError = editInterval && 'error' in editInterval ? editInterval.error : '';
   const editCollapsesPauses = !!editingEntry && editingEntry.segments.length > 1 && !!editInterval && 'startedUtc' in editInterval
@@ -204,11 +236,25 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
   };
 
   const exportReport = async () => {
-    if (!reportEntries.length || busy) return;
+    if (!snapshot || busy || !hasSavedHistory) return;
     setBusy('exportCsv');
     setNotice('');
     try {
-      const saved = await services.files.saveWorkTimeCsv(createWorkTimeCsv(reportEntries, workingPeriodOnly));
+      // The export covers every stored entry, so load the remaining pages before filtering.
+      let older = olderHistory;
+      while (snapshot.history.length + older.length < snapshot.historyTotal) {
+        const page = await fetchHistoryPage(snapshot.history.length + older.length);
+        const merged = mergeWorkTimeHistory(page.entries, older);
+        if (merged.length === older.length) throw new Error('Could not load every saved work entry before exporting. Reload the log and try again.');
+        older = merged;
+      }
+      if (alive.current) setOlderHistory(older);
+      const entries = filterWorkTimeEntries(mergeWorkTimeHistory(snapshot.history, older), reportFilter).slice().reverse();
+      if (!entries.length) {
+        setNotice('No saved work matches these filters.');
+        return;
+      }
+      const saved = await services.files.saveWorkTimeCsv(createWorkTimeCsv(entries, workingPeriodOnly));
       setNotice(saved ? 'Filtered work-time report exported.' : 'CSV export cancelled.');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not export the work-time report.');
@@ -229,7 +275,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
     ])),
     ...((snapshot?.pendingEntries ?? []).map((entry) => ({ id: `discard-pending-${entry.id}`, label: `Discard unsaved ${entry.description || 'timer'}`, keywords: ['delete unsaved draft'], disabled: !!busy, confirmationPrompt: 'Discard this unsaved work interval?', run: async () => { await dispatch('discardPending', { id: entry.id }); } }))),
     ...(surface === 'workspace' ? [
-      { id: 'export-work-time-csv', label: 'Export filtered work log as CSV', keywords: ['download report spreadsheet'], disabled: !!busy || reportEntries.length === 0, run: exportReport },
+      { id: 'export-work-time-csv', label: 'Export filtered work log as CSV', keywords: ['download report spreadsheet'], disabled: !!busy || !hasSavedHistory, run: exportReport },
       ...reportEntries.flatMap((entry) => [
         { id: `edit-work-time-${entry.id}`, label: `Edit ${entry.description}`, keywords: ['change description tags'], disabled: !!busy, run: () => beginEdit(entry) },
         { id: `delete-work-time-${entry.id}`, label: `Delete ${entry.description}`, keywords: ['remove saved log entry'], disabled: !!busy, confirmationPrompt: `Delete “${entry.description}”?`, run: async () => { await deleteEntry(entry.id); } },
@@ -326,7 +372,8 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
                   : <button className="primary-button" type="button" disabled={!!busy || !!runningTimer} onClick={() => void dispatch('resume', { id: timer.id })}><Play size={13} /> Resume timer</button>}
                 {!isRunning && <>
                   <button className="secondary-button" type="button" disabled={!!busy} onClick={() => void dispatch('end', { id: timer.id })}><X size={13} /> End timer</button>
-                  <button className="work-time-discard" type="button" disabled={!!busy} onClick={() => { if (window.confirm(`Discard timer “${timer.description}”?`)) void dispatch('discardTimer', { id: timer.id }); }}><Trash2 size={13} /> Discard</button>
+                  <InlineConfirmButton className="work-time-discard" label="Discard" confirmLabel={`Yes, discard ${timer.description}`} disabled={!!busy}
+                    warning={`Discard timer “${timer.description}”?`} onConfirm={() => dispatch('discardTimer', { id: timer.id })}><Trash2 size={13} /> Discard</InlineConfirmButton>
                 </>}
               </div>
             </div>
@@ -347,7 +394,8 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
           </label>
           <div className="work-time-entry-actions">
             <button className="primary-button" type="submit" disabled={!!busy || !isWorkTimeDescriptionValid(draftDescriptions[entry.id] ?? entry.description)}><Check size={13} /> Save entry</button>
-            <button className="work-time-discard" type="button" disabled={!!busy} onClick={() => { if (window.confirm('Discard this unsaved work interval?')) void dispatch('discardPending', { id: entry.id }); }}><Trash2 size={13} /> Discard draft</button>
+            <InlineConfirmButton className="work-time-discard" label="Discard draft" confirmLabel="Yes, discard draft" disabled={!!busy}
+                warning="Discard this unsaved work interval?" onConfirm={() => dispatch('discardPending', { id: entry.id })}><Trash2 size={13} /> Discard draft</InlineConfirmButton>
           </div>
         </form>
       </section>)}
@@ -355,7 +403,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
       {surface === 'workspace' && <section className="work-time-reports" aria-label="Work time reports">
         <header className="work-time-reports-heading">
           <div><History size={15} /><div><h2>Work log</h2><p>Review, filter, and export your saved work.</p></div></div>
-          <button className="secondary-button work-time-export" type="button" disabled={!!busy || reportEntries.length === 0} onClick={() => void exportReport()}>
+          <button className="secondary-button work-time-export" type="button" disabled={!!busy || !hasSavedHistory} onClick={() => void exportReport()}>
             <Download size={13} /> {busy === 'exportCsv' ? 'Preparing…' : 'Export filtered work log as CSV'}
           </button>
         </header>
@@ -376,7 +424,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
         </div>
 
         {reportEntries.length === 0
-          ? <div className="work-time-history-empty"><span><History size={18} /></span><p>{snapshot.history.length ? 'No saved work matches these filters.' : 'Saved intervals will appear here.'}</p></div>
+          ? <div className="work-time-history-empty"><span><History size={18} /></span><p>{history.length ? 'No saved work matches these filters.' : 'Saved intervals will appear here.'}</p></div>
           : <div className="work-time-report-list">{reportEntries.map((entry) => {
             const isEditing = editingEntryId === entry.id;
             const isDeleting = deleteCandidateId === entry.id;
@@ -411,6 +459,12 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
               </>}
             </article>;
           })}</div>}
+        {snapshot && history.length < snapshot.historyTotal && <div className="work-time-history-more">
+          <span>Showing {history.length} of {snapshot.historyTotal} entries</span>
+          <button className="secondary-button" type="button" disabled={!!busy} aria-label="Load older work entries" onClick={() => void loadOlderEntries()}>
+            {busy === 'loadHistory' ? 'Loading…' : 'Load older entries'}
+          </button>
+        </div>}
       </section>}
     </>}
   </section>;

@@ -2,6 +2,8 @@
 
 Options manages application-wide preferences such as the opener key, theme, startup behavior, and settings backup/restore. Its Variables section edits reusable typed JSON values and shows where references can be inserted. Interpreter defaults are associated with Script Runner; saved profiles continue to own their configured interpreter paths.
 
+Before each settings replacement, Automator copies the previous `settings.json` to a `settings.json.bak-<timestamp>` file beside it and keeps only the newest 10 backups.
+
 Variables use references such as {{variables.name}} in supported text fields and workflow JSON pointers in workflow mappings. Values may be JSON primitives, arrays, or objects. They are included in library backup/export; credentials are not.
 
 ## Code map

@@ -13,6 +13,8 @@ Read the root AGENTS.md first. Workflows compose saved Script Runner, API, Brows
 - Keep workflow output/history limits and metadata-only persistence. Treat step output as potentially sensitive and do not write it to application logs.
 - Add Application specs for mapping, ordering, failure/cancellation and renderer contract tests for any new editor field.
 
+Row removal uses `InlineConfirmButton` (`ui/components/InlineConfirmButton.tsx`). Keep the first button's existing accessible name, give the confirm button a distinct `Yes, …` name, and do not reintroduce `window.confirm` for row actions.
+
 ## Code and checks
 
 UI: ui/modules/WorkflowsView.tsx and WorkflowsView.css.

@@ -214,7 +214,7 @@ public sealed class SharedHttpService : IDisposable
         catch (HttpRequestException exception)
         {
             var policyFailure = FindServiceException(exception);
-            var failure = policyFailure ?? Error(AutomationServiceErrorCategory.TransportFailure, "The HTTP transport failed.");
+            var failure = policyFailure ?? Error(AutomationServiceErrorCategory.TransportFailure, "The HTTP transport failed. Automator does not use the Windows proxy settings.");
             WriteLog(moduleId, hostName, methodName, startedAt, statusCode, failure.Category);
             throw failure;
         }

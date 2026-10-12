@@ -268,6 +268,15 @@ function SettingsDialog({
   );
 }
 
+// Text-like controls only: digits and '/' must type normally there, but not in buttons, checkboxes or other controls.
+const textInputTypes = new Set(['', 'text', 'search', 'url', 'tel', 'email', 'password', 'number', 'date', 'datetime-local', 'month', 'time', 'week']);
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (target instanceof HTMLInputElement) return textInputTypes.has(target.type) && !target.readOnly && !target.disabled;
+  if (target instanceof HTMLTextAreaElement) return !target.readOnly && !target.disabled;
+  if (target instanceof HTMLSelectElement) return !target.disabled;
+  return target instanceof HTMLElement && target.isContentEditable;
+}
+
 export function App() {
   const isWorkspaceSurface = new URLSearchParams(window.location.search).get('surface') === 'workspace';
   const [explorerLaunches, setExplorerLaunches] = useState<FileExplorerLaunchRequest[]>([]);
@@ -299,6 +308,7 @@ export function App() {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const currentStateRef = useRef<BackendUiState | null>(null);
   const bridgeRef = useRef<AutomatorBridge | null>(null);
+  const textEntryReportRef = useRef<((focused: boolean) => void) | null>(null);
   const quickActionsHomeRef = useRef(false);
   const commandCatalog = useAllTabCommandCatalog();
   const resolveLiveCommand = useTabCommandResolver();
@@ -400,6 +410,37 @@ export function App() {
       window.removeEventListener('automator:website-launcher-settings-changed', onChanged);
     };
   }, []);
+
+  useEffect(() => {
+    if (!bridge) return undefined;
+    let reported = false;
+    // Sends only changes; the native hook reads the flag to decide whether digits and '/' belong to the page.
+    const report = (focused: boolean) => {
+      if (focused === reported) return;
+      reported = focused;
+      void bridge.setTextEntryFocused(focused).catch(() => undefined);
+    };
+    textEntryReportRef.current = report;
+    const onFocusIn = (event: FocusEvent) => report(isTextEntryTarget(event.target));
+    const onFocusOut = (event: FocusEvent) => {
+      // Focus moving to another element is reported by its focusin; a null relatedTarget means focus left the page.
+      if (!event.relatedTarget) report(false);
+    };
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
+    report(isTextEntryTarget(document.activeElement));
+    return () => {
+      document.removeEventListener('focusin', onFocusIn);
+      document.removeEventListener('focusout', onFocusOut);
+      textEntryReportRef.current = null;
+    };
+  }, [bridge]);
+
+  useEffect(() => {
+    // Removing a focused input does not fire focusout, so re-check the active element after the tab or mode DOM settles.
+    const frame = requestAnimationFrame(() => textEntryReportRef.current?.(isTextEntryTarget(document.activeElement)));
+    return () => cancelAnimationFrame(frame);
+  }, [state?.selectedTab, state?.mode]);
 
   const activeTab = state?.tabs.find((tab) => tab.slot === state.selectedTab) ?? state?.tabs[0];
   const moduleState = activeTab ? state?.moduleStates.find((item) => item.moduleId === activeTab.id) : undefined;

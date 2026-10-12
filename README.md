@@ -63,7 +63,7 @@ Slot 9 is the Codex task builder.
 ## Controls and tab behavior
 
 - Tap **Right Ctrl** to open or close the panel. Opening selects slot 1.
-- Press **1–9** to select a workspace tab. Each numbered tab shows a purpose icon beside its number. Slot 1 is the app launcher; slots 2–8 are Script Runner, API, Browser Automation, Workflows, Scheduler, Work Time, and Website Launcher; slot 9 is Codex.
+- Press **1–9** to select a workspace tab. While a text field in the launcher has focus, digits and `/` type into it instead. Each numbered tab shows a purpose icon beside its number. Slot 1 is the app launcher; slots 2–8 are Script Runner, API, Browser Automation, Workflows, Scheduler, Work Time, and Website Launcher; slot 9 is Codex.
 - Opening the compact launcher shows Global Action Search as its home surface. It searches registered actions across tabs; a unique match runs, and choosing a tab-specific action switches to that tab. This home surface is not a numbered tab.
 - Press **/** in slot 1 to open the app catalog. The app under the pointer when the panel opens is pinned first.
 - Choose a listed app or browse for an EXE/shortcut, then assign a unique letters-only alias.

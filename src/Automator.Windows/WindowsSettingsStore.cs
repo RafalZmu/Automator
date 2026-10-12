@@ -14,6 +14,8 @@ public sealed class WindowsSettingsStore
 {
     private const string StartupRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string StartupValueName = "Automator";
+    /// <summary>Pre-write backups kept beside settings.json; older backups are deleted after each new backup.</summary>
+    public const int MaximumBackups = 10;
     private readonly bool _testMode;
     private readonly IApplicationLog _log;
     private readonly AutomationModuleRegistry? _moduleRegistry;
@@ -120,7 +122,17 @@ public sealed class WindowsSettingsStore
     {
         if (!Path.IsPathFullyQualified(path)) throw new InvalidDataException("Export path must be absolute.");
         var json = SettingsSerializer.Serialize(settings);
-        File.WriteAllText(path, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        // Write beside the target and rename, so an interrupted export never leaves a partial file at the destination.
+        var tempPath = path + ".tmp-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            File.WriteAllText(tempPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            File.Move(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tempPath)) File.Delete(tempPath);
+        }
         _log.Write(ApplicationLogLevel.Information, "Settings.Exported", "Settings were exported.",
             properties: new Dictionary<string, object?> { ["path"] = path, ["bindingCount"] = settings.Bindings.Count });
     }
@@ -163,6 +175,7 @@ public sealed class WindowsSettingsStore
                 File.Copy(_settingsPath, backupPath, overwrite: false);
                 _log.Write(ApplicationLogLevel.Information, "Settings.BackupCreated", "A settings backup was created before replacement.",
                     properties: new Dictionary<string, object?> { ["backupPath"] = backupPath });
+                PruneBackups();
             }
 
             File.Move(tempPath, _settingsPath, overwrite: true);
@@ -172,6 +185,24 @@ public sealed class WindowsSettingsStore
         finally
         {
             if (File.Exists(tempPath)) File.Delete(tempPath);
+        }
+    }
+
+    /// <summary>Deletes all but the newest backups. Backup names embed a sortable UTC timestamp, so name order is age order.</summary>
+    private void PruneBackups()
+    {
+        try
+        {
+            var stale = Directory.EnumerateFiles(DataDirectory, Path.GetFileName(_settingsPath) + ".bak-*")
+                .OrderByDescending(path => Path.GetFileName(path), StringComparer.Ordinal)
+                .Skip(MaximumBackups)
+                .ToList();
+            foreach (var path in stale) File.Delete(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            _log.Write(ApplicationLogLevel.Warning, "Settings.BackupPruneFailed", "Old settings backups could not be deleted.", exception,
+                new Dictionary<string, object?> { ["settingsPath"] = _settingsPath });
         }
     }
 

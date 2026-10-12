@@ -24,6 +24,52 @@ test('work-time snapshot validates multiple running and paused timers, drafts, a
   assert.equal(readWorkTimeSnapshot({ ...valid, history: [{ description: ' ' }] }), null);
 });
 
+// Valid saved entries, one minute apart, numbered from firstIndex (ascending by stop time).
+function workEntries(count, firstIndex = 0) {
+  const base = Date.parse('2026-10-03T08:00:00Z');
+  return Array.from({ length: count }, (_, offset) => {
+    const index = firstIndex + offset;
+    const startedUtc = new Date(base + index * 60_000).toISOString();
+    const stoppedUtc = new Date(base + index * 60_000 + 30_000).toISOString();
+    return { id: `entry-${index}`, description: 'Work', startedUtc, stoppedUtc, durationMilliseconds: 30_000, tags: [],
+      segments: [{ startedUtc, stoppedUtc }] };
+  });
+}
+
+test('work-time snapshot keeps the sent page and reads the stored total, defaulting to the page length', async () => {
+  const { readWorkTimeSnapshot } = await import(modelUrl);
+  const page = workEntries(250, 4750);
+  const snapshot = readWorkTimeSnapshot({ timers: [], pendingEntries: [], history: page, historyTotal: 5000 });
+  assert.equal(snapshot.history.length, 250);
+  assert.equal(snapshot.history[0].id, 'entry-4750');
+  assert.equal(snapshot.historyTotal, 5000);
+  assert.equal(readWorkTimeSnapshot({ timers: [], pendingEntries: [], history: page })?.historyTotal, 250);
+  assert.equal(readWorkTimeSnapshot({ timers: [], pendingEntries: [], history: page, historyTotal: 249 }), null,
+    'the stored total cannot be smaller than the sent page');
+});
+
+test('work-time history pages validate entries and report offset and total', async () => {
+  const { readWorkTimeHistoryPage } = await import(modelUrl);
+  const page = readWorkTimeHistoryPage({ entries: workEntries(2, 10), total: 5000, offset: 0 });
+  assert.equal(page.entries.length, 2);
+  assert.equal(page.total, 5000);
+  assert.equal(page.offset, 0);
+  assert.deepEqual(readWorkTimeHistoryPage({ entries: [], total: 5000, offset: 5000 }).entries, []);
+  assert.equal(readWorkTimeHistoryPage({ entries: [{ description: ' ' }], total: 1, offset: 0 }), null);
+  assert.equal(readWorkTimeHistoryPage({ entries: [], total: 1.5, offset: 0 }), null);
+  assert.equal(readWorkTimeHistoryPage({ total: 1, offset: 0 }), null);
+});
+
+test('merged work-time history removes duplicate ids, prefers the fresh entry, and orders oldest first', async () => {
+  const { mergeWorkTimeHistory } = await import(modelUrl);
+  const [oldest, middle, newest] = workEntries(3);
+  const freshMiddle = { ...middle, description: 'Fresh' };
+  const merged = mergeWorkTimeHistory([newest, freshMiddle], [middle, oldest]);
+  assert.deepEqual(merged.map((entry) => entry.id), [oldest.id, middle.id, newest.id]);
+  assert.equal(merged[1].description, 'Fresh');
+  assert.deepEqual(mergeWorkTimeHistory([], []), []);
+});
+
 test('work-time snapshot accepts undescribed ended drafts but rejects them as saved history', async () => {
   const { readWorkTimeSnapshot } = await import(modelUrl);
   const pending = {

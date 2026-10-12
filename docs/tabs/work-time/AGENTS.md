@@ -18,6 +18,9 @@ Read the root AGENTS.md first. Slot 7 is the Work Time logger; the legacy Focus 
 - Preserve edit and delete behavior for saved entries, date/tag filters, summaries, CSV export, and recovery of timers and independent drafts after restart.
 - Avoid silently saving an empty description or losing a timer or draft when the user changes tabs or the process restarts.
 - Keep the history bounded and do not put work descriptions or tags in application logs.
+- The snapshot sends only the newest page (`FocusSessionsModule.SnapshotHistoryPageSize`, 250) plus `historyTotal`. Read older history only through `getHistory`, and keep every page within the 512 KiB module result limit. Do not raise the page size without measuring worst-case entry size.
+- `getHistory` must stay read-only. Keep the UI page size (`WORK_TIME_HISTORY_PAGE_SIZE`) equal to the backend page size, and reset loaded older pages after any mutating action.
+- Initialization skips individual corrupt history entries so one bad record cannot hide the rest of the history. An invalid state record must still fail initialization because it has a single owner.
 - Add coordinator specs for time boundaries and renderer tests for duration/report formatting.
 - The transient “Count only working hours” checkbox is off by default and counts only local 08:00–16:00 overlap per calendar day. Apply it to timer and draft displays, saved-entry displays, report totals, and CSV duration columns without changing stored timestamps or durations.
 - Keep working-period overlap and duration derivation in `ui/modules/workTimeViewModel.ts`. The checkbox state is component-local and resets when the view is recreated; do not claim it is persisted.
@@ -25,6 +28,8 @@ Read the root AGENTS.md first. Slot 7 is the Work Time logger; the legacy Focus 
 - Keep the New timer description required and visible on both surfaces. A new timer can start only when no timer is running; users pause the current timer explicitly first.
 - Render every running/paused timer and every ended draft independently. Resume is unavailable while another timer runs. End/discard/save operations must target the selected ID; discarding a paused timer and discarding an ended draft require confirmation.
 - Prefill each ended draft's editable description and tags independently so saving one draft cannot overwrite details for another.
+
+Discard on timers and drafts uses `InlineConfirmButton` (`ui/components/InlineConfirmButton.tsx`). Keep the visible `Discard` and `Discard draft` names and do not reintroduce `window.confirm`.
 
 ## Code and checks
 

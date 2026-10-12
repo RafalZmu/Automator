@@ -81,6 +81,8 @@ export function WebsiteLauncherView({ tab, services }: ViewProps) {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'The website shortcut could not be launched.';
       setNotice(message);
+      // The notice above already shows the failure. The rethrow lets the command palette observe it; the row button
+      // discards the rejection (see its onClick) so no unhandled rejection is raised.
       throw error;
     } finally {
       setBusy(null);

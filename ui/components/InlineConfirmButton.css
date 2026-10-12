@@ -1,0 +1,2 @@
+.inline-confirm { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.inline-confirm-warning { color: var(--muted); font-size: 8px; }

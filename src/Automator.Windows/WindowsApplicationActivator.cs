@@ -97,7 +97,7 @@ public sealed class WindowsApplicationActivator : IApplicationActivator
 
             _log.Write(ApplicationLogLevel.Warning, "Launcher.WindowTimeout", "No window appeared before the launch timeout.",
                 properties: new Dictionary<string, object?> { ["targetPath"] = binding.TargetPath, ["processId"] = started.Id });
-            throw new TimeoutException($"{binding.Name} started, but its window did not appear within eight seconds.");
+            throw new TimeoutException($"{binding.Name} started, but its window did not appear within eight seconds. It may still be loading.");
         }
     }
 

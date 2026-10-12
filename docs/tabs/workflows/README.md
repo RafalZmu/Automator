@@ -4,6 +4,10 @@ Workflows chain saved Script Runner, API, Browser Automation, and Codex-generate
 
 Mappings can use literal JSON, workflow variables, or a JSON Pointer into an earlier step's output. A blank source pointer selects the full output. Steps run in order and the initial engine stops at the first failed step. The run view shows status and available structured output for each step.
 
+## Removing workflows
+
+The Remove button on a workflow row uses a two-step inline confirmation: the first click shows Yes and Cancel, Escape or Cancel dismisses them, and they reset after six seconds.
+
 ## Code map
 
 - ui/modules/WorkflowsView.tsx and WorkflowsView.css contain the profile list and structured step editor.

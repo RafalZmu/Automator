@@ -4,6 +4,10 @@ Scheduler creates interval, daily, and weekly schedules in local time. A schedul
 
 The tab shows schedule history and an upcoming agenda/calendar. The agenda uses the next-run values supplied by the host scheduler. Scheduling continues while Automator remains in the tray and pauses after a full exit.
 
+## Deleting schedules
+
+The Delete button on a schedule uses a two-step inline confirmation: the first click shows Yes and Cancel, Escape or Cancel dismisses them, and they reset after six seconds.
+
 ## Code map
 
 - ui/modules/SchedulerView.tsx contains schedule editing, run/pause controls, history, agenda, and calendar.

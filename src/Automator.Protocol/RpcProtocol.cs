@@ -155,7 +155,7 @@ public static class RpcProtocol
 }
 
 public sealed record InitializeParams(int ProtocolVersion, string BuildId, int HostProcessId, string HostExecutablePath, string? PortableExecutablePath, bool TestMode, string? DataDirectory);
-public sealed record WindowContextParams(string WindowHandleHex, bool Visible, bool RendererFocused, bool NativeDialogActive, string Mode);
+public sealed record WindowContextParams(string WindowHandleHex, bool Visible, bool RendererFocused, bool NativeDialogActive, string Mode, bool TextEntryFocused = false);
 public sealed record ForegroundCheckParams(string WindowHandleHex);
 public sealed record SetModeParams(string Mode);
 public sealed record SelectTabParams(int Tab);

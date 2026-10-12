@@ -4,11 +4,15 @@ Work Time logs elapsed work intervals rather than running a Pomodoro cycle. Star
 
 Time can also be registered without any timer. The “Add time without the timer” card (Launcher and Workspace) takes an amount of time in hours and minutes (for example 1 hour 5 minutes), a required description, and optional tags. The entry ends at the moment it is added and starts that duration earlier, and is saved as one continuous segment. The duration must be at least one minute, with up to 99 hours and minutes from 0 to 59. Manual entries may overlap other entries, and they do not affect running timers or drafts. To record a specific past time, add the entry and then edit its start and end in the Workspace work log.
 
-The history supports filtering by date and tag, editing or deleting entries, viewing totals, and exporting a CSV report. Editing a saved entry can also correct its start and end times. Changing either time replaces the entry with one continuous segment from the new start to the new end, so any pauses it had are removed and its duration becomes the new interval; the edit form warns about this for entries with pauses. Saving with both times unchanged keeps the entry's pauses, segments, and exact timestamps. Multiple timers and ended drafts remain available after a restart.
+The history supports filtering by date and tag, editing or deleting entries, viewing totals, and exporting a CSV report. The log opens with the newest 250 entries and shows “Showing N of M entries”; “Load older entries” appends the next page through `getHistory`. Any saved change reloads the newest page and discards the loaded older pages. Report totals cover only the loaded entries, not every stored entry; load older pages first for totals across the whole log. Exporting loads every remaining page before it builds the CSV, so the file covers all stored entries that match the filters. Editing a saved entry can also correct its start and end times. Changing either time replaces the entry with one continuous segment from the new start to the new end, so any pauses it had are removed and its duration becomes the new interval; the edit form warns about this for entries with pauses. Saving with both times unchanged keeps the entry's pauses, segments, and exact timestamps. Multiple timers and ended drafts remain available after a restart.
 
 While this tab is active, press **S** to pause the running timer, or focus the New timer description when none is running. It never chooses a paused timer to resume. The shortcut is also listed in the tab command menu and does not run while editing text.
 
 The “Count only working hours” checkbox is off by default and is a view-only option. When enabled, displayed durations, report totals, and CSV durations count the overlap with local 08:00–16:00 on each calendar day, including intervals that cross midnight. Original timestamps and stored elapsed durations remain unchanged. The option resets when the Work Time view is recreated.
+
+## Discarding timers and drafts
+
+Discard on a paused timer and Discard draft use the same two-step inline confirmation as the other destructive row actions: the first click shows Yes and Cancel, Escape or Cancel dismisses them, and they reset after six seconds.
 
 ## Code map
 
@@ -26,7 +30,9 @@ See [TESTS.md](TESTS.md) for interval, duration, report, shortcut, and Workspace
 
 ## Backend API version 2
 
-The Work Time module now exposes contract/action version 2. The shared RPC result envelope stays version 1, and settings stay version 1. Its snapshot is `{ timers, pendingEntries, history }`.
+The Work Time module now exposes contract/action version 2. The shared RPC result envelope stays version 1, and settings stay version 1. Its snapshot is `{ timers, pendingEntries, history, historyTotal }`. `history` holds only the newest 250 saved entries (oldest to newest), and `historyTotal` is the number of entries stored, up to 5000.
+
+`getHistory {offset, limit}` (version 2, read-only) returns `{ entries, total, offset }`. `offset` counts back from the newest entry (0 is the newest), `limit` is 1–250, and `entries` is that slice in oldest-to-newest order. Pages are non-overlapping; an offset at or beyond `total` returns no entries. The result stays under the 512 KiB module data limit.
 
 `createEntry {startedUtc, stoppedUtc, description, tags}` saves a finished single-segment entry without a timer (the UI sends `now` as the end and `now − duration` as the start), and `updateEntry {id, startedUtc, stoppedUtc, description, tags}` edits a saved entry; both take ISO timestamps and reject an end that is not after the start or is in the future. `updateEntry` with unchanged times keeps the entry's segments; changed times collapse it to one segment and recalculate `durationMilliseconds`. Overlapping entries are allowed.
 
@@ -34,6 +40,6 @@ The Work Time module now exposes contract/action version 2. The shared RPC resul
 
 Timer fields are `id`, `description`, `startedUtc`, `status` (`running` or `paused`), `elapsedMilliseconds`, `sampledUtc`, and ordered `segments`. A running timer has one open final segment with `stoppedUtc: null`; drafts and saved entries contain completed segments. Paused duration is excluded from the accumulated elapsed time.
 
-The coordinator writes schema 2 records atomically under its state lock. Timers and multiple drafts survive restart. If a history write completed before draft removal was interrupted, startup keeps the saved entry and removes the duplicate draft. Description limits remain 500 characters, tags remain at most 30 values of at most 40 characters, and history remains bounded to 500 entries. Descriptions and tags are not logged.
+The coordinator writes schema 2 records atomically under its state lock. Timers and multiple drafts survive restart. If a history write completed before draft removal was interrupted, startup keeps the saved entry and removes the duplicate draft. Description limits remain 500 characters, tags remain at most 30 values of at most 40 characters, and history remains bounded to 5000 entries. Descriptions and tags are not logged. A saved history entry that cannot be read or fails validation is skipped at startup while the remaining entries load; the state record is still strict and an invalid state record fails initialization.
 
 Schema 1 active records recover as running timers; schema 1 pending records recover as paused timers. Missing legacy descriptions use the stable “Untitled timer” label and can be edited when saving. Existing elapsed values remain intact. Since schema 1 did not record paused boundaries, a migrated pending timer starts with a zero-length segment at its known stopped time; working-period totals do not count the unknown earlier span. Legacy history keeps a single continuous segment to preserve its previous report interpretation. A migrated active timer records only the segment boundaries known after recovery; it does not invent boundaries for its unknown prior running time.

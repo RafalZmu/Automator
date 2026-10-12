@@ -4,6 +4,10 @@ API stores reusable HTTP request profiles. A profile defines its method, URL, or
 
 The tab can import Chrome's Copy as cURL text into a profile. Import parses supported request details; it does not run the cURL command. Credentials are stored in the Windows secret store and are injected by the host when the request runs. The host applies URL and network restrictions, bounds response sizes, and supports cancellation.
 
+## Removing profiles
+
+The Remove button on a saved request uses a two-step inline confirmation. The confirmation states that the stored credentials are deleted too. Escape or Cancel dismisses it, and it resets after six seconds.
+
 ## Code map
 
 - `ui/modules/ApiView.tsx` is the profile editor, runner, response view, secret editor, and cURL import surface.

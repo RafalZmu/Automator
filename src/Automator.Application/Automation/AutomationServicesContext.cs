@@ -372,6 +372,12 @@ public sealed class AutomationServicesContext : IAsyncDisposable
             return await inner.GetSnapshotAsync(linked.Token).ConfigureAwait(false);
         }
 
+        public async Task<AutomationWorkTimeHistoryPage> GetHistoryPageAsync(int offset, int limit, CancellationToken cancellationToken)
+        {
+            using var linked = Link(context, cancellationToken);
+            return await inner.GetHistoryPageAsync(offset, limit, linked.Token).ConfigureAwait(false);
+        }
+
         public async Task<AutomationWorkTimeSnapshot> StartAsync(string description, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);
