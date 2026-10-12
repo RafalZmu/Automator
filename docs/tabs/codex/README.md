@@ -1,5 +1,7 @@
 # Codex — slot 9
 
+The **Assistant** selector chooses the local CLI that drafts the task: Codex (default) or Claude Code. Each uses its own installed CLI and sign-in, and the choice is remembered in the browser profile. Claude drafts run `claude -p` with a JSON schema, no tools, no MCP servers, no slash commands, no hooks, and no saved session; the CLI is discovered as `claude.exe` (`~/.local/bin`, `%LOCALAPPDATA%\Programs\claude`, or `PATH`). Implementation: `ClaudeCliClient.cs` and the shared `IAuthoringCliClient.cs`; the provider travels as the optional `provider` property of `getStatus` and `generateDraft`.
+
 Codex turns a task description into a reviewed Python script, Playwright task, or Workflow. It uses the Codex CLI installed on this computer and that CLI's own sign-in. When the CLI is missing, signed out, or has a configuration problem, the tab shows the state and setup guidance; Automator does not request a separate API key or sign-in.
 
 Enter what the task should do and list its files, folders, or sites in scope. Type paths or use the native file and folder pickers to add local paths; enter websites as URLs. Codex recommends a format unless Python, Playwright, or Workflow is selected. The result includes a plain-language plan, complete source, named inputs, and declared effects for review. If the draft proposes additional scope, accept the items you want and generate a new draft before reviewing it.
