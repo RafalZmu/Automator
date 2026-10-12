@@ -254,7 +254,7 @@ input { user-select: text; }
 .script-heading p { margin: 3px 0 0; color: var(--muted); font-size: 9px; }
 .script-notice { flex: none; margin: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted-strong); background: rgba(255,255,255,.34); font-size: 9px; line-height: 1.4; }
 .window-shell[data-theme="dark"] .script-notice { background: rgba(255,255,255,.045); }
-.script-editor { flex: none; max-height: 59%; display: flex; flex-direction: column; gap: 9px; padding: 11px; overflow: auto; border: 1px solid var(--line); border-radius: 13px; background: rgba(255,255,255,.43); box-shadow: 0 5px 16px rgba(30,75,88,.035); scrollbar-color: rgba(90,126,135,.25) transparent; scrollbar-width: thin; }
+.script-editor { flex: none; max-height: 66%; display: flex; flex-direction: column; gap: 9px; padding: 11px; overflow: auto; border: 1px solid var(--line); border-radius: 13px; background: rgba(255,255,255,.43); box-shadow: 0 5px 16px rgba(30,75,88,.035); scrollbar-color: rgba(90,126,135,.25) transparent; scrollbar-width: thin; }
 .window-shell[data-theme="dark"] .script-editor { background: rgba(16,25,29,.35); }
 .script-editor-heading { flex: none; gap: 7px; color: var(--accent); }
 .script-editor-heading strong { flex: 1; color: var(--ink); font-size: 10px; }

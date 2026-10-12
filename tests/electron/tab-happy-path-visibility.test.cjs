@@ -116,7 +116,8 @@ async function assertTabIcons(page, tabs) {
     const icon = tab.locator('svg[aria-hidden="true"]');
     assert.equal(await icon.count(), 1, `${name} tab must show one decorative icon`);
     const bounds = await icon.boundingBox();
-    assert.ok(bounds && bounds.width >= 12 && bounds.height >= 12,
+    // Layout rounds the 12px decorative icon to about 11.99px; accept sub-pixel rounding.
+    assert.ok(bounds && bounds.width >= 11.5 && bounds.height >= 11.5,
       `${name} tab icon must have visible dimensions`);
   }
 }
