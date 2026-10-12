@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import type { TabCommand } from './commandMatching';
+import { findShortcutCommand, type ShortcutEvent } from './keyboardShortcuts';
 
 type CommandProvider = () => readonly TabCommand[];
 
@@ -33,12 +34,13 @@ class Registry {
   }
 
   private snapshot(commands: readonly TabCommand[]): readonly TabCommand[] {
-    return Object.freeze(commands.map(({ id, label, keywords, disabled, confirmationPrompt }) => Object.freeze({
+    return Object.freeze(commands.map(({ id, label, keywords, disabled, confirmationPrompt, shortcut }) => Object.freeze({
       id,
       label,
       keywords: keywords ? Object.freeze([...keywords]) : undefined,
       disabled,
       confirmationPrompt,
+      shortcut,
       run: () => undefined,
     })));
   }
@@ -69,8 +71,8 @@ export function useRegisterTabCommands(scope: string, commands: readonly TabComm
   const registry = useRegistry();
   const current = useRef(commands);
   current.current = commands;
-  const descriptor = JSON.stringify(commands.map(({ id, label, keywords, disabled, confirmationPrompt }) =>
-    [id, label, keywords ?? [], disabled ?? false, confirmationPrompt ?? '']));
+  const descriptor = JSON.stringify(commands.map(({ id, label, keywords, disabled, confirmationPrompt, shortcut }) =>
+    [id, label, keywords ?? [], disabled ?? false, confirmationPrompt ?? '', shortcut ?? '']));
 
   useEffect(() => registry.register(scope, () => current.current), [registry, scope, descriptor]);
 }
@@ -89,6 +91,12 @@ export function useAllTabCommandCatalog(): readonly { scope: string; command: Ta
 export function useTabCommandResolver(): (scope: string, commandId: string) => TabCommand | undefined {
   const registry = useRegistry();
   return (scope, commandId) => registry.getLiveCommand(scope, commandId);
+}
+
+/** Finds the live, enabled command whose key chord matches the event within one tab's registration. */
+export function useTabShortcutResolver(): (scope: string, event: ShortcutEvent) => TabCommand | undefined {
+  const registry = useRegistry();
+  return (scope, event) => findShortcutCommand(registry.getCommands(scope), event);
 }
 
 const emptyCatalog: readonly { scope: string; command: TabCommand }[] = Object.freeze([]);

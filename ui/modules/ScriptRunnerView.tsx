@@ -99,6 +99,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   const [templateProfile, setTemplateProfile] = useState<ScriptProfile | null>(null);
   const [templateValues, setTemplateValues] = useState<Record<string, ScriptTemplateValue>>({});
   const runController = useRef<AbortController | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const moduleSettingsRef = useRef<ModuleSettingsValue>({});
 
   const loadModuleSettings = useCallback(async (savedProfiles: ScriptProfile[]) => {
@@ -287,14 +288,15 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   };
 
   const commands = useMemo(() => [
-    { id: 'new-script-profile', label: 'Create script profile', keywords: ['new', 'python', 'bash', 'powershell'], disabled: !settingsReady || runningId !== null, run: () => { setOutput(null); setEditing(blankProfile(interpreterDefaults)); } },
+    { id: 'new-script-profile', label: 'Create script profile', keywords: ['new', 'python', 'bash', 'powershell'], shortcut: 'Ctrl+N', disabled: !settingsReady || runningId !== null, run: () => { setOutput(null); setEditing(blankProfile(interpreterDefaults)); } },
+    { id: 'save-script-profile', label: 'Save script profile', keywords: ['save profile'], shortcut: 'Ctrl+S', disabled: !editing, run: () => formRef.current?.requestSubmit() },
     ...(runningId ? [{ id: 'cancel-script-run', label: 'Cancel running script', keywords: ['stop', 'terminate'], run: () => runController.current?.abort() }] : []),
     ...profiles.flatMap((profile) => [
       { id: `run-script:${profile.id}`, label: `Run ${profile.name}`, keywords: [profile.id, profile.interpreter], disabled: runningId !== null, confirmationPrompt: `Run script profile “${profile.name}”?`, run: () => runProfile(profile) },
       { id: `edit-script:${profile.id}`, label: `Edit ${profile.name}`, keywords: [profile.id, 'profile'], disabled: runningId !== null, run: () => { setOutput(null); setEditing({ ...profile, arguments: [...profile.arguments], ...(profile.templateOrigin ? { templateOrigin: null } : {}) }); } },
       { id: `delete-script:${profile.id}`, label: `Delete ${profile.name}`, keywords: [profile.id, 'remove'], disabled: runningId !== null, confirmationPrompt: `Delete saved script profile “${profile.name}”?`, run: () => deleteProfile(profile) },
     ]),
-  ], [deleteProfile, interpreterDefaults, profiles, runProfile, runningId, settingsReady]);
+  ], [deleteProfile, editing, interpreterDefaults, profiles, runProfile, runningId, settingsReady]);
   useRegisterTabCommands(tab.id, commands);
 
   const browseForScript = async (): Promise<string | null> => {
@@ -376,11 +378,11 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
       </section>}
 
       {editing && (
-        <form className="script-editor" onSubmit={(event) => void saveProfile(event)}>
+        <form className="script-editor" ref={formRef} onSubmit={(event) => void saveProfile(event)}>
           <div className="script-editor-heading"><FileCode2 size={16} /><strong>{profiles.some((profile) => profile.id === editing.id) ? 'Edit profile' : 'New profile'}</strong>
             <button className="icon-button" type="button" aria-label="Close editor" onClick={() => setEditing(null)}><X size={15} /></button></div>
           <div className="script-fields">
-            <label><span>Name</span><input required maxLength={128} value={editing.name} placeholder="Daily report" onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label>
+            <label><span>Name</span><input autoFocus required maxLength={128} value={editing.name} placeholder="Daily report" onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label>
             <label><span>Profile key</span><input required pattern="[a-z0-9][a-z0-9._-]{0,63}" value={editing.id} onChange={(event) => setEditing({ ...editing, id: event.target.value.toLowerCase() })} /></label>
             <label><span>Interpreter</span><select value={editing.interpreter} onChange={(event) => {
               const interpreter = event.target.value as ScriptRunnerInterpreter;
@@ -405,7 +407,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
             <label><span>Timeout <small>seconds</small></span><input required type="number" min={1} max={3600} value={editing.timeoutSeconds} onChange={(event) => setEditing({ ...editing, timeoutSeconds: Number(event.target.value) })} /></label>
           </div>
           <p className="script-trust-note">Scripts run as your Windows user with the same access as Automator. They are not sandboxed. Saving a profile remembers its interpreter path as the default for new profiles; existing profiles keep their saved path.</p>
-          <div className="script-editor-actions"><button className="secondary-button" type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary-button" type="submit"><Save size={14} /> Save profile</button></div>
+          <div className="script-editor-actions"><button className="secondary-button" type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary-button" type="submit" title="Save profile (Ctrl+S)"><Save size={14} /> Save profile</button></div>
         </form>
       )}
 

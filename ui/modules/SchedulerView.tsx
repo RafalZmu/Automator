@@ -41,6 +41,7 @@ export function SchedulerView({ services }: ViewProps) {
   const [calendarAnchor, setCalendarAnchor] = useState(() => new Date());
   const alive = useRef(true);
   const refreshing = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const refresh = useCallback(async () => {
     if (refreshing.current) return;
     refreshing.current = true;
@@ -105,12 +106,13 @@ export function SchedulerView({ services }: ViewProps) {
   </ol>;
   const commands = useMemo(() => [
     { id: 'scheduler:refresh', label: 'Refresh schedules', keywords: ['reload', 'update'], run: refresh },
-    { id: 'scheduler:new', label: 'Create schedule', keywords: ['new', 'workflow', 'script'], disabled: !!busy || (snapshot.workflows.length === 0 && snapshot.scripts.length === 0), run: () => {
+    { id: 'scheduler:new', label: 'Create schedule', keywords: ['new', 'workflow', 'script'], shortcut: 'Ctrl+N', disabled: !!busy || (snapshot.workflows.length === 0 && snapshot.scripts.length === 0), run: () => {
       setErrors([]);
       const targetKind: ScheduleTargetKind = snapshot.workflows.length ? 'workflow' : 'scriptProfile';
       const profileId = targetKind === 'workflow' ? snapshot.workflows[0]?.profileId : snapshot.scripts[0]?.profileId;
       setDraft(blankSchedule(targetKind, profileId));
     } },
+    { id: 'scheduler:save', label: 'Save schedule', keywords: ['save'], shortcut: 'Ctrl+S', disabled: !draft || !!busy, run: () => formRef.current?.requestSubmit() },
     ...snapshot.schedules.map((schedule) => {
       const catalog = schedule.targetKind === 'workflow' ? snapshot.workflows : snapshot.scripts;
       const profile = catalog.find((item) => item.profileId === schedule.profileId);
@@ -119,7 +121,7 @@ export function SchedulerView({ services }: ViewProps) {
         disabled: !!busy || !!state?.running || !profile, confirmationPrompt: `Run schedule “${schedule.name}” now?`,
         run: async () => { await action('runNow', { scheduleId: schedule.id }, schedule.id); } };
     }),
-  ], [action, busy, refresh, snapshot]);
+  ], [action, busy, draft, refresh, snapshot]);
   useRegisterTabCommands('scheduler', commands);
 
   return <section className="module-view script-runner-view scheduler-view" aria-label="Scheduler">
@@ -169,10 +171,10 @@ export function SchedulerView({ services }: ViewProps) {
             </div>
           </>}
     </section>
-    {draft && <form className="script-editor" onSubmit={(event) => void save(event)}>
+    {draft && <form className="script-editor" ref={formRef} onSubmit={(event) => void save(event)}>
       <div className="script-editor-heading"><CalendarClock size={14} /><strong>Schedule</strong><button className="icon-button" type="button" aria-label="Close editor" disabled={!!busy} onClick={() => setDraft(null)}><X size={13} /></button></div>
       <div className="script-fields">
-        <label><span>Name</span><input required maxLength={128} value={draft.name} onChange={(event) => change({ name: event.target.value })} /></label>
+        <label><span>Name</span><input autoFocus required maxLength={128} value={draft.name} onChange={(event) => change({ name: event.target.value })} /></label>
         <label><span>Run</span><select value={draft.targetKind} onChange={(event) => { const targetKind = event.target.value as ScheduleTargetKind; const catalog = targetKind === 'workflow' ? snapshot.workflows : snapshot.scripts; change({ targetKind, profileId: catalog[0]?.profileId ?? '' }); }}><option value="workflow">Workflow</option><option value="scriptProfile">Script profile</option></select></label>
         <label><span>{draft.targetKind === 'workflow' ? 'Workflow profile' : 'Script profile'}</span><select value={draft.profileId} onChange={(event) => change({ profileId: event.target.value })}>
           {(draft.targetKind === 'workflow' ? snapshot.workflows : snapshot.scripts).length === 0 && <option value="">No saved {draft.targetKind === 'workflow' ? 'workflows' : 'script profiles'}</option>}

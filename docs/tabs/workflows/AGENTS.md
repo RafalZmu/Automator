@@ -23,3 +23,7 @@ Module/engine: WorkflowModule.cs and AutomationWorkflowEngine.cs.
 Tests: tests/workflows-contract.test.mjs and tests/Automator.Workflows.Specs.
 
 Update the sibling README when supported step types, mapping semantics, or workflow behavior changes.
+
+## Keyboard
+
+- `workflow:new` (Ctrl+N) and `workflow:save` (Ctrl+S) are registered commands. Save has no confirmation prompt because the editor's Save button does not ask for one; keep validation as the gate.

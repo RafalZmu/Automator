@@ -8,6 +8,10 @@ The tab shows schedule history and an upcoming agenda/calendar. The agenda uses 
 
 The Delete button on a schedule uses a two-step inline confirmation: the first click shows Yes and Cancel, Escape or Cancel dismisses them, and they reset after six seconds.
 
+## Keyboard
+
+`Ctrl+N` creates a schedule when a workflow or script profile exists. `Ctrl+S` saves the open schedule editor.
+
 ## Code map
 
 - ui/modules/SchedulerView.tsx contains schedule editing, run/pause controls, history, agenda, and calendar.

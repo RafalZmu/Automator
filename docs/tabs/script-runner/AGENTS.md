@@ -50,3 +50,7 @@ Update the sibling README when supported profile fields or script output behavio
 Explorer UI: `ui/modules/ExplorerActionsPanel.tsx` and `explorerActionViewModel.ts`; launch queue/context: `ui/App.tsx` and `ui/FileExplorerLaunchContext.ts`; registry adapter: `src/Automator.Windows/WindowsAutomationFileExplorerMenu.cs`. Update this guide, README, and TESTS together when these boundaries change.
 
 PathField uses a React per-instance ID so multiple Library cards and transient forms can reuse the same label without associating it with another input. Preserve that label/control association when changing shared fields.
+
+## Keyboard
+
+- Keep `Ctrl+N` and `Ctrl+S` as `commands` entries in `ScriptRunnerView.tsx` (`new-script-profile`, `save-script-profile`). The save command calls `requestSubmit` on the editor form, so it uses the same validation as the Save profile button. Do not add a view-level key listener.

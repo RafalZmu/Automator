@@ -73,7 +73,7 @@ export function QuickActionsHome({
       event.preventDefault();
       const action = selected >= 0 ? matches[selected] : resolution.kind === 'unique' ? resolution.command : undefined;
       if (action) void execute(action as QuickAction);
-    } else if (event.key === '/' && !query.trim()) {
+    } else if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey && !query.trim()) {
       event.preventDefault();
       onAddApp();
     } else if (event.key === 'Escape') {
@@ -88,8 +88,8 @@ export function QuickActionsHome({
       <span className="quick-actions-mark"><Sparkles size={17} /></span>
       <div><h1>Quick Actions</h1><p>Search apps and actions across your workspace.</p></div>
       <div className="quick-actions-heading-buttons">
-        <button className="quick-actions-icon" type="button" aria-label="Add an application" title="Add app" onClick={onAddApp}><AppWindow size={15} /></button>
-        <button className="quick-actions-icon" type="button" aria-label="Open settings" title="Settings" onClick={onOpenSettings}><Settings2 size={15} /></button>
+        <button className="quick-actions-icon" type="button" aria-label="Add an application" title="Add app (/)" onClick={onAddApp}><AppWindow size={15} /></button>
+        <button className="quick-actions-icon" type="button" aria-label="Open settings" title="Settings (Ctrl+,)" onClick={onOpenSettings}><Settings2 size={15} /></button>
       </div>
     </div>
     <label className="quick-actions-search" htmlFor="quick-actions-search">

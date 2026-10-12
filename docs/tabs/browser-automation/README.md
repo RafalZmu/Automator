@@ -17,6 +17,10 @@ The result is shown as a diff with a summary. Nothing is written until **Create 
 
 **Failures** show the error message, the failing source line and Playwright's page snapshot at the moment of failure (read from inside the project only), with a **Fix with AI** button that opens the AI panel with the failure pre-filled. If the browser is not installed, a banner offers **Install browser**, which runs the project's own `playwright install chromium` (nothing else in the project changes). The managed project is seeded with a minimal `playwright.config.mjs` (only when no config exists) so results stay inside the project.
 
+## Keyboard
+
+`Ctrl+N` creates a Playwright test section when a project folder is chosen and no operation is running.
+
 ## Code map
 
 - ui/modules/BrowserAutomationView.tsx renders project selection, discovered files/tests, tag editing, grouped runs, and browser profiles.

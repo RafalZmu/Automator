@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, CircleAlert, Code2, Download, FilePlus2, FolderOpen, Play, RefreshCw, Save, Sparkles, Square } from 'lucide-react';
 import type { AutomationServices } from '../automationServices';
+import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import type { BackendUiState } from '../../contracts/rpc';
 import {
   codexTaskDraftSchema,
@@ -62,6 +63,7 @@ export function CodexView({ tab, services }: Props) {
   const [runSucceeded, setRunSucceeded] = useState(false);
   const [runOutput, setRunOutput] = useState<unknown>(null);
   const controller = useRef<AbortController | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const sensitiveEffects = useMemo(() => draft?.effects.filter((effect) => ['overwrite', 'delete', 'submit', 'send'].includes(effect.kind)) ?? [], [draft]);
   const scope = useMemo(() => scopeText.split(/\r?\n/).map((item) => item.trim()).filter(Boolean), [scopeText]);
   const proposedExpansion = draft?.proposedScope.filter((item) => !draft.scope.includes(item)) ?? [];
@@ -206,6 +208,9 @@ export function CodexView({ tab, services }: Props) {
     finally { controller.current = null; setBusy(null); }
   };
 
+  useRegisterTabCommands(tab.id, [
+    { id: 'generate-task', label: 'Generate task', keywords: ['draft', 'create task', 'assistant'], shortcut: 'Ctrl+Enter', disabled: !status?.available || busy !== null || !prompt.trim() || scope.length === 0 || scope.length > 32, run: () => formRef.current?.requestSubmit() },
+  ]);
   const saveDraft = async () => {
     if (!draft || !runSucceeded) return;
     setBusy('save'); setError('');
@@ -243,7 +248,7 @@ export function CodexView({ tab, services }: Props) {
     </section>}
     {drafts.some((item) => item.saved) && <label className="codex-load-saved"><span>Review a saved task</span><select aria-label="Load saved task" value={draft?.saved ? draft.id : ''} onChange={(event) => void loadDraft(event.target.value)}><option value="">Choose saved task…</option>{drafts.filter((item) => item.saved).map((item) => <option key={item.id} value={item.id}>{item.plan.slice(0, 100)} · {item.format}</option>)}</select></label>}
 
-    <form className="codex-request" onSubmit={(event) => void generate(event)}>
+    <form className="codex-request" ref={formRef} onSubmit={(event) => void generate(event)}>
       <label><span>What should the task do?</span><textarea required maxLength={12000} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="For example: read the monthly CSV files, summarize totals, and create a report." /></label>
       <label><span>Files, folders, or sites in scope <small>Browse for local paths or enter one item per line; enter websites as URLs</small></span><textarea required maxLength={8192} value={scopeText} onChange={(event) => setScopeText(event.target.value)} placeholder={'C:\\Reports\\monthly\\\nhttps://example.com'} /></label>
       <div className="codex-scope-picker"><button className="secondary-button" type="button" disabled={busy !== null || scope.length >= 32} onClick={() => void pickScopePath('file')}><FilePlus2 size={13} /> Browse file</button><button className="secondary-button" type="button" disabled={busy !== null || scope.length >= 32} onClick={() => void pickScopePath('directory')}><FolderOpen size={13} /> Browse folder</button></div>

@@ -21,3 +21,9 @@ Desktop lifecycle and native focus: `electron/main.ts`; backend launcher behavio
 Tests: `tests/electron/catalog-alias.test.cjs`, `tests/electron/native-hotkey.test.cjs`, and `tests/electron/ui-flow.test.cjs`.
 
 Update this guide and the sibling README when a user-visible launcher rule or source boundary changes.
+
+## Keyboard
+
+- The native key layer owns Escape and digits 1–9 (and `/` on slot 1) in launcher and catalog modes. Keep renderer shortcuts that need those keys working when the native layer is absent, but do not add renderer-only Escape steps in those modes.
+- App search arrows and Enter (`ui/App.tsx`) act on the visible rows only; an exact alias keeps the alias flow and must not also start the app from Enter.
+- The shortcut reference replaces the content area, not the whole panel, and resets when the mode changes or the panel hides.

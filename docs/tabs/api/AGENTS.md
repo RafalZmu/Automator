@@ -22,3 +22,7 @@ Secret storage and host resolution: `WindowsCredentialSecretManager.cs` and `Hos
 Tests: `tests/api-view.test.mjs`, RPC/backend tests, and Application/Infrastructure specs.
 
 Update this guide and README when profile fields, import support, or network policy changes.
+
+## Keyboard
+
+- The shortcuts are the `api:new-profile` (Ctrl+N) and `api:save-profile` (Ctrl+S) commands. The save command submits the editor form, so credential handling stays in `saveProfile`.

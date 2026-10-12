@@ -155,16 +155,16 @@ The test filename and view-model module retain the old Focus Sessions name for c
 
 ## Shortcut and service tests
 
-### Work Time S shortcut toggles only without modifiers and outside editable controls
+### unmodified printable shortcuts never fire inside text controls
 
-**Source:** tests/electron/work-time-shortcut.test.cjs
+**Source:** tests/command-matching.test.mjs
 
 **Steps**
 
-1. Try lowercase and uppercase S on a non-editable target.
-2. Repeat with a modifier, an input, and a content-editable target.
+1. Try lowercase and uppercase S on a non-editable target, with Shift, and inside an input, a textarea, and a content-editable target.
+2. Repeat with Ctrl+S inside an input.
 
-**Expected result:** Only unmodified S outside editable controls is treated as the Work Time toggle shortcut.
+**Expected result:** Only unmodified S outside editable controls is treated as the Work Time toggle shortcut; Ctrl+S remains available inside text controls.
 
 ### Work Time CSV saving is exposed only to the Work Time module and forwards the file content
 

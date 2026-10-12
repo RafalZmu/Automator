@@ -264,9 +264,9 @@ export function WorkflowsView({ services, tab }: ViewProps) {
 
   const commandCatalog = useMemo(() => {
     const commands = [
-      { id: 'workflow:new', label: 'New workflow', keywords: ['create workflow'], disabled: running || Boolean(draft), run: () => createOrEdit() },
+      { id: 'workflow:new', label: 'New workflow', keywords: ['create workflow'], shortcut: 'Ctrl+N', disabled: running || Boolean(draft), run: () => createOrEdit() },
       { id: 'workflow:add-step', label: 'Add workflow step', keywords: ['new step'], disabled: running || !draft || draft.steps.length >= 32, run: addStep },
-      { id: 'workflow:save', label: 'Save workflow', keywords: ['save'], disabled: running || !draft || Boolean(validationError), confirmationPrompt: 'Save the current workflow?', run: () => saveWorkflow() },
+      { id: 'workflow:save', label: 'Save workflow', keywords: ['save'], shortcut: 'Ctrl+S', disabled: running || !draft || Boolean(validationError), run: () => saveWorkflow() },
       { id: 'workflow:cancel', label: 'Cancel workflow run', keywords: ['stop'], disabled: !running, run: () => runController.current?.abort() },
       ...workflows.flatMap((workflow) => [
         { id: `workflow:run:${workflow.id}`, label: `Run ${workflow.name}`, keywords: ['execute', workflow.id], disabled: running || Boolean(draft), confirmationPrompt: `Run workflow “${workflow.name}”?`, run: () => runWorkflow(workflow.id) },
@@ -295,7 +295,7 @@ export function WorkflowsView({ services, tab }: ViewProps) {
           <div className="workflow-editor-heading"><strong>{workflows.some((workflow) => workflow.id === draft.id) ? 'Edit workflow' : 'New workflow'}</strong>
             <button className="secondary-button" type="button" onClick={() => setDraft(null)}>Close</button></div>
           <div className="workflow-fields">
-            <label><span>Name</span><input required maxLength={128} value={draft.name} placeholder="Daily report" onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
+            <label><span>Name</span><input autoFocus required maxLength={128} value={draft.name} placeholder="Daily report" onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
             <label><span>Workflow key</span><input required pattern="[a-z0-9][a-z0-9._-]{0,63}" value={draft.id} onChange={(event) => setDraft({ ...draft, id: event.target.value.trim().toLowerCase() })} /></label>
           </div>
 

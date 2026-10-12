@@ -4,6 +4,10 @@ Website Launcher saves named shortcuts with a letters-only alias. Each shortcut 
 
 Launch requests go through the active `website-launcher` module action and the host-owned `website.launch` capability. The Windows adapter opens HTTP(S) URLs through the system default browser in group and website order. Direct Chromium and Firefox launches redirect and drain/discard stdout and stderr asynchronously until the child exits, so opening a browser does not block the request or write browser output to the backend protocol stream. Unknown browser associations retain the Windows shell URL-handler fallback. The browser controls whether URLs reuse an existing window or open new tabs, so exact window grouping is best-effort.
 
+## Keyboard
+
+`Ctrl+N` adds a website shortcut row and `Ctrl+S` saves every shortcut. The Add shortcut and Save buttons show the same chords in their tooltips.
+
 ## Code map
 
 - `ui/modules/WebsiteLauncherView.tsx` edits shortcuts, browser groups, and website tabs; `WebsiteLauncherView.css` styles the editor.

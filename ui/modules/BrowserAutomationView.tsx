@@ -423,7 +423,7 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
   const commands = [
     { id: 'refresh-tests', label: 'Refresh Playwright tests', keywords: ['discover', 'reload'], disabled: !explorer?.projectRoot || !!busy, run: refreshTests },
     { id: 'choose-project', label: 'Choose Playwright project folder', keywords: ['folder', 'directory'], disabled: !!busy, run: chooseProject },
-    { id: 'create-section', label: 'Create Playwright test section', keywords: ['new file', 'spec'], disabled: !explorer?.projectRoot || !!busy, run: openCreateSection },
+    { id: 'create-section', label: 'Create Playwright test section', keywords: ['new file', 'spec'], shortcut: 'Ctrl+N', disabled: !explorer?.projectRoot || !!busy, run: openCreateSection },
     { id: 'install-browsers', label: 'Install Playwright browser', keywords: ['chromium', 'download', 'setup'], disabled: !explorer?.projectRoot || !explorer.runner.available || !!busy, confirmationPrompt: 'Download Chromium for Playwright (about 120 MB)?', run: installBrowsers },
     { id: 'ai-write-test', label: 'Write a Playwright test with AI', keywords: ['recording', 'codegen', 'agent', 'refactor', 'new test'], disabled: !explorer?.projectRoot || !explorer.runner.available || !!busy, run: () => openAi() },
     ...((explorer?.files ?? []).flatMap((file) => [

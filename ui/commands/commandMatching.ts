@@ -4,6 +4,8 @@ export type TabCommand = {
   keywords?: readonly string[];
   disabled?: boolean;
   confirmationPrompt?: string;
+  /** Key chord such as "Ctrl+N". Runs only while the owning tab is active and the command is enabled without confirmation. */
+  shortcut?: string;
   run: () => void | Promise<void>;
 };
 

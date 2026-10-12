@@ -27,3 +27,7 @@ Browser runtime: src/Automator.Infrastructure/Automation/BrowserAutomationProxy.
 Tests: tests/browser-automation-contract.test.mjs and Browser Infrastructure/Application specs.
 
 Update this guide when supported test-file patterns, managed-project behavior, tags, or browser grants change.
+
+## Keyboard
+
+- `create-section` is bound to Ctrl+N through the commands list. Keep its disabled rules (project chosen, not busy) in sync with the button.

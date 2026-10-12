@@ -4,7 +4,6 @@ import type { AutomationModuleActionRequest, BackendUiState } from '../../contra
 import type { AutomationServices } from '../automationServices';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import { InlineConfirmButton } from '../components/InlineConfirmButton';
-import { isWorkTimeToggleShortcut } from './workTimeShortcut';
 import {
   calculateWorkTimeReportTotals,
   calculateWorkTimeIntervalMilliseconds,
@@ -113,15 +112,6 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
     if (runningTimer) await dispatch('pause', { id: runningTimer.id });
     else startDescriptionRef.current?.focus();
   };
-  useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent) => {
-      if (!isWorkTimeToggleShortcut(event)) return;
-      event.preventDefault();
-      void toggleWorkTimer();
-    };
-    window.addEventListener('keydown', handleShortcut);
-    return () => window.removeEventListener('keydown', handleShortcut);
-  });
   const submitEntry = (event: FormEvent<HTMLFormElement>, id: string) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -264,7 +254,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
   };
 
   const commands = useMemo(() => [
-    { id: 'toggle-work', label: 'Work timer shortcut', keywords: ['start pause shortcut s'], disabled: !!busy || !snapshot, run: toggleWorkTimer },
+    { id: 'toggle-work', label: 'Start or pause work timer', keywords: ['start pause shortcut s'], shortcut: 'S', disabled: !!busy || !snapshot, run: toggleWorkTimer },
     { id: 'start-work', label: 'Start work timer', keywords: ['begin named timer'], disabled: !!busy || !snapshot || !!runningTimer || !cleanedStartDescription, run: startTimer },
     { id: 'add-work-entry-manually', label: 'Add work entry manually', keywords: ['register time without timer log past interval'], disabled: !!busy || !snapshot, run: () => { document.getElementById('work-time-manual-hours')?.focus(); } },
     ...(runningTimer ? [{ id: `pause-work-${runningTimer.id}`, label: `Pause ${runningTimer.description}`, keywords: ['pause timer'], disabled: !!busy, run: async () => { await dispatch('pause', { id: runningTimer.id }); } }] : []),

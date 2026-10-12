@@ -66,12 +66,13 @@ export function TabCommandBar({ scope }: { scope: string }) {
       event.preventDefault();
       if (selected >= 0) void execute(matches[selected]?.id);
       else void execute();
-    } else if (event.key === 'Escape') {
+    } else if (event.key === 'Escape' && (query || armedCommand || error)) {
+      // Clear first. An empty bar lets Escape bubble, so it can leave the field and then hide the workspace.
+      event.preventDefault();
       setQuery('');
       setSelected(-1);
       setArmedCommand(null);
       setError('');
-      inputRef.current?.blur();
     }
   };
 
@@ -88,7 +89,7 @@ export function TabCommandBar({ scope }: { scope: string }) {
         const isSelected = selected === index || (selected < 0 && resolution.kind === 'unique');
         return <button key={command.id} type="button" role="option" aria-selected={isSelected} className="tab-command-option" data-selected={isSelected}
           onMouseEnter={() => { setSelected(index); setArmedCommand(null); }} onClick={() => void execute(command.id)} disabled={busy}>
-          <span>{command.label}</span><span className="tab-command-enter"><CornerDownLeft size={12} /> {command.confirmationPrompt ? 'Enter twice' : 'Enter'}</span>
+          <span>{command.label}</span><span className="tab-command-enter">{command.shortcut && <kbd>{command.shortcut}</kbd>}<CornerDownLeft size={12} /> {command.confirmationPrompt ? 'Enter twice' : 'Enter'}</span>
         </button>;
       })}
       {confirm && <p className="tab-command-confirm" role="status">{confirm.confirmationPrompt} Press Enter again to continue.</p>}

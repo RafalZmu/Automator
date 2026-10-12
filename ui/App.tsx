@@ -6,7 +6,7 @@ import {
   Settings2, Sparkles, Sun, Terminal, Workflow, X,
 } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { backendUiStateSchema, type AutomationResult, type BackendUiState, type GlobalVariableSnapshot, type FileExplorerLaunchRequest, type SettingsImportResult } from '../contracts/rpc';
 import type { RunActivityEntry, RunActivitySnapshot } from '../contracts/activity';
 import type { VariableJsonValue } from './contracts/variables';
@@ -18,7 +18,9 @@ import type { AutomatorBridge, FocusRequest, HostInfo, InitialState } from './ty
 import { launcherViewRegistry } from './viewRegistry';
 import { TabCommandBar } from './commands/TabCommandBar';
 import { QuickActionsHome, type QuickAction } from './commands/QuickActionsHome';
-import { useAllTabCommandCatalog, useTabCommandResolver } from './commands/TabCommandRegistry';
+import { KeyboardShortcutsPanel, type TabShortcutEntry } from './commands/KeyboardShortcutsPanel';
+import { globalShortcutFor, isEditableTarget, type GlobalShortcutId } from './commands/keyboardShortcuts';
+import { useAllTabCommandCatalog, useTabCommandResolver, useTabShortcutResolver } from './commands/TabCommandRegistry';
 import type { TabCommand } from './commands/commandMatching';
 import { GlobalVariablesContext, GlobalVariablesEditor } from './variables/GlobalVariables';
 import { NotificationCenter } from './activity/NotificationCenter';
@@ -194,6 +196,11 @@ function SettingsDialog({
         event.preventDefault();
         if (state.mode === 'recordingHotkey') void bridge.cancelHotkeyRecording();
         else void bridge.close();
+      }} onKeyDown={(event) => {
+        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !saving && state.settingsValid) {
+          event.preventDefault();
+          void save();
+        }
       }}>
           <header className="settings-header">
             <div>
@@ -287,6 +294,7 @@ function SettingsDialog({
 
           <footer className="settings-footer">
             {state.settingsError && <span className="settings-error"><AlertCircle size={14} /> {state.settingsError}</span>}
+            <span className="settings-shortcut-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> save</span>
             <button className="secondary-button" type="button" onClick={() => onOpenChange(false)}>Cancel</button>
             <button className="primary-button" type="button" disabled={saving || !state.settingsValid} onClick={() => void save()}>
               <Check size={15} /> {saving ? 'Saving…' : 'Save changes'}
@@ -309,6 +317,8 @@ export function App() {
   const [backendError, setBackendError] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickActionsHome, setQuickActionsHomeState] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const shortcutHandlerRef = useRef<(event: globalThis.KeyboardEvent) => void>(() => undefined);
   const [globalVariables, setGlobalVariables] = useState<GlobalVariableSnapshot>({ version: 1, values: {}, migrationConflicts: [] });
   const [websiteShortcuts, setWebsiteShortcuts] = useState<ReturnType<typeof readWebsiteLauncherQuickActions>>([]);
   const [runActivity, setRunActivity] = useState<RunActivitySnapshot>({ contractVersion: 1, entries: [] });
@@ -332,6 +342,7 @@ export function App() {
   const quickActionsHomeRef = useRef(false);
   const commandCatalog = useAllTabCommandCatalog();
   const resolveLiveCommand = useTabCommandResolver();
+  const resolveTabShortcut = useTabShortcutResolver();
 
   const setQuickActionsHome = useCallback((open: boolean) => {
     quickActionsHomeRef.current = open;
@@ -352,6 +363,8 @@ export function App() {
     const selectedTabChanged = previous !== null && previous.selectedTab !== parsed.data.selectedTab;
     if (!isWorkspaceSurface && justOpened) setQuickActionsHome(true);
     else if (!parsed.data.visible || parsed.data.mode !== 'launcher' || selectedTabChanged) setQuickActionsHome(false);
+    // The reference belongs to one mode and visibility; a native mode change (for example the add-app flow) must show its own view.
+    if (!parsed.data.visible || (previous && previous.mode !== parsed.data.mode)) setShortcutsOpen(false);
     const contextChanged = !previous
       || previous.mode !== parsed.data.mode
       || previous.selectedTab !== parsed.data.selectedTab
@@ -429,6 +442,12 @@ export function App() {
     return () => {
       window.removeEventListener('automator:website-launcher-settings-changed', onChanged);
     };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => shortcutHandlerRef.current(event);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
   const activeTab = state?.tabs.find((tab) => tab.slot === state.selectedTab) ?? state?.tabs[0];
@@ -594,23 +613,82 @@ export function App() {
     finally { setRetrying(false); }
   };
 
-  const handleEscape = (event: KeyboardEvent<HTMLElement>) => {
-    if (!state?.visible || !bridge) return;
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      if (state.mode === 'recordingHotkey') void runCommand(() => bridge.cancelHotkeyRecording());
-      else void runCommand(() => bridge.close());
+  const cycleTab = (direction: 1 | -1) => {
+    if (!state) return;
+    const slots = state.tabs.filter((tab) => !isWorkspaceSurface || tab.slot > 1).map((tab) => tab.slot);
+    if (slots.length === 0) return;
+    const quickActionsVisible = quickActionsHome && !isWorkspaceSurface && state.mode === 'launcher';
+    const current = quickActionsVisible ? -1 : slots.indexOf(state.selectedTab);
+    const next = current < 0 ? (direction === 1 ? 0 : slots.length - 1) : (current + direction + slots.length) % slots.length;
+    changeTab(slots[next]);
+  };
+
+  const openFind = () => {
+    if (!bridge || !state) return;
+    setShortcutsOpen(false);
+    if (isWorkspaceSurface) {
+      setActivityOpen(false);
+      setNotificationsOpen(false);
+      const tab = state.tabs.find((candidate) => candidate.slot === state.selectedTab);
+      if (tab && tab.kind !== 'reserved') requestAnimationFrame(() => window.dispatchEvent(new CustomEvent('automator:focus-tab-search', { detail: { scope: tab.id } })));
       return;
     }
-    const target = event.target;
-    const isEditing = target instanceof HTMLElement
-      && (target.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement);
-    if (/^[1-9]$/.test(event.key) && !isEditing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    setQuickActionsHome(true);
+    if (state.mode !== 'launcher') void runCommand(() => bridge.setMode('launcher'));
+    requestAnimationFrame(() => document.getElementById('quick-actions-search')?.focus({ preventScroll: true }));
+  };
+
+  const runGlobalShortcut = (id: GlobalShortcutId) => {
+    if (id === 'find') openFind();
+    else if (id === 'shortcuts') {
+      setShortcutsOpen((open) => !open);
+      setActivityOpen(false);
+      setNotificationsOpen(false);
+    } else if (id === 'settings') {
+      if (!isWorkspaceSurface) openSettings();
+    } else cycleTab(id === 'next-tab' ? 1 : -1);
+  };
+
+  // Escape backs out one layer at a time. Hiding the window is the last step.
+  const escapeOneLayer = (target: EventTarget | null) => {
+    if (!bridge || !state) return;
+    if (shortcutsOpen) setShortcutsOpen(false);
+    else if (notificationsOpen) setNotificationsOpen(false);
+    else if (activityOpen) setActivityOpen(false);
+    else if (state.mode === 'aliasEditing') void runCommand(() => bridge.setMode('launcher'));
+    else if (isWorkspaceSurface && isEditableTarget(target)) (target as HTMLElement).blur();
+    else void runCommand(() => bridge.close());
+  };
+
+  // Window-level so shortcuts work wherever focus is inside Automator. Components that handle a key call preventDefault first.
+  const handleShortcutKeyDown = (event: globalThis.KeyboardEvent) => {
+    if (event.defaultPrevented || !state?.visible || !bridge || settingsOpen) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      escapeOneLayer(event.target);
+      return;
+    }
+    const globalId = globalShortcutFor(event, isWorkspaceSurface ? 'workspace' : 'launcher');
+    if (globalId) {
+      event.preventDefault();
+      runGlobalShortcut(globalId);
+      return;
+    }
+    if (/^[1-9]$/.test(event.key) && !isEditableTarget(event.target) && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
       changeTab(Number(event.key));
+      return;
     }
+    const quickActionsVisible = quickActionsHome && !isWorkspaceSurface && state.mode === 'launcher';
+    const tab = state.tabs.find((candidate) => candidate.slot === state.selectedTab);
+    if (quickActionsVisible || shortcutsOpen || activityOpen || !tab || tab.kind === 'reserved') return;
+    const command = resolveTabShortcut(tab.id, event);
+    if (!command) return;
+    event.preventDefault();
+    setCommandError('');
+    void Promise.resolve().then(() => command.run()).catch((error: unknown) => setCommandError(errorMessage(error)));
   };
+  shortcutHandlerRef.current = handleShortcutKeyDown;
 
   if (bridgeError) {
     return <RecoveryView title="Automator bridge unavailable" message={bridgeError} preview={false} retry={undefined} />;
@@ -690,6 +768,7 @@ export function App() {
         keywords: [...(command.keywords ?? []), tab.title, tab.id],
         disabled: command.disabled,
         confirmationPrompt: command.confirmationPrompt,
+        shortcut: command.shortcut,
         kind: 'module' as const,
         scope,
         category: `${tab.title} · action`,
@@ -800,6 +879,10 @@ export function App() {
     if (refreshedActivity.entries.some((candidate) => candidate.id === requestId)) setSelectedActivityRunId(requestId);
   };
 
+  const tabShortcuts: TabShortcutEntry[] = activeTab
+    ? commandCatalog.flatMap(({ scope, command }) => scope === activeTab.id && command.shortcut
+      ? [{ id: command.id, label: command.label, shortcut: command.shortcut }] : [])
+    : [];
   const preview = host.buildId === 'browser-preview';
   const footer = state.mode === 'catalog'
     ? <span><kbd>/</kbd> filter catalog</span>
@@ -816,7 +899,6 @@ export function App() {
       data-material={!isWorkspaceSurface && host.acrylicSupported ? 'acrylic' : 'solid'}
       data-surface={isWorkspaceSurface ? 'workspace' : 'launcher'}
       data-native-corners={host.nativeCornersSupported}
-      onKeyDownCapture={handleEscape}
     >
       <header className="topbar">
         <div className="brand-lockup">
@@ -839,7 +921,7 @@ export function App() {
           {!isWorkspaceSurface && <button className="icon-button" type="button" aria-label="Open application catalog" title={state.selectedTab === 1 ? 'Add an app' : 'Switch to Launcher to add an app'} disabled={state.selectedTab !== 1} onClick={() => { if (bridge) void runCommand(() => bridge.openCatalog()); }}>
             <Plus size={17} />
           </button>}
-          {!isWorkspaceSurface && <button className="icon-button" type="button" aria-label="Settings" title="Settings" onClick={openSettings}>
+          {!isWorkspaceSurface && <button className="icon-button" type="button" aria-label="Settings" title="Settings (Ctrl+,)" onClick={openSettings}>
               <Settings2 size={17} />
             </button>}
         </div>
@@ -863,7 +945,7 @@ export function App() {
           })}
         </Tabs.List>
 
-        {!showQuickActions && !activityOpen && activeTab && activeTab.slot !== 1 && activeTab.kind !== 'reserved' && <TabCommandBar scope={activeTab.id} />}
+        {!showQuickActions && !shortcutsOpen && !activityOpen && activeTab && activeTab.slot !== 1 && activeTab.kind !== 'reserved' && <TabCommandBar scope={activeTab.id} />}
 
         {isWorkspaceSurface && activityOpen ? <div className="activity-workspace-content"><RunActivityView
           entries={runActivity.entries}
@@ -872,7 +954,8 @@ export function App() {
           registeredActionsForModule={(moduleId) => state.tabs.find((tab) => tab.id === moduleId)?.actions ?? []}
           onAction={(entry, action) => runActivityFollowUp(entry, action)}
         />{activeTab && <LatestModuleResult moduleId={activeTab.id} moduleTitle={activeTab.title} />}</div> : <FileExplorerLaunchContext.Provider value={{ request: explorerLaunches[0] ?? null, consume: consumeExplorerLaunch }}><AnimatePresence mode="wait" initial={false}>
-          {showQuickActions ? <QuickActionsHome key="quick-actions" actions={quickActions} onRun={runQuickAction}
+          {shortcutsOpen ? <KeyboardShortcutsPanel key="keyboard-shortcuts" surface={isWorkspaceSurface ? 'workspace' : 'launcher'} tabTitle={activeTab?.title ?? null} tabShortcuts={tabShortcuts} onClose={() => setShortcutsOpen(false)} />
+          : showQuickActions ? <QuickActionsHome key="quick-actions" actions={quickActions} onRun={runQuickAction}
             onAddApp={() => { setQuickActionsHome(false); void bridge.openCatalog().then(acceptState).catch((error) => setCommandError(errorMessage(error))); }}
             onOpenSettings={openSettings} onClose={() => { void runCommand(() => bridge.close()); }} />
           : launcherViewProps ? <ActiveView key={`${activeTab?.id}-${state.mode}`} {...launcherViewProps}>
@@ -888,6 +971,17 @@ export function App() {
                     placeholder={isCatalog ? 'Search installed apps' : 'Search apps or type an alias'}
                     value={localQuery}
                     onChange={(event) => updateQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'ArrowDown' && visibleBindings.length > 0) {
+                        event.preventDefault();
+                        mainListRef.current?.querySelector<HTMLButtonElement>('.app-row-main')?.focus();
+                      } else if (event.key === 'Enter' && localQuery.trim() && !exactMatch && visibleBindings[0]) {
+                        // An exact alias already starts its app through the alias flow, so Enter only handles partial matches.
+                        event.preventDefault();
+                        if (isCatalog) editAlias(visibleBindings[0], true);
+                        else void runCommand(() => bridge.activateBinding(visibleBindings[0].id));
+                      }
+                    }}
                     autoComplete="off"
                     spellCheck={false}
                   />
@@ -931,7 +1025,16 @@ export function App() {
             )}
 
             {showSearch && (
-              <div className="app-list" ref={mainListRef} aria-live="polite" aria-busy={state.catalogLoading}>
+              <div className="app-list" ref={mainListRef} aria-live="polite" aria-busy={state.catalogLoading} onKeyDown={(event) => {
+                if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                const rows = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('.app-row-main')];
+                const index = rows.indexOf(document.activeElement as HTMLButtonElement);
+                if (index < 0) return;
+                event.preventDefault();
+                if (event.key === 'ArrowDown') rows[Math.min(index + 1, rows.length - 1)].focus();
+                else if (index === 0) (isCatalog ? catalogSearchRef : searchRef).current?.focus();
+                else rows[index - 1].focus();
+              }}>
                 {state.catalogLoading ? (
                   <div className="list-loading"><span /><span /><span /></div>
                 ) : visibleBindings.length > 0 ? visibleBindings.map((binding) => (
@@ -966,6 +1069,7 @@ export function App() {
       <footer className="footer">
         {footer}
         {exactMatch && <span className="match-note"><Check size={12} /> Alias ready</span>}
+        <span><kbd>Ctrl</kbd>+<kbd>/</kbd> shortcuts</span>
         <span><kbd>Esc</kbd> close</span>
       </footer>
 

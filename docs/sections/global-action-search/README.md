@@ -4,6 +4,8 @@ Global Action Search appears as the default home surface when the compact launch
 
 Website Launcher aliases are also available here with a trailing `w` (for example, `docsw`). The suffix keeps website shortcuts distinguishable from app aliases with the same letters. Saved website shortcuts are loaded from their module settings at startup and refreshed after edits.
 
+Ctrl+K opens Quick Actions from the compact launcher and focuses the active tab's action search in the workspace. Results show the chord of any command that declares one; a shortcut never starts a command that needs confirmation, so those results stay in the list for an explicit choice. See [Keyboard shortcuts](../keyboard-shortcuts/README.md).
+
 Saved Script Runner profiles, API profiles and Workflows are searchable as "Run <name>" before their tab has been opened. The backend lists their names from the library at startup, after every save/delete and after a backup import, and publishes them in each module's `savedItems` state value. Choosing one opens the tab and runs the tab's own live command after the same confirmation the tab would ask for, so these entries never run automatically on a unique match.
 
 ## Code map

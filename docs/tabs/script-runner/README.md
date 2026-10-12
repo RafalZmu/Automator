@@ -31,6 +31,10 @@ Templates are bundled trusted code and run unsandboxed with the same Windows-use
 
 The Remove button on a profile row uses a two-step inline confirmation: the first click shows Yes and Cancel, Escape or Cancel dismisses them, and they reset after six seconds. The command-palette delete keeps its own confirmation prompt.
 
+## Keyboard
+
+`Ctrl+N` starts a new profile and puts focus in its name field; it is unavailable while a script runs or settings are loading. `Ctrl+S` saves the open profile editor, and the required-field checks still apply. Both appear in the tab action search and the keyboard reference.
+
 ## Code map
 
 - `ui/modules/ScriptRunnerView.tsx` contains profile editing, interpreter defaults, Explorer registration handoff, run/cancel, and output presentation. `scriptTemplateViewModel.ts` creates validated PowerShell profile drafts from `.ps1` Explorer requests.

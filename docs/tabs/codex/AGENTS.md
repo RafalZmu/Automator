@@ -25,3 +25,7 @@ Read the root AGENTS.md first. Codex drafts repeatable tasks in Python, Playwrig
 - Tests: `tests/electron/codex-builder.test.cjs`, `tests/electron/ui-flow.test.cjs`, `tests/rpc-contracts.test.mjs`, and `tests/Automator.Application.Specs/CodexTaskSpecs.cs`.
 
 Update this guide, its sibling README and TESTS, impacted execution-surface guides, and the root tab index when Codex behavior or its boundaries change.
+
+## Keyboard
+
+- Generate is the `generate-task` command (Ctrl+Enter) registered with `useRegisterTabCommands`. It calls `requestSubmit` on the request form, so the form validation and the scope checks in `generate` still apply.

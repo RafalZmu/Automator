@@ -12,6 +12,10 @@ The first run requires explicit review and approval. A successful run enables **
 
 Saved tasks can be loaded for review or exported to a user-selected file. Export is limited to saved tasks. If saved source or its declared scope, inputs, or effects have changed, review the current task and reapprove it before running manually or through a Workflow or schedule. A changed Playwright source is also checked against its saved source hash.
 
+## Keyboard
+
+`Ctrl+Enter` in the task request generates the task. The shortcut is the `generate-task` command, enabled when the assistant is available, a request is written, and the scope is valid.
+
 ## Code map
 
 - `ui/modules/CodexView.tsx` and `CodexView.css` render CLI readiness, task prompt/scope pickers/format, review, input collection, approvals, run results, saving, and export.

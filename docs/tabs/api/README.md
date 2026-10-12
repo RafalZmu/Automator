@@ -8,6 +8,10 @@ The tab can import Chrome's Copy as cURL text into a profile. Import parses supp
 
 The Remove button on a saved request uses a two-step inline confirmation. The confirmation states that the stored credentials are deleted too. Escape or Cancel dismisses it, and it resets after six seconds.
 
+## Keyboard
+
+`Ctrl+N` starts a new API profile and `Ctrl+S` saves the open profile editor. Validation, credential handling, and the save rules are the same as the form's buttons.
+
 ## Code map
 
 - `ui/modules/ApiView.tsx` is the profile editor, runner, response view, secret editor, and cURL import surface.

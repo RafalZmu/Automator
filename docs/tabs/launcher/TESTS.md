@@ -442,3 +442,30 @@ Run this packaged lifecycle case separately with npm.cmd run test:packaged-lifec
 2. Open Workspace and verify slots 2–8 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
 
 **Expected result:** The numbered tabs retain their accessible names and show one visible icon in both windows.
+
+## Keyboard flows — tests/electron/keyboard-shortcuts.test.cjs
+
+### launcher keyboard layer: reference panel, Ctrl+K, tab cycling and Settings without the mouse
+
+**Source:** tests/electron/keyboard-shortcuts.test.cjs
+
+**Steps**
+
+1. Press Ctrl+/ and confirm the Keyboard shortcuts heading; press Ctrl+/ again to close it. Repeat with F1.
+2. Press Ctrl+K and confirm the Quick Actions search has focus.
+3. Press Ctrl+Tab, Ctrl+Tab, and Ctrl+Shift+Tab and check the selected tab after each press.
+4. Press Ctrl+, to open Settings, then Escape, which closes Settings and hides the launcher as before.
+
+**Expected result:** Each shortcut changes only its own view; Escape closes Settings, as it did before this change.
+
+### catalog keyboard path: arrows move through apps, Enter starts the alias, Escape backs out
+
+**Source:** tests/electron/keyboard-shortcuts.test.cjs
+
+**Steps**
+
+1. Press / on the Launcher tab to open the catalog after discovery finishes.
+2. Search for “Windows PowerShell”, press ↓ to enter the list, then ↑ to return to the search.
+3. Press Enter and confirm the alias editor opens; press Escape.
+
+**Expected result:** Arrows move focus between the search and rows, Enter opens alias editing, and Escape cancels it without hiding the launcher.

@@ -8,6 +8,10 @@ Mappings can use literal JSON, workflow variables, or a JSON Pointer into an ear
 
 The Remove button on a workflow row uses a two-step inline confirmation: the first click shows Yes and Cancel, Escape or Cancel dismisses them, and they reset after six seconds.
 
+## Keyboard
+
+`Ctrl+N` starts a new workflow and `Ctrl+S` saves the open workflow draft. Saving no longer asks for confirmation from the command list, matching the editor's Save button; validation still blocks an invalid draft.
+
 ## Code map
 
 - ui/modules/WorkflowsView.tsx and WorkflowsView.css contain the profile list and structured step editor.

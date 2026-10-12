@@ -18,3 +18,7 @@ Module: `src/Automator.Application/Automation/WebsiteLauncherModule.cs`; Windows
 Tests: `tests/website-launcher-contract.test.mjs`, Application specs, and Windows specs.
 
 Update this guide and the sibling README when shortcut matching, grouping, settings, or browser launch behavior changes.
+
+## Keyboard
+
+- Add and save are registered commands (`add-website-shortcut`, `save-website-shortcuts`). The command list is rebuilt on every render on purpose, so the save command always reads the newest settings; keep it that way when editing the view.

@@ -57,6 +57,7 @@ The app keeps its compact numbered launcher tabs and also provides a larger Work
 | Options | [Agent guide](docs/sections/options/AGENTS.md) · [Functionality and code](docs/sections/options/README.md) | — |
 | Activity and notifications | [Agent guide](docs/sections/activity-center/AGENTS.md) · [Functionality and code](docs/sections/activity-center/README.md) | — |
 | Workspace window | [Agent guide](docs/sections/workspace/AGENTS.md) · [Functionality and code](docs/sections/workspace/README.md) | — |
+| Keyboard shortcuts | [Agent guide](docs/sections/keyboard-shortcuts/AGENTS.md) · [Functionality and code](docs/sections/keyboard-shortcuts/README.md) | — |
 
 Slot 9 is the Codex task builder.
 
@@ -69,6 +70,7 @@ Slot 9 is the Codex task builder.
 - Choose a listed app or browse for an EXE/shortcut, then assign a unique letters-only alias.
 - Type an alias to launch the app after a short delay. The panel closes; an app already in the foreground is minimized, a running background app is restored and maximized, and a new app is maximized when its window appears.
 - Press **Escape** or click outside the panel to close it.
+- **Ctrl+K** finds an app, tab, or action. **Ctrl+/** (or F1) lists every keyboard shortcut, **Ctrl+,** opens Settings, and **Ctrl+Tab** moves between tabs. Tab commands show their shortcut in the action search; see [keyboard shortcuts](docs/sections/keyboard-shortcuts/README.md).
 - Settings can record another opener key, set the theme and startup behavior, import/export settings, relink missing paths, edit reusable Variables, set default interpreters, and open the log folder.
 - Script Runner stores Python, Bash, and PowerShell profiles in the local SQLite library. Profiles keep interpreter/script paths, individual arguments, working directory, output format, and timeout; runs can be canceled and show bounded stdout/stderr or parsed JSON.
 - API stores request profiles, supports Chrome Copy as cURL import, uses profile defaults for request JSON, and keeps credentials in Windows Credential Manager.

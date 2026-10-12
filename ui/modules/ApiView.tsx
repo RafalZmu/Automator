@@ -168,6 +168,7 @@ export function ApiView({ services }: ViewProps) {
   const [notice, setNotice] = useState('');
   const [validationIssues, setValidationIssues] = useState<string[]>([]);
   const runController = useRef<AbortController | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -384,7 +385,8 @@ export function ApiView({ services }: ViewProps) {
   };
 
   const commandActions = [
-    { id: 'api:new-profile', label: 'New API profile', keywords: ['create request'], run: startNewProfile },
+    { id: 'api:new-profile', label: 'New API profile', keywords: ['create request'], shortcut: 'Ctrl+N', run: startNewProfile },
+    { id: 'api:save-profile', label: 'Save API profile', keywords: ['save request'], shortcut: 'Ctrl+S', disabled: !editing, run: () => formRef.current?.requestSubmit() },
     { id: 'api:paste-curl', label: 'Paste cURL request', keywords: ['chrome import copy as curl'], run: () => {
       const section = document.querySelector<HTMLDetailsElement>('.api-curl-import');
       if (section) section.open = true;
@@ -410,7 +412,7 @@ export function ApiView({ services }: ViewProps) {
           <span className="script-module-icon"><Globe2 size={16} /></span>
           <div><h1>API</h1><p>Saved requests; each request is limited to its URL host</p></div>
         </div>
-        <button className="primary-button" type="button" onClick={startNewProfile}><Plus size={14} /> New profile</button>
+        <button className="primary-button" type="button" title="New profile (Ctrl+N)" onClick={startNewProfile}><Plus size={14} /> New profile</button>
       </header>
 
       <details className="api-curl-import" open={profiles.length === 0 ? true : undefined}>
@@ -424,11 +426,11 @@ export function ApiView({ services }: ViewProps) {
       {notice && <p className="api-notice script-notice" role="status">{notice}</p>}
 
       {editing && (
-        <form className="api-editor script-editor" onSubmit={(event) => void saveProfile(event)}>
+        <form className="api-editor script-editor" ref={formRef} onSubmit={(event) => void saveProfile(event)}>
           <div className="script-editor-heading"><Globe2 size={15} /><strong>{profiles.some((profile) => profile.id === editing.id) ? 'Edit API profile' : 'New API profile'}</strong>
             <button className="icon-button" type="button" aria-label="Close editor" onClick={() => { setEditing(null); setPendingImportedSecrets({}); }}><X size={14} /></button></div>
           <div className="api-fields script-fields">
-            <label><span>Name</span><input required maxLength={128} value={editing.name} placeholder="Get project status" onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label>
+            <label><span>Name</span><input autoFocus required maxLength={128} value={editing.name} placeholder="Get project status" onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label>
             <label><span>Profile key</span><input required pattern="[a-z0-9][a-z0-9._-]{0,63}" value={editing.id} onChange={(event) => setEditing({ ...editing, id: event.target.value.toLowerCase() })} /></label>
             <label><span>Method</span><select value={editing.method} onChange={(event) => setEditing({ ...editing, method: event.target.value })}>{['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].map((method) => <option key={method}>{method}</option>)}</select></label>
             <label className="api-field-wide script-field-wide"><span>URL <small>This URL grants access to its host; redirects to other hosts are blocked</small></span><input required type="url" value={editing.url} placeholder="https://api.example.com/v1/status" onChange={(event) => setEditing({ ...editing, url: event.target.value })} /></label>

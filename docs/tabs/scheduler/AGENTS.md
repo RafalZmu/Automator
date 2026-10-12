@@ -21,3 +21,7 @@ Module/coordinator: src/Automator.Application/Automation/SchedulerModule.cs, Aut
 Tests: tests/scheduler-view.test.mjs and tests/Automator.Scheduler.Specs.
 
 Update the sibling README when recurrence types, target kinds, restart policy, or agenda semantics change.
+
+## Keyboard
+
+- `scheduler:new` (Ctrl+N) and `scheduler:save` (Ctrl+S) are registered commands. The save command submits the editor form, so the schedule validation in `save` remains the only save path.

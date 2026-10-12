@@ -7,6 +7,10 @@ When the compact panel opens, its home surface is Global Action Search. That sur
 
 The compact launcher uses a fixed 760×800 preferred window size and clamps to the selected display's work area when needed. The active tab view scrolls vertically; the topbar, tab selector, command bar, and footer stay in place.
 
+## Keyboard
+
+Ctrl+K opens Quick Actions; Ctrl+/ (or F1) shows the shortcut reference, which replaces the content until it is toggled off again; Ctrl+, opens Settings; Ctrl+Tab and Ctrl+Shift+Tab cycle tabs. Digits 1–9 switch tabs and `/` opens the catalog from slot 1, as before. In the app search, ↑ moves into the application list and Enter opens the first match when no exact alias is typed. Esc closes the compact panel, because the native key layer owns Escape there. See [Keyboard shortcuts](../../sections/keyboard-shortcuts/README.md) for the full table.
+
 ## Test case steps
 
 See [TESTS.md](TESTS.md) for launcher, host, platform, and end-to-end cases with their steps and expected results.

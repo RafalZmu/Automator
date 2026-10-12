@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronUp, ExternalLink, FolderPlus, Globe2, Plus, Save, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AutomationServices } from '../automationServices';
 import type { BackendUiState, ModuleSettingsUpdateRequest } from '../../contracts/rpc';
 import { readWebsiteLauncherSettings, validateWebsiteLauncherSettings, type WebsiteLauncherGroup, type WebsiteLauncherRow, type WebsiteLauncherSettings, type WebsiteLauncherSite } from '../contracts/websiteLauncher';
@@ -89,13 +89,22 @@ export function WebsiteLauncherView({ tab, services }: ViewProps) {
     }
   }, [dirty, save, services, settings]);
 
-  const commands = useMemo(() => settings.rows.filter((row) => /^[a-z]{1,32}$/i.test(row.alias)).map((row) => ({
-    id: `launch-${row.id}`,
-    label: `${row.alias.toLocaleLowerCase()} · ${row.name || 'Website shortcut'}`,
-    keywords: [row.alias.toLocaleLowerCase(), `${row.alias.toLocaleLowerCase()}w`, row.name, 'launch websites'],
-    disabled: !ready || busy !== null,
-    run: () => launch(row),
-  })), [settings.rows, ready, busy, launch]);
+  const addShortcut = () => {
+    setSettings((current) => ({ ...current, rows: [...current.rows, blankRow()] }));
+    setNotice('Unsaved changes');
+  };
+  // Not memoized on purpose: the save command must read the newest settings, and the registry keeps each render's array.
+  const commands = [
+    { id: 'add-website-shortcut', label: 'Add website shortcut', keywords: ['new', 'create', 'site'], shortcut: 'Ctrl+N', disabled: !ready || settings.rows.length >= 64, run: addShortcut },
+    { id: 'save-website-shortcuts', label: 'Save website shortcuts', keywords: ['save'], shortcut: 'Ctrl+S', disabled: !ready || busy !== null, run: () => saveAndReport() },
+    ...settings.rows.filter((row) => /^[a-z]{1,32}$/i.test(row.alias)).map((row) => ({
+      id: `launch-${row.id}`,
+      label: `${row.alias.toLocaleLowerCase()} · ${row.name || 'Website shortcut'}`,
+      keywords: [row.alias.toLocaleLowerCase(), `${row.alias.toLocaleLowerCase()}w`, row.name, 'launch websites'],
+      disabled: !ready || busy !== null,
+      run: () => launch(row),
+    })),
+  ];
   useRegisterTabCommands('website-launcher', commands);
 
   const updateRow = (rowId: string, update: (row: WebsiteLauncherRow) => WebsiteLauncherRow) => {
@@ -117,8 +126,8 @@ export function WebsiteLauncherView({ tab, services }: ViewProps) {
     <header className="website-launcher-heading">
       <div><h1>Website Launcher</h1><p>Group sites into browser windows and set their tab order. Window handling depends on your default browser.</p></div>
       <div className="website-launcher-actions">
-        <button type="button" className="secondary-button" onClick={() => { setSettings((current) => ({ ...current, rows: [...current.rows, blankRow()] })); setNotice('Unsaved changes'); }} disabled={!ready || settings.rows.length >= 64}><Plus size={14} /> Add shortcut</button>
-        <button type="button" className="primary-button" onClick={() => void saveAndReport()} disabled={!ready || busy !== null}><Save size={14} /> Save</button>
+        <button type="button" className="secondary-button" onClick={addShortcut} title="Add shortcut (Ctrl+N)" disabled={!ready || settings.rows.length >= 64}><Plus size={14} /> Add shortcut</button>
+        <button type="button" className="primary-button" title="Save (Ctrl+S)" onClick={() => void saveAndReport()} disabled={!ready || busy !== null}><Save size={14} /> Save</button>
       </div>
     </header>
     {!ready && <p className="website-launcher-status" role="status">Loading saved shortcuts…</p>}
