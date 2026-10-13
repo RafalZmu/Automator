@@ -32,7 +32,12 @@ public sealed record ScriptRunnerProfile(
     ScriptRunnerOutputMode OutputMode,
     int TimeoutSeconds,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ScriptRunnerTemplateOrigin? TemplateOrigin = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CodexTaskApproval? CodexApproval = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CodexTaskApproval? CodexApproval = null,
+    // User-declared typed parameters; their argument positions follow list order and follow Arguments.
+    // Template profiles leave this null because their catalog declares the parameters.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ScriptRunnerTemplateParameter>? Parameters = null,
+    // Non-sensitive values remembered for the Run form. Sensitive template inputs are never stored.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? Values = null);
 
 public sealed record ScriptRunnerTemplateOrigin(string Id, int Version);
 
@@ -144,7 +149,8 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
     private async Task<AutomationResult> InstallTemplateAsync(JsonElement input, JsonElement settings,
         AutomationServicesContext services, CancellationToken cancellationToken)
     {
-        var (profile, installed) = await _templateInstaller.InstallAsync(ReadId(input), settings, services.Library!, cancellationToken).ConfigureAwait(false);
+        JsonElement? values = input.TryGetProperty("values", out var raw) && raw.ValueKind == JsonValueKind.Object ? raw : null;
+        var (profile, installed) = await _templateInstaller.InstallAsync(ReadId(input), settings, services.Library!, cancellationToken, values).ConfigureAwait(false);
         return Result(installed ? AutomationStatus.Success : AutomationStatus.Information,
             installed ? $"Installed {profile.Name}." : "This template is already installed.", new { profile, installed });
     }
@@ -188,7 +194,7 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
             ?? throw new InvalidDataException("The saved script profile is invalid.");
         Validate(profile);
 
-        var hasTemplateValues = input.TryGetProperty("templateValues", out var templateValues);
+        var hasValues = input.TryGetProperty("values", out var values);
         ScriptRunnerTemplateDescriptor? template = null;
         string[]? transientArguments = null;
         if (profile.TemplateOrigin is { } origin)
@@ -196,12 +202,12 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
             template = ScriptRunnerTemplateCatalog.Get(origin.Id);
             if (template is null || template.Version != origin.Version || !_templateInstaller.MatchesInstalledAsset(profile))
                 return Error("The installed template origin, path, or script content is invalid. Remove and reinstall the profile to repair it.");
-            if (!hasTemplateValues) return Error("This template requires interactive input values before it can run.");
-            transientArguments = ScriptRunnerTemplateCatalog.MapArguments(template, templateValues).ToArray();
+            if (!hasValues) return Error("This template requires interactive input values before it can run.");
+            transientArguments = ScriptRunnerTemplateCatalog.MapArguments(template, values).ToArray();
         }
-        else if (hasTemplateValues)
+        else if (hasValues && profile.Parameters is not { Count: > 0 })
         {
-            return Error("Transient template inputs are only accepted for a registered template profile.");
+            return Error("This script profile does not declare parameters, so run values are not accepted.");
         }
 
         if (_variables is not null)
@@ -228,8 +234,10 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
         bool parseFailure;
         if (template is null)
         {
+            // Without run values, the execution path uses the values remembered on the profile.
+            JsonElement? runValues = hasValues ? values : null;
             var execution = await ScriptRunnerExecution.RunAsync(runProfile, services.Processes!, null,
-                AutomationExecutionOrigin.Manual, Guid.NewGuid().ToString("N"), cancellationToken).ConfigureAwait(false);
+                AutomationExecutionOrigin.Manual, Guid.NewGuid().ToString("N"), cancellationToken, runValues).ConfigureAwait(false);
             processResult = execution.ProcessResult;
             parseFailure = execution.ParseFailure;
             structuredOutput = runProfile.OutputMode == ScriptRunnerOutputMode.Json && !parseFailure ? execution.Output : null;
@@ -336,6 +344,16 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
         if (profile.TemplateOrigin is { } origin &&
             (string.IsNullOrWhiteSpace(origin.Id) || !ProfileIdPattern.IsMatch(origin.Id) || origin.Version < 1))
             throw new InvalidDataException("Template origin is invalid.");
+        if (profile.TemplateOrigin is not null && profile.Parameters is not null)
+            throw new InvalidDataException("Template profiles use the parameters declared by their template.");
+        ScriptRunnerParameters.ValidateDefinitions(profile.Parameters, allowSensitive: false, maximumCount: ScriptRunnerParameters.MaximumProfileParameters);
+        if (profile.Values is { } savedValues)
+        {
+            IReadOnlyList<ScriptRunnerTemplateParameter> definitions = profile.TemplateOrigin is { } templateOrigin
+                ? ScriptRunnerTemplateCatalog.Get(templateOrigin.Id)?.Parameters ?? Array.Empty<ScriptRunnerTemplateParameter>()
+                : profile.Parameters ?? Array.Empty<ScriptRunnerTemplateParameter>();
+            ScriptRunnerParameters.ValidateSavedValues(definitions, savedValues);
+        }
     }
 
     private static AutomationResult Error(string message) => Result(AutomationStatus.Error, message, new { });

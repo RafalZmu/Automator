@@ -107,7 +107,7 @@ export function ExplorerActionsPanel({ services, profiles, templates, open, onOp
       setRunning(true);
       onRunning(`explorer:${form.profile.id}`);
       setNotice('');
-      const result = await services.modules.dispatch('runExplorerAction', { id: form.action.id, filePath: form.request.filePath, ...(templateValues ? { templateValues } : { arguments: form.arguments }) }, { signal: abort.signal });
+      const result = await services.modules.dispatch('runExplorerAction', { id: form.action.id, filePath: form.request.filePath, ...(templateValues ? { values: templateValues } : { arguments: form.arguments }) }, { signal: abort.signal });
       onResult(result.data);
       setNotice(result.message);
       if (result.status === 'success') setForm(null);

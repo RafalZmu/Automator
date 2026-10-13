@@ -21,7 +21,7 @@ internal static class ScriptRunnerTemplateRunSpecs
         await using var context = registry.CreateContext(new(module.Id, module.Definition.Capabilities));
         var settings = module.CreateDefaultSettings();
         var catalog = await module.ExecuteAsync("listTemplates", JsonSerializer.SerializeToElement(new { }), settings, context, default);
-        Ensure(catalog.Status == AutomationStatus.Success && catalog.Data.GetProperty("templates").GetArrayLength() == 2, "catalog action");
+        Ensure(catalog.Status == AutomationStatus.Success && catalog.Data.GetProperty("templates").GetArrayLength() == 3, "catalog action");
         Ensure(!catalog.Data.GetRawText().Contains("masterkey"), "catalog excludes credential defaults");
         var profile = new ScriptRunnerProfile("template-run", "Backup", ScriptRunnerInterpreter.Powershell,
             Environment.ProcessPath!, installedScript, [], root, ScriptRunnerOutputMode.Text, 60,
@@ -35,7 +35,7 @@ internal static class ScriptRunnerTemplateRunSpecs
         var missing = await module.ExecuteAsync("runProfile", JsonSerializer.SerializeToElement(new { id = profile.Id }), settings, context, default);
         Ensure(missing.Status == AutomationStatus.Error && missing.Message.Contains("input", StringComparison.OrdinalIgnoreCase) && process.Calls == 0, "interactive inputs required before dispatch");
         var values = new { database = @"C:\Data Files\live.fdb", backup = @"D:\Backup Files\live.fbk", archive = @"D:\Backup Files\live.zip", gbak = @"C:\Program Files\Firebird\gbak.exe", username = "SYSDBA", password = "unique-private-password" };
-        var request = JsonSerializer.SerializeToElement(new { id = profile.Id, templateValues = values });
+        var request = JsonSerializer.SerializeToElement(new { id = profile.Id, values = values });
         var pathMismatch = profile with { ScriptPath = Path.Combine(root, "other.ps1") };
         await store.UpsertAsync(new(ScriptRunnerModule.IdValue, ScriptRunnerModule.ProfileCollection, profile.Id, 1,
             JsonSerializer.SerializeToElement(pathMismatch, Options()), DateTimeOffset.UtcNow), default);
@@ -44,7 +44,7 @@ internal static class ScriptRunnerTemplateRunSpecs
         var forgedOrigin = profile with { Id = "forged-origin", TemplateOrigin = new("unregistered-template", 1) };
         await store.UpsertAsync(new(ScriptRunnerModule.IdValue, ScriptRunnerModule.ProfileCollection, forgedOrigin.Id, 1,
             JsonSerializer.SerializeToElement(forgedOrigin, Options()), DateTimeOffset.UtcNow), default);
-        var forgedOriginRun = await module.ExecuteAsync("runProfile", JsonSerializer.SerializeToElement(new { id = forgedOrigin.Id, templateValues = values }), settings, context, default);
+        var forgedOriginRun = await module.ExecuteAsync("runProfile", JsonSerializer.SerializeToElement(new { id = forgedOrigin.Id, values = values }), settings, context, default);
         Ensure(forgedOriginRun.Status == AutomationStatus.Error && process.Calls == 0, "unregistered template origin rejected before dispatch");
         await store.UpsertAsync(new(ScriptRunnerModule.IdValue, ScriptRunnerModule.ProfileCollection, profile.Id, 1,
             JsonSerializer.SerializeToElement(profile, Options()), DateTimeOffset.UtcNow), default);

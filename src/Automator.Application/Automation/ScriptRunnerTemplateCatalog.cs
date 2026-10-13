@@ -15,7 +15,8 @@ public sealed record ScriptRunnerTemplateParameter(
     string? Description = null,
     bool Sensitive = false,
     object? DefaultValue = null,
-    IReadOnlyList<string>? Options = null);
+    IReadOnlyList<string>? Options = null,
+    string? Example = null);
 
 public sealed record ScriptRunnerTemplateDescriptor(
     string Id,
@@ -33,7 +34,6 @@ public sealed record ScriptRunnerTemplateDescriptor(
 public static partial class ScriptRunnerTemplateCatalog
 {
     private static readonly Regex IdPattern = new("^[a-z0-9][a-z0-9._-]{0,63}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
-    private static readonly Regex KeyPattern = new("^[a-z][a-z0-9_]{0,63}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly IReadOnlyList<ScriptRunnerTemplateDescriptor> Templates =
     [
@@ -41,22 +41,32 @@ public static partial class ScriptRunnerTemplateCatalog
             "Create a Firebird database backup.", ["database", "backup", "firebird"],
             ScriptRunnerInterpreter.Powershell, "firebird-3-backup", ScriptRunnerOutputMode.Text, 3600,
             [
-                new("database", "Target database", ScriptRunnerTemplateParameterType.File, true, 0),
-                new("backup", "Backup file", ScriptRunnerTemplateParameterType.File, true, 1),
-                new("gbak", "gbak executable", ScriptRunnerTemplateParameterType.File, true, 2),
-                new("username", "Username", ScriptRunnerTemplateParameterType.Text, true, 3),
+                new("database", "Target database", ScriptRunnerTemplateParameterType.File, true, 0, "The .fdb file to back up.", Example: @"C:\Data\company.fdb"),
+                new("backup", "Backup file", ScriptRunnerTemplateParameterType.File, true, 1, "Where to write the .fbk backup. It may not exist yet.", Example: @"D:\Backups\company.fbk"),
+                new("gbak", "gbak executable", ScriptRunnerTemplateParameterType.File, true, 2, "Firebird's backup tool.", Example: @"C:\Program Files\Firebird\Firebird_3_0\gbak.exe"),
+                new("username", "Username", ScriptRunnerTemplateParameterType.Text, true, 3, Example: "SYSDBA"),
                 new("password", "Password", ScriptRunnerTemplateParameterType.Text, true, 4, Sensitive: true),
             ]),
         new("firebird-3-backup-zip", 1, "Firebird 3 database backup and ZIP",
             "Create a Firebird database backup and ZIP archive.", ["database", "backup", "firebird"],
             ScriptRunnerInterpreter.Powershell, "firebird-3-backup-zip", ScriptRunnerOutputMode.Text, 3600,
             [
-                new("database", "Target database", ScriptRunnerTemplateParameterType.File, true, 0),
-                new("backup", "Backup file", ScriptRunnerTemplateParameterType.File, true, 1),
-                new("archive", "ZIP file", ScriptRunnerTemplateParameterType.File, true, 2),
-                new("gbak", "gbak executable", ScriptRunnerTemplateParameterType.File, true, 3),
-                new("username", "Username", ScriptRunnerTemplateParameterType.Text, true, 4),
+                new("database", "Target database", ScriptRunnerTemplateParameterType.File, true, 0, "The .fdb file to back up.", Example: @"C:\Data\company.fdb"),
+                new("backup", "Backup file", ScriptRunnerTemplateParameterType.File, true, 1, "Where to write the .fbk backup. It may not exist yet.", Example: @"D:\Backups\company.fbk"),
+                new("archive", "ZIP file", ScriptRunnerTemplateParameterType.File, true, 2, "Where to write the ZIP of the backup.", Example: @"D:\Backups\company.zip"),
+                new("gbak", "gbak executable", ScriptRunnerTemplateParameterType.File, true, 3, "Firebird's backup tool.", Example: @"C:\Program Files\Firebird\Firebird_3_0\gbak.exe"),
+                new("username", "Username", ScriptRunnerTemplateParameterType.Text, true, 4, Example: "SYSDBA"),
                 new("password", "Password", ScriptRunnerTemplateParameterType.Text, true, 5, Sensitive: true),
+            ]),
+        new("fdb-stale-archive", 1, "Archive stale .fdb databases",
+            "Zip each .fdb not accessed for a number of days into <name>.fdb.zip beside it, then delete the original. Preview only is on by default.",
+            ["database", "archive", "firebird"],
+            ScriptRunnerInterpreter.Powershell, "fdb-stale-archive", ScriptRunnerOutputMode.Text, 3600,
+            [
+                new("source", "Source folder", ScriptRunnerTemplateParameterType.Directory, true, 0, "Searched for .fdb files.", Example: @"D:\Databases"),
+                new("days", "Days not accessed", ScriptRunnerTemplateParameterType.Text, true, 1, "Files not accessed for this many days are archived.", DefaultValue: "90", Example: "90"),
+                new("subfolders", "Include subfolders", ScriptRunnerTemplateParameterType.Boolean, true, 2, DefaultValue: true),
+                new("preview", "Preview only (change nothing)", ScriptRunnerTemplateParameterType.Boolean, true, 3, DefaultValue: true),
             ])
     ];
 
@@ -78,25 +88,9 @@ public static partial class ScriptRunnerTemplateCatalog
                 template.Tags is null || template.Tags.Count > 16 ||
                 template.Tags.Any(tag => !Bounded(tag, 64)) ||
                 template.Tags.Distinct(StringComparer.Ordinal).Count() != template.Tags.Count ||
-                template.Parameters is null || template.Parameters.Count > AutomationProcessLimits.MaximumArgumentCount - 1)
+                template.Parameters is null)
                 throw new InvalidDataException("Template descriptor is invalid or duplicated.");
-            var keys = new HashSet<string>(StringComparer.Ordinal);
-            for (var index = 0; index < template.Parameters.Count; index++)
-            {
-                var parameter = template.Parameters[index];
-                if (parameter is null || parameter.Key is null || !KeyPattern.IsMatch(parameter.Key) || !keys.Add(parameter.Key) ||
-                    !Bounded(parameter.Label, 128) ||
-                    parameter.Description is not null && !Bounded(parameter.Description, 512) ||
-                    !Enum.IsDefined(parameter.Type) || parameter.ArgumentIndex != index ||
-                    parameter.Sensitive && parameter.Type != ScriptRunnerTemplateParameterType.Text ||
-                    parameter.Sensitive && parameter.DefaultValue is not null ||
-                    parameter.DefaultValue is not null && !ValidDefault(parameter) ||
-                    parameter.Type == ScriptRunnerTemplateParameterType.Choice && (parameter.Options is null || parameter.Options.Count is < 1 or > 32 ||
-                        parameter.Options.Any(option => !Bounded(option, 128)) ||
-                        parameter.Options.Distinct(StringComparer.Ordinal).Count() != parameter.Options.Count) ||
-                    parameter.Type != ScriptRunnerTemplateParameterType.Choice && parameter.Options is not null)
-                    throw new InvalidDataException("Template parameter or argument mapping is invalid.");
-            }
+            ScriptRunnerParameters.ValidateDefinitions(template.Parameters, allowSensitive: true, maximumCount: AutomationProcessLimits.MaximumArgumentCount - 1);
         }
     }
 
@@ -104,51 +98,7 @@ public static partial class ScriptRunnerTemplateCatalog
     public static IReadOnlyList<string> MapArguments(ScriptRunnerTemplateDescriptor template, JsonElement values)
     {
         Validate([template]);
-        if (values.ValueKind != JsonValueKind.Object) throw new InvalidDataException("Template values must be an object.");
-        var known = template.Parameters.Select(parameter => parameter.Key).ToHashSet(StringComparer.Ordinal);
-        foreach (var property in values.EnumerateObject())
-            if (!known.Contains(property.Name)) throw new InvalidDataException("Template value key is unknown.");
-        var arguments = new string[template.Parameters.Count];
-        foreach (var parameter in template.Parameters)
-        {
-            var hasValue = values.TryGetProperty(parameter.Key, out var value) && value.ValueKind != JsonValueKind.Null;
-            if (!hasValue && parameter.DefaultValue is null)
-            {
-                if (parameter.Required) throw new InvalidDataException($"{parameter.Label} is required.");
-                arguments[parameter.ArgumentIndex] = string.Empty;
-                continue;
-            }
-            if (hasValue)
-            {
-                if (parameter.Type == ScriptRunnerTemplateParameterType.Boolean)
-                {
-                    if (value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
-                        throw new InvalidDataException($"{parameter.Label} must be a boolean.");
-                    arguments[parameter.ArgumentIndex] = value.GetBoolean() ? "true" : "false";
-                    continue;
-                }
-                if (value.ValueKind != JsonValueKind.String) throw new InvalidDataException($"{parameter.Label} must be text.");
-                var input = value.GetString()!;
-                var requiresAbsolutePath = parameter.Type is ScriptRunnerTemplateParameterType.File or ScriptRunnerTemplateParameterType.Directory;
-                if (requiresAbsolutePath && !Path.IsPathFullyQualified(input))
-                    throw new InvalidDataException($"{parameter.Label} must be an absolute path.");
-                if (input.Length > AutomationProcessLimits.MaximumArgumentLength || parameter.Required && string.IsNullOrWhiteSpace(input) ||
-                    parameter.Type == ScriptRunnerTemplateParameterType.Choice && !(parameter.Options?.Contains(input) ?? false))
-                    throw new InvalidDataException($"{parameter.Label} is invalid.");
-                arguments[parameter.ArgumentIndex] = input;
-            }
-            else arguments[parameter.ArgumentIndex] = parameter.DefaultValue is bool boolean
-                ? boolean ? "true" : "false" : (string)parameter.DefaultValue!;
-        }
-        return arguments;
-    }
-
-    private static bool ValidDefault(ScriptRunnerTemplateParameter parameter)
-    {
-        if (parameter.Type == ScriptRunnerTemplateParameterType.Boolean) return parameter.DefaultValue is bool;
-        return parameter.DefaultValue is string value && !string.IsNullOrWhiteSpace(value) &&
-            value.Length <= AutomationProcessLimits.MaximumArgumentLength &&
-            (parameter.Type != ScriptRunnerTemplateParameterType.Choice || parameter.Options?.Contains(value) == true);
+        return ScriptRunnerParameters.Resolve(template.Parameters, values, enforceRequired: true);
     }
 
     private static bool ValidId(string? value) => value is not null && IdPattern.IsMatch(value);

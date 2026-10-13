@@ -266,6 +266,36 @@ input { user-select: text; }
 .script-fields textarea { resize: vertical; line-height: 1.45; }
 .script-fields input:focus, .script-fields select:focus, .script-fields textarea:focus { border-color: rgba(24,130,152,.48); box-shadow: 0 0 0 2px rgba(25,139,162,.09); }
 .script-field-wide { grid-column: 1 / -1; }
+.script-parameter-section { flex: none; display: flex; flex-direction: column; gap: 6px; }
+.script-parameter-section h2 { margin: 0; color: var(--ink); font-size: 10px; font-weight: 650; }
+.script-section-help { margin: 0; color: var(--muted); font-size: 8px; line-height: 1.4; }
+.script-section-help code { font-size: 8px; }
+.script-parameter-builder { display: flex; flex-direction: column; gap: 8px; }
+.script-parameter-empty { margin: 0; padding: 8px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); font-size: 9px; }
+.script-parameter-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 8px; padding: 9px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.3); }
+.window-shell[data-theme="dark"] .script-parameter-row { background: rgba(16,25,29,.3); }
+.script-parameter-row label, .script-fields label { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.script-parameter-row label > span:first-child { color: var(--muted-strong); font-size: 9px; font-weight: 620; }
+.script-parameter-row small { color: var(--muted); font-size: 8px; font-weight: 450; }
+.script-parameter-row input:not([type="checkbox"]), .script-parameter-row select, .script-parameter-row textarea { width: 100%; min-width: 0; min-height: 30px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; outline: 0; color: var(--ink); background: var(--control); font-size: 9px; }
+.script-parameter-row textarea { resize: vertical; line-height: 1.45; }
+.script-parameter-row input:focus, .script-parameter-row select:focus, .script-parameter-row textarea:focus { border-color: rgba(24,130,152,.48); box-shadow: 0 0 0 2px rgba(25,139,162,.09); }
+.script-parameter-wide { grid-column: 1 / -1; }
+.script-parameter-row label.script-check-field, .script-fields label.script-check-field { flex-direction: row; align-items: center; gap: 6px; min-height: 30px; }
+.script-check-field input { flex: none; width: auto; min-height: 0; }
+.script-check-field > span { color: var(--muted-strong); font-size: 9px; font-weight: 620; }
+.script-parameter-actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.script-parameter-required { margin-right: auto; }
+.script-field-hint { color: var(--muted); font-size: 8px; line-height: 1.4; }
+.script-advanced { flex: none; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.script-advanced summary { cursor: pointer; color: var(--muted-strong); font-size: 9px; font-weight: 620; }
+.script-advanced[open] summary { margin-bottom: 6px; }
+.script-input-values { display: flex; flex-direction: column; gap: 6px; }
+.script-input-values h2 { margin: 0; color: var(--ink); font-size: 10px; font-weight: 650; }
+.script-run-hint { color: var(--muted); font-size: 9px; }
+.script-readonly { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: baseline; font-size: 9px; }
+.script-readonly > span { color: var(--muted-strong); font-weight: 620; }
+.script-readonly code { overflow-wrap: anywhere; }
 .script-path-row { display: flex; gap: 6px; }
 .script-path-row input { flex: 1; }
 .script-path-row .secondary-button { flex: none; min-height: 30px; padding: 0 8px; font-size: 9px; }

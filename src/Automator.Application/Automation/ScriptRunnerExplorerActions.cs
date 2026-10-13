@@ -113,13 +113,14 @@ public sealed partial class ScriptRunnerModule
         if (profile.TemplateOrigin is not null)
         {
             if (input.TryGetProperty("arguments", out _)) throw new InvalidDataException("Template actions accept typed inputs only.");
-            if (!input.TryGetProperty("templateValues", out var values) || values.ValueKind != JsonValueKind.Object)
+            if (!input.TryGetProperty("values", out var values) || values.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException("This template requires interactive input values before it can run.");
             var dictionary = values.EnumerateObject().ToDictionary(item => item.Name, item => item.Value.Clone());
             dictionary[action.FileParameterKey!] = JsonSerializer.SerializeToElement(path);
-            return await RunProfileAsync(JsonSerializer.SerializeToElement(new { id = profile.Id, templateValues = dictionary }), services, token);
+            return await RunProfileAsync(JsonSerializer.SerializeToElement(new { id = profile.Id, values = dictionary }), services, token);
         }
-        if (input.TryGetProperty("templateValues", out _)) throw new InvalidDataException("Regular profiles do not accept template values.");
+        // Regular profiles run their remembered parameter values; the Explorer form only edits fixed arguments.
+        if (input.TryGetProperty("values", out _)) throw new InvalidDataException("Explorer runs of regular profiles use the parameter values saved on the profile.");
         var arguments = input.TryGetProperty("arguments", out var edited)
             ? JsonSerializer.Deserialize<string[]>(edited.GetRawText(), JsonOptions) ?? throw new InvalidDataException("Arguments are invalid.") : profile.Arguments;
         // The form can submit an already-prefilled path. Keep that exact path opaque

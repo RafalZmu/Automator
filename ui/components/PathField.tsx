@@ -8,11 +8,13 @@ type Props = {
   kind: 'file' | 'directory';
   required?: boolean;
   placeholder?: string;
+  /** Replaces the default drop instructions under the box. */
+  hint?: string;
   onChange(value: string): void;
   onBrowse(): Promise<string | null>;
 };
 
-export function PathField({ label, value, kind, required, placeholder, onChange, onBrowse }: Props) {
+export function PathField({ label, value, kind, required, placeholder, hint, onChange, onBrowse }: Props) {
   const instanceId = useId();
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
@@ -33,6 +35,6 @@ export function PathField({ label, value, kind, required, placeholder, onChange,
     <span className="script-path-row"><input id={id} required={required} value={value} placeholder={placeholder ?? (kind === 'file' ? 'Paste or drop a file path' : 'Paste or drop a folder path')} aria-describedby={error ? `${id}-error` : undefined} onChange={(event) => { applyPathInputChange(event.target.value, onChange); setError(''); }} />
       <button className="secondary-button" type="button" onClick={async () => { setError(''); try { await browseAndApplyPath(onBrowse, onChange); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not open the picker.'); } }}><FolderOpen size={13} /> Browse</button></span>
     {error && <span className="path-field-error" id={`${id}-error`} role="alert">{error}</span>}
-    <span className="path-field-hint">Paste a path or drop one {kind === 'file' ? 'file' : 'folder'} here.</span>
+    <span className="path-field-hint">{hint ?? `Paste a path or drop one ${kind === 'file' ? 'file' : 'folder'} here.`}</span>
   </div>;
 }

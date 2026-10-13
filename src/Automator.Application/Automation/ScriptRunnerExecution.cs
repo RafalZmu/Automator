@@ -37,7 +37,19 @@ public static class ScriptRunnerExecution
     {
         var definition = JsonSerializer.Serialize(new { source = HashSource(source), profile.Interpreter, profile.InterpreterPath,
             profile.ScriptPath, profile.Arguments, profile.WorkingDirectory, profile.OutputMode, profile.TimeoutSeconds });
+        // Declared parameters decide how a run builds its arguments, so they belong to the approved revision.
+        // Profiles without parameters keep their existing hash.
+        if (profile.Parameters is { Count: > 0 } parameters)
+            definition = HashSource(definition + JsonSerializer.Serialize(parameters));
         return HashSource(definition);
+    }
+
+    /// <summary>Fixed arguments first, then one value per declared parameter in declaration order.</summary>
+    public static IReadOnlyList<string> BuildArguments(ScriptRunnerProfile profile, JsonElement? values)
+    {
+        if (profile.Parameters is not { Count: > 0 } parameters) return profile.Arguments;
+        JsonElement effective = values ?? profile.Values ?? JsonSerializer.SerializeToElement(new Dictionary<string, string>(StringComparer.Ordinal));
+        return [.. profile.Arguments, .. ScriptRunnerParameters.Resolve(parameters, effective, enforceRequired: true)];
     }
     public static string HashScope(IReadOnlyList<string> scope) => Convert.ToHexString(SHA256.HashData(
         Encoding.UTF8.GetBytes(JsonSerializer.Serialize(scope.Order(StringComparer.Ordinal)))));
@@ -47,7 +59,7 @@ public static class ScriptRunnerExecution
 
     public static async Task<ScriptRunnerExecutionResult> RunAsync(
         ScriptRunnerProfile profile, IAutomationProcessService processes, JsonElement? input,
-        AutomationExecutionOrigin origin, string correlationId, CancellationToken cancellationToken)
+        AutomationExecutionOrigin origin, string correlationId, CancellationToken cancellationToken, JsonElement? values = null)
     {
         ScriptRunnerModule.Validate(profile);
         if (profile.CodexApproval is { } approval)
@@ -57,9 +69,10 @@ public static class ScriptRunnerExecution
                 || approval.Scope is null || !string.Equals(HashReview(approval.Scope, approval.Inputs, approval.Effects), approval.ScopeHash, StringComparison.Ordinal))
                 throw new InvalidDataException("This generated task changed after approval. Review and approve its current source before running it.");
         }
+        var scriptArguments = BuildArguments(profile, values);
         var arguments = profile.Interpreter == ScriptRunnerInterpreter.Powershell
-            ? new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", profile.ScriptPath }.Concat(profile.Arguments).ToArray()
-            : new[] { profile.ScriptPath }.Concat(profile.Arguments).ToArray();
+            ? new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", profile.ScriptPath }.Concat(scriptArguments).ToArray()
+            : new[] { profile.ScriptPath }.Concat(scriptArguments).ToArray();
         var processResult = await processes.ExecuteAsync(new AutomationProcessRequest(
             profile.InterpreterPath, arguments, profile.WorkingDirectory, TimeSpan.FromSeconds(profile.TimeoutSeconds),
             input?.GetRawText()), cancellationToken).ConfigureAwait(false);

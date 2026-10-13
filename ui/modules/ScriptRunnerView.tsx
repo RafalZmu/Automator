@@ -4,16 +4,21 @@ import {
 } from 'lucide-react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AutomationServices } from '../automationServices';
-import type { BackendUiState, ModuleSettingsUpdateRequest } from '../../contracts/rpc';
+import type { AutomationModuleActionRequest, BackendUiState, ModuleSettingsUpdateRequest } from '../../contracts/rpc';
 import { FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID } from '../../contracts/fileExplorer';
-import type { ScriptRunnerInterpreter } from '../../contracts/scriptRunner';
-import { parseScriptTemplateCatalog, validateScriptTemplateValues, type ScriptTemplateDescriptor, type ScriptTemplateValue } from '../../contracts/scriptRunner';
-import { clearSensitiveTemplateValues, createPowerShellProfileDraft, filterScriptTemplates, resetTemplateValues, templateDetailParameters, updateScriptPath, type ScriptProfile } from './scriptTemplateViewModel';
+import type { ScriptRunnerInterpreter, ScriptTemplateDescriptor, ScriptTemplateValue } from '../../contracts/scriptRunner';
+import { parseScriptTemplateCatalog, validateScriptParameterValues } from '../../contracts/scriptRunner';
+import {
+  clearSensitiveValues, createPowerShellProfileDraft, filterScriptTemplates, initialParameterValues, normalizeParameterPositions,
+  normalizeParametersForSave, profileParameters, rememberableValues, resetTemplateValues, templateDetailParameters, updateScriptPath, type ScriptProfile,
+} from './scriptTemplateViewModel';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import { InlineConfirmButton } from '../components/InlineConfirmButton';
 import { PathField } from '../components/PathField';
 import { ExplorerActionsPanel } from './ExplorerActionsPanel';
 import { FileExplorerLaunchContext } from '../FileExplorerLaunchContext';
+import { ScriptParameterBuilder } from './ScriptParameterBuilder';
+import { ScriptParameterFields } from './ScriptParameterFields';
 
 type ViewProps = {
   tab: BackendUiState['tabs'][number];
@@ -50,7 +55,13 @@ const blankProfile = (interpreterDefaults: InterpreterDefaults): ScriptProfile =
   workingDirectory: '',
   outputMode: 'text',
   timeoutSeconds: 60,
+  parameters: [],
 });
+
+const interpreterName = (interpreter: ScriptRunnerInterpreter) => interpreter === 'python' ? 'Python' : interpreter === 'bash' ? 'Bash' : 'PowerShell';
+
+/** Module inputs are JSON. Round-tripping drops the optional fields that are left undefined. */
+const moduleInput = (value: unknown) => JSON.parse(JSON.stringify(value)) as AutomationModuleActionRequest['input'];
 
 function readProfiles(data: unknown): ScriptProfile[] {
   if (!data || typeof data !== 'object' || !('profiles' in data) || !Array.isArray(data.profiles)) return [];
@@ -80,26 +91,53 @@ function readInterpreterDefaults(value: unknown): InterpreterDefaults {
   };
 }
 
+const trustNote = 'Scripts run as your Windows user with the same access as Automator. They are not sandboxed. Review and trust this code before running it.';
+
 export function ScriptRunnerView({ tab, services }: ViewProps) {
   const fileExplorerLaunch = useContext(FileExplorerLaunchContext);
   const [profiles, setProfiles] = useState<ScriptProfile[]>([]);
   const [interpreterDefaults, setInterpreterDefaults] = useState<InterpreterDefaults>(emptyInterpreterDefaults);
   const [settingsReady, setSettingsReady] = useState(false);
   const [editing, setEditing] = useState<ScriptProfile | null>(null);
+  // Remembered input values for the profile being edited, and whether its input definitions are expanded.
+  const [editValues, setEditValues] = useState<Record<string, ScriptTemplateValue>>({});
+  const [definitionsOpen, setDefinitionsOpen] = useState(false);
   const [output, setOutput] = useState<RunOutput | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [templates, setTemplates] = useState<ScriptTemplateDescriptor[]>([]);
-  const [libraryOpen, setLibraryOpen] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
-  const openExplorer = useCallback(() => { setExplorerOpen(true); setEditing(null); setLibraryOpen(false); setSelectedTemplate(null); setTemplateProfile(null); setTemplateValues({}); }, []);
-  const explorerResult = useCallback((data: unknown) => { if (data && typeof data === 'object' && 'profileId' in data) setOutput(data as RunOutput); }, []);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [templateQuery, setTemplateQuery] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState<ScriptTemplateDescriptor | null>(null);
-  const [templateProfile, setTemplateProfile] = useState<ScriptProfile | null>(null);
-  const [templateValues, setTemplateValues] = useState<Record<string, ScriptTemplateValue>>({});
+  const [libraryDetail, setLibraryDetail] = useState<ScriptTemplateDescriptor | null>(null);
+  const [libraryValues, setLibraryValues] = useState<Record<string, ScriptTemplateValue>>({});
+  // The one profile whose inputs are open in the Run form.
+  const [runTarget, setRunTarget] = useState<ScriptProfile | null>(null);
+  const [runValues, setRunValues] = useState<Record<string, ScriptTemplateValue>>({});
   const runController = useRef<AbortController | null>(null);
   const moduleSettingsRef = useRef<ModuleSettingsValue>({});
+
+  const closeLibrary = useCallback(() => {
+    setLibraryOpen(false);
+    setLibraryDetail(null);
+    setLibraryValues({});
+  }, []);
+  const closeRunForm = useCallback(() => {
+    setRunTarget(null);
+    setRunValues({});
+  }, []);
+  const beginEditing = useCallback((profile: ScriptProfile) => {
+    setEditing(profile);
+    setEditValues(initialParameterValues(profileParameters(profile, templates), profile.values, profile.templateOrigin?.id));
+    setDefinitionsOpen(!profile.templateOrigin && (profile.parameters ?? []).length === 0);
+  }, [templates]);
+  const openExplorer = useCallback(() => {
+    setExplorerOpen(true);
+    setEditing(null);
+    closeLibrary();
+    closeRunForm();
+  }, [closeLibrary, closeRunForm]);
+  const explorerResult = useCallback((data: unknown) => { if (data && typeof data === 'object' && 'profileId' in data) setOutput(data as RunOutput); }, []);
 
   const loadModuleSettings = useCallback(async (savedProfiles: ScriptProfile[]) => {
     const bridge = window.automator;
@@ -158,20 +196,18 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     const request = fileExplorerLaunch.request;
     if (!settingsReady || editing || runningId !== null || !request || request.actionId !== FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID) return;
     try {
-      setEditing(createPowerShellProfileDraft(request.filePath, interpreterDefaults.powershell, profiles.map(profile => profile.id)));
+      beginEditing(createPowerShellProfileDraft(request.filePath, interpreterDefaults.powershell, profiles.map(profile => profile.id)));
       setOutput(null);
       setExplorerOpen(false);
-      setLibraryOpen(false);
-      setSelectedTemplate(null);
-      setTemplateProfile(null);
-      setTemplateValues({});
+      closeLibrary();
+      closeRunForm();
       setNotice('');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The selected PowerShell script could not be registered.');
     } finally {
       fileExplorerLaunch.consume();
     }
-  }, [fileExplorerLaunch.request, fileExplorerLaunch.consume, settingsReady, editing, runningId, interpreterDefaults.powershell, profiles]);
+  }, [fileExplorerLaunch.request, fileExplorerLaunch.consume, settingsReady, editing, runningId, interpreterDefaults.powershell, profiles, closeLibrary, closeRunForm, beginEditing]);
 
   const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -182,9 +218,18 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
       name: editing.name.trim(),
       arguments: editing.arguments.filter((argument) => argument.length > 0),
       timeoutSeconds: Math.max(1, Math.min(3600, Math.floor(editing.timeoutSeconds))),
+      // Library profiles take their inputs from the library template, so only user scripts send declarations.
+      parameters: editing.templateOrigin ? undefined : normalizeParametersForSave(editing.parameters ?? []),
     };
+    // Remember what was typed into the input fields. Passwords and transient values are dropped, and a choice
+    // that is no longer offered is forgotten rather than blocking the save.
+    const savedParameters = profileParameters(normalized, templates);
+    const savedValues = rememberableValues(savedParameters, editValues, normalized.templateOrigin?.id);
+    for (const parameter of savedParameters)
+      if (parameter.type === 'choice' && !parameter.options.includes(String(savedValues[parameter.key]))) delete savedValues[parameter.key];
+    normalized.values = savedValues;
     try {
-      const result = await services.modules.dispatch('saveProfile', normalized);
+      const result = await services.modules.dispatch('saveProfile', moduleInput(normalized));
       if (result.status === 'error') throw new Error(result.message);
       let settingsWarning = '';
       try {
@@ -210,17 +255,19 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     }
   };
 
-  const runProfile = async (profile: ScriptProfile) => {
-    if (profile.templateOrigin) {
-      const template = templates.find((item) => item.id === profile.templateOrigin?.id && item.version === profile.templateOrigin.version);
-      if (!template) { setNotice('This template version is unavailable. Remove and reinstall its profile.'); return; }
-      setSelectedTemplate(template);
-      setTemplateProfile(profile);
-      setTemplateValues((current) => resetTemplateValues(template, current));
-      setLibraryOpen(true);
-      return;
-    }
-    await dispatchRun(profile, undefined);
+  const openEditor = (profile: ScriptProfile) => {
+    setOutput(null);
+    beginEditing({ ...profile, arguments: [...profile.arguments], parameters: profile.parameters ? [...profile.parameters] : profile.parameters });
+  };
+
+  const openNewEditor = () => {
+    setOutput(null);
+    beginEditing(blankProfile(interpreterDefaults));
+  };
+
+  const openRunForm = (profile: ScriptProfile) => {
+    setRunTarget(profile);
+    setRunValues(initialParameterValues(profileParameters(profile, templates), profile.values, profile.templateOrigin?.id));
   };
 
   const dispatchRun = async (profile: ScriptProfile, values: Record<string, ScriptTemplateValue> | undefined) => {
@@ -233,7 +280,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     setRunningId(profile.id);
     setNotice('');
     try {
-      const result = await services.modules.dispatch('runProfile', { id: profile.id, ...(values ? { templateValues: values } : {}) }, { signal: controller.signal });
+      const result = await services.modules.dispatch('runProfile', { id: profile.id, ...(values ? { values } : {}) }, { signal: controller.signal });
       if (result.data && typeof result.data === 'object' && 'profileId' in result.data) setOutput(result.data as RunOutput);
       setNotice(result.message);
     } catch (error) {
@@ -241,38 +288,81 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     } finally {
       if (runController.current === controller) runController.current = null;
       setRunningId(null);
-      if (selectedTemplate) setTemplateValues((current) => clearSensitiveTemplateValues(selectedTemplate, current));
+      setRunValues((current) => clearSensitiveValues(profileParameters(profile, templates), current));
     }
   };
 
-  const runTemplate = async () => {
-    if (!selectedTemplate || !templateProfile) return;
-    try {
-      const values = validateScriptTemplateValues(selectedTemplate, templateValues);
+  const runProfile = async (profile: ScriptProfile) => {
+    if (profile.templateOrigin && !templates.some((item) => item.id === profile.templateOrigin?.id && item.version === profile.templateOrigin.version)) {
+      setNotice('This template version is unavailable. Remove and reinstall its profile.');
+      return;
+    }
+    if (profileParameters(profile, templates).length > 0) {
       setNotice('');
-      await dispatchRun(templateProfile, values);
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'Template inputs are invalid.'); }
+      openRunForm(profile);
+      return;
+    }
+    await dispatchRun(profile, undefined);
   };
 
-  const closeTemplateLibrary = () => {
-    if (templateProfile && runningId === templateProfile.id) runController.current?.abort();
-    if (selectedTemplate) setTemplateValues((current) => clearSensitiveTemplateValues(selectedTemplate, current));
-    setLibraryOpen(false);
-    setSelectedTemplate(null);
-    setTemplateProfile(null);
-  };
-
-  const installTemplate = async (template: ScriptTemplateDescriptor) => {
+  const submitRun = async () => {
+    if (!runTarget) return;
     try {
-      const result = await services.modules.dispatch('installTemplate', { id: template.id });
+      const values = validateScriptParameterValues(profileParameters(runTarget, templates), runValues, true);
+      setNotice('');
+      await dispatchRun(runTarget, values);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'These inputs are invalid.');
+    }
+  };
+
+  const rememberValues = async (profile: ScriptProfile, values: Record<string, ScriptTemplateValue>) => {
+    try {
+      const result = await services.modules.dispatch('saveProfile', moduleInput({
+        ...profile,
+        values: rememberableValues(profileParameters(profile, templates), values, profile.templateOrigin?.id),
+      }));
+      if (result.status === 'error') throw new Error(result.message);
+      setNotice(`${profile.name}: values remembered. Passwords are never remembered.`);
+      await refresh();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not remember these values.');
+    }
+  };
+
+  const installTemplate = async (template: ScriptTemplateDescriptor, values?: Record<string, ScriptTemplateValue>) => {
+    try {
+      const payload = values ? { id: template.id, values: rememberableValues(template.parameters, values, template.id) } : { id: template.id };
+      const result = await services.modules.dispatch('installTemplate', moduleInput(payload));
       if (result.status === 'error') throw new Error(result.message);
       setNotice(result.message);
-      setSelectedTemplate(template);
-      const installedProfile = result.data && typeof result.data === 'object' && 'profile' in result.data ? result.data.profile : null;
-      setTemplateProfile(installedProfile && typeof installedProfile === 'object' ? installedProfile as ScriptProfile : null);
-      setTemplateValues((current) => resetTemplateValues(template, current));
+      setLibraryDetail(null);
       await refresh();
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not install this template.'); }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not install this template.');
+    }
+  };
+
+  const showTemplateDetails = (template: ScriptTemplateDescriptor) => {
+    const installedProfile = profiles.find((profile) => profile.templateOrigin?.id === template.id && profile.templateOrigin?.version === template.version);
+    if (installedProfile) {
+      setLibraryDetail(null);
+      openRunForm(installedProfile);
+      return;
+    }
+    setLibraryDetail(template);
+    setLibraryValues((current) => resetTemplateValues(template, current));
+  };
+
+  const makeEditableCopy = () => {
+    if (!editing?.templateOrigin) return;
+    const template = templates.find((item) => item.id === editing.templateOrigin?.id && item.version === editing.templateOrigin?.version);
+    if (!template) {
+      setNotice('This template version is unavailable. Remove and reinstall its profile.');
+      return;
+    }
+    setEditing({ ...editing, templateOrigin: null, parameters: normalizeParameterPositions(template.parameters.map((parameter) => ({ ...parameter }))) });
+    setDefinitionsOpen(false);
   };
 
   const deleteProfile = async (profile: ScriptProfile) => {
@@ -280,6 +370,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
       const result = await services.modules.dispatch('deleteProfile', { id: profile.id });
       setNotice(result.message);
       if (output?.profileId === profile.id) setOutput(null);
+      if (runTarget?.id === profile.id) closeRunForm();
       await refresh();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not remove this profile.');
@@ -287,14 +378,18 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   };
 
   const commands = useMemo(() => [
-    { id: 'new-script-profile', label: 'Create script profile', keywords: ['new', 'python', 'bash', 'powershell'], disabled: !settingsReady || runningId !== null, run: () => { setOutput(null); setEditing(blankProfile(interpreterDefaults)); } },
+    { id: 'new-script-profile', label: 'Create script', keywords: ['new', 'python', 'bash', 'powershell'], disabled: !settingsReady || runningId !== null, run: () => openNewEditor() },
     ...(runningId ? [{ id: 'cancel-script-run', label: 'Cancel running script', keywords: ['stop', 'terminate'], run: () => runController.current?.abort() }] : []),
-    ...profiles.flatMap((profile) => [
-      { id: `run-script:${profile.id}`, label: `Run ${profile.name}`, keywords: [profile.id, profile.interpreter], disabled: runningId !== null, confirmationPrompt: `Run script profile “${profile.name}”?`, run: () => runProfile(profile) },
-      { id: `edit-script:${profile.id}`, label: `Edit ${profile.name}`, keywords: [profile.id, 'profile'], disabled: runningId !== null, run: () => { setOutput(null); setEditing({ ...profile, arguments: [...profile.arguments], ...(profile.templateOrigin ? { templateOrigin: null } : {}) }); } },
-      { id: `delete-script:${profile.id}`, label: `Delete ${profile.name}`, keywords: [profile.id, 'remove'], disabled: runningId !== null, confirmationPrompt: `Delete saved script profile “${profile.name}”?`, run: () => deleteProfile(profile) },
-    ]),
-  ], [deleteProfile, interpreterDefaults, profiles, runProfile, runningId, settingsReady]);
+    ...profiles.flatMap((profile) => {
+      const hasInputs = profileParameters(profile, templates).length > 0;
+      return [
+        { id: `run-script:${profile.id}`, label: `Run ${profile.name}`, keywords: [profile.id, profile.interpreter], disabled: runningId !== null,
+          ...(hasInputs ? {} : { confirmationPrompt: `Run script profile “${profile.name}”?` }), run: () => runProfile(profile) },
+        { id: `edit-script:${profile.id}`, label: `Edit ${profile.name}`, keywords: [profile.id, 'profile'], disabled: runningId !== null, run: () => openEditor(profile) },
+        { id: `delete-script:${profile.id}`, label: `Delete ${profile.name}`, keywords: [profile.id, 'remove'], disabled: runningId !== null, confirmationPrompt: `Delete saved script profile “${profile.name}”?`, run: () => deleteProfile(profile) },
+      ];
+    }),
+  ], [deleteProfile, interpreterDefaults, profiles, runProfile, runningId, settingsReady, templates]);
   useRegisterTabCommands(tab.id, commands);
 
   const browseForScript = async (): Promise<string | null> => {
@@ -323,16 +418,30 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     }
   };
 
+  const runParameters = runTarget ? profileParameters(runTarget, templates) : [];
+  const runIsActive = runTarget !== null && runningId === runTarget.id;
+  const editingTemplate = editing?.templateOrigin ? templates.find((item) => item.id === editing.templateOrigin?.id && item.version === editing.templateOrigin?.version) : undefined;
+  // Passwords and the transient Firebird database are never remembered, so the edit screen does not ask for them.
+  const editParameters = editing
+    ? profileParameters(editing, templates).filter((parameter) => !parameter.sensitive
+      && !(editing.templateOrigin && parameter.key === 'database' && editing.templateOrigin.id.startsWith('firebird-3-')))
+    : [];
+  const editingTemplateHasPassword = editingTemplate?.parameters.some((parameter) => parameter.sensitive) ?? false;
+
   return (
     <section className="module-view script-runner-view" aria-label="Script Runner">
       <div className="script-heading">
         <div className="script-heading-title">
           <span className="script-module-icon"><Terminal size={16} /></span>
-          <div><h1>Script Runner</h1><p>Saved Python, Bash, and PowerShell tasks</p></div>
+          <div><h1>Script Runner</h1><p>Saved Python, Bash, and PowerShell scripts with typed inputs</p></div>
         </div>
-        <div className="script-editor-actions"><button className="secondary-button" type="button" disabled={runningId !== null} onClick={() => setExplorerOpen(current => !current)}>Explorer actions</button><button className="secondary-button" type="button" onClick={() => libraryOpen ? closeTemplateLibrary() : setLibraryOpen(true)}>Library</button><button className="primary-button" type="button" disabled={!settingsReady || runningId !== null} onClick={() => { setOutput(null); setEditing(blankProfile(interpreterDefaults)); }}>
-          <Plus size={14} /> New profile
-        </button></div>
+        <div className="script-editor-actions">
+          <button className="secondary-button" type="button" disabled={runningId !== null} onClick={() => setExplorerOpen((current) => !current)}>Explorer actions</button>
+          <button className="secondary-button" type="button" onClick={() => libraryOpen ? closeLibrary() : setLibraryOpen(true)}>Library</button>
+          <button className="primary-button" type="button" disabled={!settingsReady || runningId !== null} onClick={openNewEditor}>
+            <Plus size={14} /> New script
+          </button>
+        </div>
       </div>
 
       {notice && <p className="script-notice" role="status">{notice}</p>}
@@ -340,7 +449,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
       <ExplorerActionsPanel services={services} profiles={profiles} templates={templates} open={explorerOpen} onOpen={openExplorer} busy={runningId !== null} onRunning={setRunningId} onResult={explorerResult} />
 
       {libraryOpen && <section className="script-editor" aria-label="Script template library">
-        <div className="script-editor-heading"><FileCode2 size={16} /><strong>Script Library</strong><button className="icon-button" type="button" aria-label="Close library" onClick={closeTemplateLibrary}><X size={15} /></button></div>
+        <div className="script-editor-heading"><FileCode2 size={16} /><strong>Script Library</strong><button className="icon-button" type="button" aria-label="Close library" onClick={closeLibrary}><X size={15} /></button></div>
         <label className="script-field-wide"><span>Search templates</span><input type="search" value={templateQuery} placeholder="Name, description, or tag" onChange={(event) => setTemplateQuery(event.target.value)} /></label>
         <div className="script-profile-list">{filterScriptTemplates(templates, templateQuery).map((template) => {
           const targetDatabaseParameter = (template.id === 'firebird-3-backup-zip' || template.id === 'firebird-3-backup')
@@ -349,35 +458,79 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
           const installedProfile = profiles.find((profile) => profile.templateOrigin?.id === template.id
             && profile.templateOrigin?.version === template.version);
           return <article className="script-profile-row script-template-row" key={template.id}>
-            <span className="script-profile-icon"><Terminal size={16} /></span><div className="script-profile-copy"><strong>{template.name}</strong><span>{template.description} · v{template.version} · {template.tags.join(', ')}</span></div>
-            <button className="secondary-button" type="button" onClick={() => { setSelectedTemplate(template); setTemplateProfile(installedProfile ?? null); setTemplateValues((current) => resetTemplateValues(template, current)); }}>Details</button>
+            <span className="script-profile-icon"><Terminal size={16} /></span>
+            <div className="script-profile-copy"><strong>{template.name}</strong><span>{template.description} · v{template.version} · {template.tags.join(', ')}</span></div>
+            <button className="secondary-button" type="button" disabled={runningId !== null && !installedProfile} onClick={() => showTemplateDetails(template)}>Details</button>
             <button className={installedProfile ? 'secondary-button' : 'primary-button'} type="button" disabled={!settingsReady || Boolean(installedProfile) || runningId !== null} onClick={() => void installTemplate(template)}>
               {installedProfile ? 'Profile added' : <><Plus size={13} />Add to Script Runner</>}
             </button>
             {targetDatabaseParameter?.type === 'file' && <div className="script-template-target">
-              <PathField label={`${targetDatabaseParameter.label}${targetDatabaseParameter.required ? ' *' : ''}`} kind="file" required={targetDatabaseParameter.required} value={String(templateValues[targetDatabaseParameter.key] ?? '')} onChange={(value) => setTemplateValues((current) => ({ ...current, [targetDatabaseParameter.key]: value }))} onBrowse={() => services.files.pickPath('file')} />
+              <PathField label={`${targetDatabaseParameter.label}${targetDatabaseParameter.required ? ' *' : ''}`} kind="file" required={targetDatabaseParameter.required} value={String(libraryValues[targetDatabaseParameter.key] ?? '')} onChange={(value) => setLibraryValues((current) => ({ ...current, [targetDatabaseParameter.key]: value }))} onBrowse={() => services.files.pickPath('file')} />
             </div>}
           </article>;
         })}</div>
-        {selectedTemplate && <div className="script-fields">
-          <h2 className="script-field-wide">{selectedTemplate.name} · v{selectedTemplate.version}</h2>
-          <p className="script-field-wide">{selectedTemplate.description}</p>
-          <p className="script-trust-note script-field-wide">Scripts run as your Windows user with the same access as Automator. They are not sandboxed. Review and trust this code before running it.</p>
-          {templateDetailParameters(selectedTemplate).map((parameter) => parameter.type === 'file' || parameter.type === 'directory'
-            ? <PathField key={parameter.key} label={`${parameter.label}${parameter.required ? ' *' : ''}${parameter.description ? ` — ${parameter.description}` : ''}`} kind={parameter.type} required={parameter.required} value={String(templateValues[parameter.key] ?? '')} onChange={(value) => setTemplateValues((current) => ({ ...current, [parameter.key]: value }))} onBrowse={() => services.files.pickPath(parameter.type)} />
-            : <label key={parameter.key}>
-            <span>{parameter.label}{parameter.required ? ' *' : ''}{parameter.description && <small>{parameter.description}</small>}</span>
-            {parameter.type === 'boolean' ? <input type="checkbox" checked={Boolean(templateValues[parameter.key])} onChange={(event) => setTemplateValues((current) => ({ ...current, [parameter.key]: event.target.checked }))} />
-              : parameter.type === 'choice' ? <select required={parameter.required} value={String(templateValues[parameter.key] ?? '')} onChange={(event) => setTemplateValues((current) => ({ ...current, [parameter.key]: event.target.value }))}><option value="">Choose…</option>{parameter.options.map((option) => <option key={option}>{option}</option>)}</select>
-              : <input required={parameter.required} type={parameter.sensitive ? 'password' : 'text'} value={String(templateValues[parameter.key] ?? '')} onChange={(event) => setTemplateValues((current) => ({ ...current, [parameter.key]: event.target.value }))} />}
-          </label>)}
-          {templateProfile && <div className="script-editor-actions script-field-wide"><button className="primary-button" type="button" disabled={runningId !== null} onClick={() => void runTemplate()}>{runningId === templateProfile.id ? 'Running…' : 'Run template'}</button>{runningId === templateProfile.id && <button className="secondary-button" type="button" onClick={() => runController.current?.abort()}>Cancel</button>}</div>}
+        {libraryDetail && <div className="script-fields script-template-details">
+          <h2 className="script-field-wide">{libraryDetail.name} · v{libraryDetail.version}</h2>
+          <p className="script-field-wide">{libraryDetail.description}</p>
+          <p className="script-trust-note script-field-wide">{trustNote} Passwords are never saved with a profile; you enter them when you run it.</p>
+          <ScriptParameterFields parameters={templateDetailParameters(libraryDetail)} values={libraryValues} services={services}
+            onChange={(key, value) => setLibraryValues((current) => ({ ...current, [key]: value }))} />
+          <div className="script-editor-actions script-field-wide">
+            <button className="secondary-button" type="button" onClick={() => setLibraryDetail(null)}>Close</button>
+            <button className="primary-button" type="button" disabled={!settingsReady || runningId !== null} onClick={() => void installTemplate(libraryDetail, libraryValues)}><Plus size={13} /> Add with these values</button>
+          </div>
         </div>}
       </section>}
 
-      {editing && (
+      {runTarget && <section className="script-editor script-run-form" aria-label={`Run ${runTarget.name}`}>
+        <div className="script-editor-heading">
+          <Play size={16} /><strong>{runTarget.name}</strong>
+          <span className="script-run-hint">{runTarget.templateOrigin ? 'Library template' : `${interpreterName(runTarget.interpreter)} script`}</span>
+          {!runIsActive && <button className="icon-button" type="button" aria-label="Close inputs" onClick={closeRunForm}><X size={15} /></button>}
+        </div>
+        {runTarget.templateOrigin && <p className="script-trust-note">{trustNote}</p>}
+        <div className="script-fields">
+          <ScriptParameterFields parameters={runParameters} values={runValues} services={services}
+            onChange={(key, value) => setRunValues((current) => ({ ...current, [key]: value }))} />
+        </div>
+        <div className="script-editor-actions">
+          {runIsActive
+            ? <button className="secondary-button" type="button" onClick={() => runController.current?.abort()}><Square size={13} /> Cancel run</button>
+            : <>
+              <button className="secondary-button" type="button" disabled={runningId !== null} onClick={() => void rememberValues(runTarget, runValues)}>Remember these values</button>
+              <button className="primary-button" type="button" disabled={runningId !== null} onClick={() => void submitRun()}><Play size={14} /> Run</button>
+            </>}
+        </div>
+      </section>}
+
+      {editing && editing.templateOrigin && (
         <form className="script-editor" onSubmit={(event) => void saveProfile(event)}>
-          <div className="script-editor-heading"><FileCode2 size={16} /><strong>{profiles.some((profile) => profile.id === editing.id) ? 'Edit profile' : 'New profile'}</strong>
+          <div className="script-editor-heading"><FileCode2 size={16} /><strong>Library profile</strong>
+            <button className="icon-button" type="button" aria-label="Close editor" onClick={() => setEditing(null)}><X size={15} /></button></div>
+          <div className="script-fields">
+            <label><span>Name</span><input required maxLength={128} value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label>
+            <div className="script-field-wide script-readonly">
+              <span>Interpreter</span><strong>{interpreterName(editing.interpreter)}</strong>
+              <span>Script</span><code>{editing.scriptPath}</code>
+            </div>
+            {editParameters.length > 0 && <div className="script-field-wide script-input-values">
+              <h2>Inputs</h2>
+              <p className="script-section-help">Values remembered for this script. The run form starts with them. Passwords are never remembered.</p>
+              <div className="script-fields"><ScriptParameterFields parameters={editParameters} values={editValues} services={services}
+                onChange={(key, value) => setEditValues((current) => ({ ...current, [key]: value }))} /></div>
+            </div>}
+            <p className="script-field-wide">To change the script or declare your own inputs, make an editable copy.</p>
+            {editingTemplateHasPassword
+              ? <p className="script-field-wide">This template takes a password, which is never saved, so it cannot be turned into an editable copy.</p>
+              : <div className="script-editor-actions script-field-wide"><button className="secondary-button" type="button" onClick={makeEditableCopy}>Make an editable copy</button></div>}
+          </div>
+          <div className="script-editor-actions"><button className="secondary-button" type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary-button" type="submit"><Save size={14} /> Save name</button></div>
+        </form>
+      )}
+
+      {editing && !editing.templateOrigin && (
+        <form className="script-editor" onSubmit={(event) => void saveProfile(event)}>
+          <div className="script-editor-heading"><FileCode2 size={16} /><strong>{profiles.some((profile) => profile.id === editing.id) ? 'Edit script' : 'New script'}</strong>
             <button className="icon-button" type="button" aria-label="Close editor" onClick={() => setEditing(null)}><X size={15} /></button></div>
           <div className="script-fields">
             <label><span>Name</span><input required maxLength={128} value={editing.name} placeholder="Daily report" onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label>
@@ -392,35 +545,53 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
             }}><option value="python">Python</option><option value="bash">Bash</option><option value="powershell">PowerShell</option></select></label>
             <label className="script-field-wide"><span>Interpreter executable</span><input required value={editing.interpreterPath} placeholder={editing.interpreter === 'python' ? 'C:\\Python\\python.exe' : editing.interpreter === 'bash' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'} onChange={(event) => setEditing({ ...editing, interpreterPath: event.target.value })} /></label>
             <div className="script-field-wide"><PathField label="Script file" kind="file" required value={editing.scriptPath} placeholder={editing.interpreter === 'python' ? 'C:\\Scripts\\report.py' : editing.interpreter === 'bash' ? 'C:\\Scripts\\report.sh' : 'C:\\Scripts\\report.ps1'} onChange={(value) => setEditing((current) => current ? updateScriptPath(current, value) : current)} onBrowse={browseForScript} /></div>
-            <label className="script-field-wide"><span>Arguments <small>one argument per line</small></span><textarea rows={3} value={editing.arguments.join('\n')} placeholder={'--daily\nvalue with spaces'} onChange={(event) => setEditing({ ...editing, arguments: event.target.value.split(/\r?\n/) })} /></label>
-            <div className="script-field-wide"><GlobalVariableHints onInsert={(reference) => setEditing({ ...editing, arguments: [...editing.arguments, reference] })} /></div>
             <div className="script-field-wide"><PathField label="Working directory" kind="directory" required value={editing.workingDirectory} placeholder="C:\\Scripts" onChange={(value) => setEditing({ ...editing, workingDirectory: value })} onBrowse={browseForWorkingDirectory} /></div>
             <label><span>Output</span><select value={editing.outputMode} onChange={(event) => setEditing({ ...editing, outputMode: event.target.value as ScriptProfile['outputMode'] })}><option value="text">Plain text</option><option value="json">JSON</option></select></label>
             <label><span>Timeout <small>seconds</small></span><input required type="number" min={1} max={3600} value={editing.timeoutSeconds} onChange={(event) => setEditing({ ...editing, timeoutSeconds: Number(event.target.value) })} /></label>
           </div>
-          <p className="script-trust-note">Scripts run as your Windows user with the same access as Automator. They are not sandboxed. Saving a profile remembers its interpreter path as the default for new profiles; existing profiles keep their saved path.</p>
-          <div className="script-editor-actions"><button className="secondary-button" type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary-button" type="submit"><Save size={14} /> Save profile</button></div>
+          {editParameters.length > 0 && <section className="script-parameter-section">
+            <h2>Inputs</h2>
+            <p className="script-section-help">Values remembered for this script. The run form starts with them, and you are asked again each time you run it.</p>
+            <div className="script-fields"><ScriptParameterFields parameters={editParameters} values={editValues} services={services}
+              onChange={(key, value) => setEditValues((current) => ({ ...current, [key]: value }))} /></div>
+          </section>}
+          <details className="script-advanced" open={definitionsOpen} onToggle={(event) => setDefinitionsOpen(event.currentTarget.open)}>
+            <summary>{(editing.parameters ?? []).length === 0 ? 'Define inputs for this script' : 'Edit input definitions'}</summary>
+            <p className="script-section-help">Each input is one argument, in this order. The example is the grey text shown in the empty box, and the hint appears under it.</p>
+            <ScriptParameterBuilder parameters={editing.parameters ?? []} onChange={(parameters) => setEditing((current) => current ? { ...current, parameters } : current)} />
+          </details>
+          <details className="script-advanced">
+            <summary>Fixed arguments (advanced)</summary>
+            <p className="script-section-help">Passed before the inputs, one per line. Use them for flags that never change, such as <code>--daily</code>.</p>
+            <label className="script-field-wide"><span>Arguments <small>one argument per line</small></span><textarea rows={3} value={editing.arguments.join('\n')} placeholder={'--daily\nvalue with spaces'} onChange={(event) => setEditing({ ...editing, arguments: event.target.value.split(/\r?\n/) })} /></label>
+            <GlobalVariableHints onInsert={(reference) => setEditing({ ...editing, arguments: [...editing.arguments, reference] })} />
+          </details>
+          <p className="script-trust-note">{trustNote} Saving a script remembers its interpreter path as the default for new scripts; existing scripts keep their saved path.</p>
+          <div className="script-editor-actions"><button className="secondary-button" type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary-button" type="submit"><Save size={14} /> Save script</button></div>
         </form>
       )}
 
       <div className="script-profile-list" aria-live="polite">
-        {profiles.length ? profiles.map((profile) => (
-          <article className="script-profile-row" key={profile.id}>
-            <span className="script-profile-icon">{profile.interpreter === 'python' ? <Braces size={16} /> : <Terminal size={16} />}</span>
-            <div className="script-profile-copy"><strong>{profile.name}</strong><span>{profile.interpreter === 'python' ? 'Python' : profile.interpreter === 'bash' ? 'Bash' : 'PowerShell'} · {profile.scriptPath || 'Script path missing'}</span></div>
-            <span className="script-profile-time"><Clock3 size={12} /> {profile.timeoutSeconds}s</span>
-            <button className="icon-button script-row-action" type="button" aria-label={runningId === profile.id ? `Cancel ${profile.name}` : `Run ${profile.name}`} title={runningId === profile.id ? 'Cancel run' : 'Run profile'} disabled={runningId !== null && runningId !== profile.id} onClick={() => void runProfile(profile)}>
-              {runningId === profile.id ? <Square size={14} /> : <Play size={15} />}
-            </button>
-            <button className="icon-button script-row-action" type="button" aria-label={`Edit ${profile.name}`} title="Edit" disabled={runningId !== null} onClick={() => { setOutput(null); setEditing({ ...profile, arguments: [...profile.arguments], ...(profile.templateOrigin ? { templateOrigin: null } : {}) }); }}><Pencil size={14} /></button>
-            <InlineConfirmButton className="icon-button script-row-action" label={`Remove ${profile.name}`} confirmLabel={`Yes, remove ${profile.name}`} title="Remove" disabled={runningId !== null} onConfirm={() => deleteProfile(profile)}><Trash2 size={14} /></InlineConfirmButton>
-          </article>
-        )) : !editing ? <div className="script-empty"><span className="empty-icon"><Terminal size={20} /></span><strong>No script profiles yet</strong><p>Add a saved Python, Bash, or PowerShell command. Each argument is passed as its own value.</p><button className="secondary-button" type="button" disabled={!settingsReady} onClick={() => setEditing(blankProfile(interpreterDefaults))}><Plus size={13} /> Create a profile</button></div> : null}
+        {profiles.length ? profiles.map((profile) => {
+          const inputCount = profileParameters(profile, templates).length;
+          return (
+            <article className="script-profile-row" key={profile.id}>
+              <span className="script-profile-icon">{profile.interpreter === 'python' ? <Braces size={16} /> : <Terminal size={16} />}</span>
+              <div className="script-profile-copy"><strong>{profile.name}</strong><span>{interpreterName(profile.interpreter)} · {profile.scriptPath || 'Script path missing'}{inputCount ? ` · ${inputCount} input${inputCount === 1 ? '' : 's'}` : ''}</span></div>
+              <span className="script-profile-time"><Clock3 size={12} /> {profile.timeoutSeconds}s</span>
+              <button className="icon-button script-row-action" type="button" aria-label={runningId === profile.id ? `Cancel ${profile.name}` : `Run ${profile.name}`} title={runningId === profile.id ? 'Cancel run' : inputCount ? 'Enter inputs and run' : 'Run script'} disabled={runningId !== null && runningId !== profile.id} onClick={() => void runProfile(profile)}>
+                {runningId === profile.id ? <Square size={14} /> : <Play size={15} />}
+              </button>
+              <button className="icon-button script-row-action" type="button" aria-label={`Edit ${profile.name}`} title="Edit" disabled={runningId !== null} onClick={() => openEditor(profile)}><Pencil size={14} /></button>
+              <InlineConfirmButton className="icon-button script-row-action" label={`Remove ${profile.name}`} confirmLabel={`Yes, remove ${profile.name}`} title="Remove" disabled={runningId !== null} onConfirm={() => deleteProfile(profile)}><Trash2 size={14} /></InlineConfirmButton>
+            </article>
+          );
+        }) : !editing ? <div className="script-empty"><span className="empty-icon"><Terminal size={20} /></span><strong>No scripts yet</strong><p>Add a Python, Bash, or PowerShell script and declare its inputs, or add a ready-made script from the Library.</p><button className="secondary-button" type="button" disabled={!settingsReady} onClick={openNewEditor}><Plus size={13} /> Create a script</button></div> : null}
       </div>
 
       {output && <section className="script-output" aria-label="Script output">
         <header><div><Check size={14} /><strong>Latest result</strong><span>{output.durationMilliseconds} ms</span></div><button className="icon-button" type="button" aria-label="Clear script output" onClick={() => setOutput(null)}><X size={14} /></button></header>
-        {output.timedOut && <p className="script-output-status">The profile timed out.</p>}
+        {output.timedOut && <p className="script-output-status">The script timed out.</p>}
         {output.exitCode !== null && output.exitCode !== 0 && <p className="script-output-status">Exit code {output.exitCode}</p>}
         {output.parseFailure && <p className="script-output-status">The output was not valid JSON.</p>}
         {output.structuredOutput !== null && output.structuredOutput !== undefined && <pre>{JSON.stringify(output.structuredOutput, null, 2)}</pre>}

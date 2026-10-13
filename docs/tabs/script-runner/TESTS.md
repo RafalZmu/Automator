@@ -74,6 +74,31 @@ Run a focused contract test with node --experimental-strip-types --test TEST_FIL
 
 **Expected result:** The original path preserves trusted template origin; an edited path clears it.
 
+## Stale .fdb archive template — tests/fdb-stale-archive-asset.spec.ps1
+
+Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\fdb-stale-archive-asset.spec.ps1` on Windows PowerShell 5.1 or PowerShell 7. The catalog and argument mapping checks are in `tests/Automator.Application.Specs/ScriptRunnerTemplateSpecs.cs` and run with `npm.cmd run test:dotnet`.
+
+### stale archive asset validates inputs, previews without changes, and archives with checks
+
+**Steps**
+
+1. Create a fixture folder with stale top-level and nested `.fdb` files, a recent file, a file whose `<name>.fdb.zip` already exists, and a file the spec holds open.
+2. Run the asset with a relative folder and with `0` days, then preview with subfolders excluded.
+3. Run the asset for real while the locked file is held open.
+4. Inspect each archive's single entry name and SHA-256, the originals, the existing archive, the timestamped archive, and the locked file.
+
+**Expected result:** Invalid inputs exit nonzero and change nothing. Preview lists only the top-level stale file and creates nothing. The real run deletes each original only after its archive matches, never overwrites an existing archive, reports and keeps the locked file, and leaves no `.partial` file.
+
+### stale archive catalog entry maps positional defaults and rejects relative folders and text preview values
+
+**Steps**
+
+1. Look up the registered template and check its version, PowerShell interpreter, timeout, and parameter types.
+2. Map a source folder alone, then explicit days and Boolean values.
+3. Submit a relative source folder and a text value for preview.
+
+**Expected result:** Defaults map to `90`, `true`, `true`; explicit values map to their argument positions; the relative folder and text preview value are rejected; the asset is embedded.
+
 ## Filesystem path field tests — tests/electron/path-field.test.cjs
 
 ### path drop accepts one File and resolves its path without reading contents

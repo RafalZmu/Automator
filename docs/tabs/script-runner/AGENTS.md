@@ -6,6 +6,9 @@ Read the root AGENTS.md first. Script Runner executes saved, trusted user script
 
 - Keep profile validation and execution in `src/Automator.Application/Automation/ScriptRunnerModule.cs` and `ScriptRunnerSavedProfileHandler.cs`; renderer code must call the module through AutomationServices.
 - Preserve structured process arguments. The UI stores one argument per line, and each line is one argument value. Never build a shell command by concatenating profile fields.
+- Declared inputs (`parameters`) use the same typed model as template parameters (`ScriptRunnerParameters.cs`). Argument order is fixed arguments first, then inputs in list order. Template profiles take inputs from the catalog and must not store their own `parameters`. `example` is display-only placeholder text (max 256 characters); never use it as a value or default.
+- Remembered `values` are non-sensitive only. `saveProfile` rejects sensitive keys; the Run form, Library form, and Workflow/Scheduler runs read values through `ScriptRunnerExecution.BuildArguments`. Required inputs are enforced when running and may be empty while saving.
+- Declared inputs are part of the Codex approval revision (`HashProfileRevision`). Profiles without inputs keep their existing hash.
 - The accepted interpreter/script pairs are Python with .py, Bash with .sh, and PowerShell with .ps1. PowerShell is invoked non-interactively with -NoProfile; Bash should use the configured executable, such as Git Bash.
 - Interpreter defaults apply when creating or changing a profile. A saved profile retains its own interpreter path. All paths are absolute; working directory, per-argument limits, and the 1–3600 second timeout are validated.
 - Script processes must not require interactive prompts. Exit code zero means success; nonzero exits and timeouts must remain visible as failures/warnings. Keep stdout/stderr bounded.

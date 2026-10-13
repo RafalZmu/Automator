@@ -24,6 +24,8 @@ type ScriptTemplateParameterBase = {
   key: string;
   label: string;
   description?: string;
+  /** Sample value shown as placeholder text. Never used as a value. */
+  example?: string;
   required: boolean;
   argumentIndex: number;
 };
@@ -65,6 +67,7 @@ function validateParameter(value: unknown, index: number): ScriptTemplateParamet
   if (!parameterKeyPattern.test(key)) throw new Error('Parameter key is invalid.');
   const label = bounded(item.label, 'Parameter label', 128);
   const description = item.description == null ? undefined : bounded(item.description, 'Parameter description', 512);
+  const example = item.example == null ? undefined : bounded(item.example, 'Parameter example', 256);
   const type = item.type;
   if (type !== 'text' && type !== 'file' && type !== 'directory' && type !== 'boolean' && type !== 'choice') throw new Error('Parameter type is unsupported.');
   if (typeof item.required !== 'boolean') throw new Error('Parameter required flag is invalid.');
@@ -88,11 +91,20 @@ function validateParameter(value: unknown, index: number): ScriptTemplateParamet
       if (type === 'choice' && !options!.includes(defaultValue)) throw new Error('Choice default is invalid.');
     }
   }
-  const base = { key, label, description, required: item.required, argumentIndex: index };
+  const base = { key, label, description, example, required: item.required, argumentIndex: index };
   if (type === 'choice') return { ...base, type, options: options!, defaultValue: defaultValue as string | undefined };
   if (type === 'boolean') return { ...base, type, defaultValue: defaultValue as boolean | undefined };
   if (type === 'text') return { ...base, type, sensitive: item.sensitive as boolean | undefined, defaultValue: defaultValue as string | undefined };
   return { ...base, type, defaultValue: defaultValue as string | undefined };
+}
+
+/** Parses typed parameters from a template catalog or a user script profile. Profiles never carry sensitive inputs. */
+export function parseScriptParameters(value: unknown, allowSensitive: boolean): ScriptTemplateParameter[] {
+  if (!Array.isArray(value) || value.length > 63) throw new Error('Template parameters are invalid.');
+  const parameters = value.map(validateParameter);
+  if (new Set(parameters.map(parameter => parameter.key)).size !== parameters.length) throw new Error('Parameter keys must be unique.');
+  if (!allowSensitive && parameters.some(parameter => parameter.sensitive)) throw new Error('Script parameters cannot be sensitive.');
+  return parameters;
 }
 
 export function parseScriptTemplateCatalog(value: unknown): ScriptTemplateDescriptor[] {
@@ -114,34 +126,41 @@ export function parseScriptTemplateCatalog(value: unknown): ScriptTemplateDescri
     if (!templateIdPattern.test(assetId)) throw new Error('Template asset ID is invalid.');
     if (item.outputMode !== 'text' && item.outputMode !== 'json') throw new Error('Template output mode is invalid.');
     if (!Number.isInteger(item.timeoutSeconds) || (item.timeoutSeconds as number) < 1 || (item.timeoutSeconds as number) > 3600) throw new Error('Template timeout is invalid.');
-    if (!Array.isArray(item.parameters) || item.parameters.length > 63) throw new Error('Template parameters are invalid.');
-    const parameters = item.parameters.map(validateParameter);
-    if (new Set(parameters.map(parameter => parameter.key)).size !== parameters.length) throw new Error('Parameter keys must be unique.');
+    const parameters = parseScriptParameters(item.parameters, true);
     return { id, version: item.version as number, name, description, tags, interpreter: item.interpreter, assetId,
       outputMode: item.outputMode, timeoutSeconds: item.timeoutSeconds as number, parameters };
   });
 }
 
-export function validateScriptTemplateValues(template: ScriptTemplateDescriptor, value: unknown): Record<string, ScriptTemplateValue> {
+/**
+ * Validates typed inputs against declared parameters. Saving remembered values passes enforceRequired false,
+ * so a profile can keep partly filled values; running always enforces required inputs.
+ */
+export function validateScriptParameterValues(parameters: ScriptTemplateParameter[], value: unknown, enforceRequired: boolean): Record<string, ScriptTemplateValue> {
   const input = object(value);
-  const keys = new Set(template.parameters.map(parameter => parameter.key));
-  for (const key of Object.keys(input)) if (!keys.has(key)) throw new Error(`Unknown template input: ${key}.`);
+  const keys = new Set(parameters.map(parameter => parameter.key));
+  for (const key of Object.keys(input)) if (!keys.has(key)) throw new Error(`Unknown input: ${key}.`);
   const result: Record<string, ScriptTemplateValue> = {};
-  for (const parameter of template.parameters) {
+  for (const parameter of parameters) {
     const raw = input[parameter.key] ?? parameter.defaultValue;
     if (raw === undefined) {
-      if (parameter.required) throw new Error(`${parameter.label} is required.`);
+      if (parameter.required && enforceRequired) throw new Error(`${parameter.label} is required.`);
       continue;
     }
     if (parameter.type === 'boolean') {
       if (typeof raw !== 'boolean') throw new Error(`${parameter.label} must be a boolean.`);
     } else {
-      if (typeof raw !== 'string' || raw.length > maxArgumentLength || (parameter.required && !raw.trim())) throw new Error(`${parameter.label} is invalid.`);
-      if (parameter.type === 'choice' && !parameter.options?.includes(raw)) throw new Error(`${parameter.label} has an invalid choice.`);
+      if (typeof raw !== 'string' || raw.length > maxArgumentLength) throw new Error(`${parameter.label} is invalid.`);
+      if (parameter.required && enforceRequired && !raw.trim()) throw new Error(`${parameter.label} is required.`);
+      if (parameter.type === 'choice' && raw && !parameter.options?.includes(raw)) throw new Error(`${parameter.label} has an invalid choice.`);
     }
     result[parameter.key] = raw;
   }
   return result;
+}
+
+export function validateScriptTemplateValues(template: ScriptTemplateDescriptor, value: unknown): Record<string, ScriptTemplateValue> {
+  return validateScriptParameterValues(template.parameters, value, true);
 }
 
 export type ExplorerActionDefinition = {
@@ -156,7 +175,7 @@ export type ExplorerActionRunInput = {
   id: string;
   filePath: string;
   arguments?: string[];
-  templateValues?: Record<string, ScriptTemplateValue>;
+  values?: Record<string, ScriptTemplateValue>;
 };
 
 export function parseExplorerActions(value: unknown): ExplorerActionDefinition[] {

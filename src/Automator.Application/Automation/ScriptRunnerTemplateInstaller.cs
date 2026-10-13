@@ -20,7 +20,7 @@ public sealed class ScriptRunnerTemplateInstaller
     }
 
     public async Task<(ScriptRunnerProfile Profile, bool Installed)> InstallAsync(string id, JsonElement settings,
-        IAutomationLibrary library, CancellationToken cancellationToken)
+        IAutomationLibrary library, CancellationToken cancellationToken, JsonElement? values = null)
     {
         var template = ScriptRunnerTemplateCatalog.Get(id) ?? throw new InvalidDataException("The selected template is not registered.");
         await InstallGate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -58,9 +58,10 @@ public sealed class ScriptRunnerTemplateInstaller
                 cancellationToken.ThrowIfCancellationRequested();
                 File.Move(staging, destination, overwrite: false);
                 moved = true;
+                // Values remembered at install time are validated against the catalog; sensitive inputs are rejected there.
                 var profile = new ScriptRunnerProfile("template-" + Guid.NewGuid().ToString("N"), template.Name,
                     template.Interpreter, interpreter, destination, [], _directory, template.OutputMode,
-                    template.TimeoutSeconds, new(template.Id, template.Version));
+                    template.TimeoutSeconds, new(template.Id, template.Version), Values: values);
                 ScriptRunnerModule.Validate(profile);
                 await library.UpsertAsync(ScriptRunnerModule.ProfileCollection, profile.Id, ScriptRunnerModule.SettingsVersionValue,
                     JsonSerializer.SerializeToElement(profile, ScriptRunnerModule.JsonOptions), cancellationToken).ConfigureAwait(false);

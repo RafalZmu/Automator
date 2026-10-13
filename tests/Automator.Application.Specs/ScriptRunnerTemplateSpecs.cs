@@ -50,6 +50,26 @@ internal static class ScriptRunnerTemplateSpecs
         Ensure(roundTrip.Id == oldProfile.Id && roundTrip.ScriptPath == oldProfile.ScriptPath &&
             roundTrip.Arguments.SequenceEqual(oldProfile.Arguments) && roundTrip.TemplateOrigin is null,
             "legacy profile round-trips");
+        var stale = ScriptRunnerTemplateCatalog.Get("fdb-stale-archive")
+            ?? throw new Exception("Stale .fdb archive template is registered");
+        Ensure(stale.Version == 1 && stale.Interpreter == ScriptRunnerInterpreter.Powershell && stale.TimeoutSeconds == 3600, "stale archive metadata");
+        Ensure(stale.Parameters.Select(parameter => parameter.Type).SequenceEqual(new[]
+        {
+            ScriptRunnerTemplateParameterType.Directory, ScriptRunnerTemplateParameterType.Text,
+            ScriptRunnerTemplateParameterType.Boolean, ScriptRunnerTemplateParameterType.Boolean,
+        }), "stale archive parameter types");
+        using var staleDefaults = JsonDocument.Parse("""{"source":"D:\\Firebird\\Data"}""");
+        Ensure(ScriptRunnerTemplateCatalog.MapArguments(stale, staleDefaults.RootElement).SequenceEqual(new[] { "D:\\Firebird\\Data", "90", "true", "true" }),
+            "stale archive defaults include subfolders and keep preview on");
+        using var staleExplicit = JsonDocument.Parse("""{"source":"D:\\Firebird\\Data","days":"180","subfolders":false,"preview":false}""");
+        Ensure(ScriptRunnerTemplateCatalog.MapArguments(stale, staleExplicit.RootElement).SequenceEqual(new[] { "D:\\Firebird\\Data", "180", "false", "false" }),
+            "stale archive explicit values map to positional arguments");
+        using var staleRelative = JsonDocument.Parse("""{"source":"Firebird\\Data"}""");
+        Throws(() => ScriptRunnerTemplateCatalog.MapArguments(stale, staleRelative.RootElement), "stale archive relative source rejected");
+        using var staleTextPreview = JsonDocument.Parse("""{"source":"D:\\Firebird\\Data","preview":"no"}""");
+        Throws(() => ScriptRunnerTemplateCatalog.MapArguments(stale, staleTextPreview.RootElement), "stale archive preview must be boolean");
+        using var staleAsset = typeof(ScriptRunnerTemplateInstaller).Assembly.GetManifestResourceStream("Automator.Templates.fdb-stale-archive.v1.ps1");
+        Ensure(staleAsset is not null, "stale archive asset is embedded");
         await ScriptRunnerTemplateInstallSpecs.RunAsync();
         await ScriptRunnerTemplateRunSpecs.RunAsync();
     }
