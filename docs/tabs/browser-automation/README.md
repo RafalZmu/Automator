@@ -25,3 +25,7 @@ The Codex task builder can create a generated Playwright task in the configured 
 ## Test case steps
 
 See [TESTS.md](TESTS.md) for the profile, explorer, preview, and managed-project test steps.
+
+## Agent access
+
+MCP clients can list browser profiles and Playwright tests and run one profile action or a test selection through `list_browser_automations` and `run_browser_automation`, using the same `runAction` and `runTests` actions and allowed-host policy as this tab. See [Agent access](../../sections/agent-access/README.md).

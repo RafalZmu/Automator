@@ -430,6 +430,11 @@ kbd { min-width: 17px; padding: 2px 4px; border: 1px solid var(--line); border-r
   .list-heading { min-height: 40px; padding: 6px 1px; }
   .footer { min-height: 19px; padding-top: 2px; }
 }
+.agent-port { display: inline-flex; align-items: center; gap: 5px; font-size: 9px; color: var(--muted-strong); }
+.agent-port input { width: 62px; min-height: 26px; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; color: inherit; background: var(--control); font-size: 9px; }
+.agent-port input[aria-invalid="true"] { border-color: #c0392b; }
+.agent-port button { min-height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted-strong); background: var(--control); font-size: 9px; cursor: pointer; }
+.agent-port button:disabled { opacity: .5; cursor: default; }
 
 @media (max-width: 390px) {
   .window-shell { padding-left: 11px; padding-right: 11px; }

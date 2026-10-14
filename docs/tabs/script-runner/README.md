@@ -58,3 +58,7 @@ In the stable Windows package, the `.ps1` **Automator** submenu also contains **
 The Library includes **Firebird 3 database backup** and **Firebird 3 database backup and ZIP**. Install either template and map it yourself; neither action is enabled automatically. Both offer the target database on the Library card, with backup destinations, `gbak`, username, and password in their typed run forms. V1 handles one selected file at a time.
 
 Explorer action UI lives in `ui/modules/ExplorerActionsPanel.tsx`; `explorerActionViewModel.ts` prepares transient forms. `ui/App.tsx` retains typed preload launch requests before the Script Runner view mounts. `ScriptRunnerExplorerActions.cs` stores and validates mappings/runs, while the Windows capability reconciles the classic cascading menu.
+
+## Agent access
+
+Saved scripts can be listed, inspected (typed inputs with hints and examples), run, polled and canceled by an MCP client through `list_scripts`, `get_script`, `run_script`, `get_run` and `cancel_run`. Runs use the same `runProfile` action and validation as this tab. See [Agent access](../../sections/agent-access/README.md).

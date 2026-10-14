@@ -16,3 +16,7 @@ Variables use references such as {{variables.name}} in supported text fields and
 - Tests: tests/variables-contract.test.mjs, tests/Automator.Variables.Specs, and settings/backend integration tests.
 
 Use named API secrets for credentials. Global variables are ordinary reusable data, not a secret vault.
+
+## Agent access
+
+Settings also hosts the **Agent access (MCP)** card (`ui/AgentAccessSettings.tsx`) for the built-in MCP server. It applies immediately and is independent of the Save button. See [Agent access](../agent-access/README.md).

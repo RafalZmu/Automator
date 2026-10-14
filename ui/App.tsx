@@ -27,6 +27,7 @@ import { LatestModuleResult } from './activity/LatestModuleResult';
 import { rememberTransientResult } from './activity/transientResults';
 import { FileExplorerLaunchContext } from './FileExplorerLaunchContext';
 
+import { AgentAccessSettings } from './AgentAccessSettings';
 type Binding = BackendUiState['bindings'][number];
 type SettingsDraft = Pick<BackendUiState, 'hotkey' | 'theme' | 'startWithWindows' | 'bindings'>;
 
@@ -216,6 +217,8 @@ function SettingsDialog({
             </section>
 
             <section className="settings-section">
+            <AgentAccessSettings bridge={bridge} reportError={reportError} />
+
               <div className="section-heading"><Sparkles size={15} /><h2>Application aliases</h2></div>
               {draft.bindings.length === 0 ? <p className="settings-empty">No saved applications yet. Add one from the catalog.</p> : (
                 <div className="settings-bindings">

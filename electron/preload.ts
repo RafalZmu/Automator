@@ -20,6 +20,7 @@ import {
   type BackendUiState,
 } from '../contracts/rpc';
 import { runActivitySnapshotSchema } from '../contracts/activity';
+import { mcpStatusSchema } from '../contracts/mcp';
 import type { AutomatorBridge, FocusRequest, HostInfo, InitialState } from '../ui/types';
 
 function listen<T>(channel: string, listener: (value: T) => void): () => void {
@@ -84,6 +85,11 @@ const api: AutomatorBridge = Object.freeze({
   relinkBinding: (bindingId: string) => ipcRenderer.invoke('automator:relink-binding', bindingId),
   openLogFolder: () => ipcRenderer.invoke('automator:open-log-folder', {}),
   retryBackend: () => ipcRenderer.invoke('automator:retry-backend'),
+  getMcpStatus: async () => mcpStatusSchema.parse(await ipcRenderer.invoke('automator:mcp-get-status')),
+  setMcpEnabled: async (enabled: boolean) => mcpStatusSchema.parse(await ipcRenderer.invoke('automator:mcp-set-enabled', enabled)),
+  setMcpPort: async (port: number) => mcpStatusSchema.parse(await ipcRenderer.invoke('automator:mcp-set-port', port)),
+  rotateMcpToken: async () => mcpStatusSchema.parse(await ipcRenderer.invoke('automator:mcp-rotate-token')),
+  copyMcpCommand: () => ipcRenderer.invoke('automator:mcp-copy-command') as Promise<boolean>,
   getAutomationKeyboardEligibility: async (moduleId: string) => {
     const result = await ipcRenderer.invoke('automator:automation-keyboard-eligibility', { moduleId });
     const parsed = automationKeyboardEligibilityResultSchema.safeParse(result);

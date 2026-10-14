@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, screen, Tray, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, safeStorage, screen, Tray, type IpcMainInvokeEvent } from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,6 +32,10 @@ import { createReloadBudget } from './reloadBudget';
 import { getScriptRunnerPathPickerSpec } from './scriptRunnerPathPicker';
 import { getCodexScopePathPickerSpec } from './codexScopePathPicker';
 import { authorizeCodexExport, extensionForCodexFormat, writeCodexSourceCreateNew } from './codexExport';
+import { mcpSetEnabledSchema, mcpSetPortSchema } from '../contracts/mcp';
+import { createMcpBackend } from './mcp/backendBridge';
+import { McpController } from './mcp/controller';
+import type { TokenProtector } from './mcp/config';
 
 const moduleDirectory = __dirname;
 const workspaceRoot = path.resolve(moduleDirectory, '../..');
@@ -82,6 +86,7 @@ let backend: BackendProcess | undefined;
 let currentState: BackendUiState | undefined;
 let backendStatus: 'ready' | 'starting' | 'failed' = 'starting';
 let backendFailure = '';
+let mcp: McpController | undefined;
 let trayIconReady = false;
 let rendererReady = false;
 let explorerListenerReady = false;
@@ -440,6 +445,51 @@ async function stopBackend(): Promise<void> {
   if (backend === oldBackend) backend = undefined;
 }
 
+const mcpTokenProtector: TokenProtector = {
+  encrypt: (value) => (safeStorage.isEncryptionAvailable()
+    ? `dpapi:${safeStorage.encryptString(value).toString('base64')}` : `plain:${value}`),
+  decrypt: (value) => {
+    if (value.startsWith('dpapi:')) return safeStorage.decryptString(Buffer.from(value.slice(6), 'base64'));
+    if (value.startsWith('plain:')) return value.slice(6);
+    throw new Error('Unsupported token format.');
+  },
+};
+
+/** Starts the agent (MCP) server with the app. Failures are logged and shown in Settings, never fatal. */
+async function startMcp(): Promise<void> {
+  try {
+    mcp = new McpController({
+      configPath: path.join(localData, 'mcp.json'),
+      protector: mcpTokenProtector,
+      version: app.getVersion(),
+      log: writeLog,
+      ephemeralPort: testMode,
+      backend: createMcpBackend({
+        getBackend: () => backend,
+        getState: () => currentState,
+        unavailableReason: () => {
+          if (quitRequested) return 'Automator is shutting down.';
+          return backend && backendStatus === 'ready' ? null : (backendFailure || 'The Automator backend is not ready.');
+        },
+        newRequestId: () => `mcp-${randomUUID()}`,
+      }),
+    });
+    await mcp.start();
+  } catch (error) {
+    writeLog('Mcp.StartFailed', 'The MCP server could not be initialized.', { error: String(error) });
+  }
+}
+
+async function stopMcp(): Promise<void> {
+  try { await mcp?.stop(); }
+  catch (error) { writeLog('Mcp.StopFailed', 'The MCP server did not stop cleanly.', { error: String(error) }); }
+}
+
+function requireMcp(): McpController {
+  if (!mcp) throw new Error('Agent access is unavailable.');
+  return mcp;
+}
+
 function createTray(): boolean {
   const iconPath = path.resolve(moduleDirectory, '../../assets/automator.png');
   const icon = nativeImage.createFromPath(iconPath);
@@ -788,6 +838,21 @@ function registerIpc(): void {
   ipcMain.handle('automator:relink-binding', (event, bindingId: string) => withOpenFileDialog(event, [
     { name: 'Applications and shortcuts', extensions: ['exe', 'lnk'] },
   ], 'settings/relink', (filePath) => ({ bindingId, path: filePath })));
+  ipcMain.handle('automator:mcp-get-status', (event) => { assertMainFrame(event); return requireMcp().status(); });
+  ipcMain.handle('automator:mcp-set-enabled', (event, enabled: unknown) => {
+    assertMainFrame(event);
+    return requireMcp().setEnabled(mcpSetEnabledSchema.parse(enabled));
+  });
+  ipcMain.handle('automator:mcp-set-port', (event, port: unknown) => {
+    assertMainFrame(event);
+    return requireMcp().setPort(mcpSetPortSchema.parse(port));
+  });
+  ipcMain.handle('automator:mcp-rotate-token', (event) => { assertMainFrame(event); return requireMcp().rotateToken(); });
+  ipcMain.handle('automator:mcp-copy-command', (event) => {
+    assertMainFrame(event);
+    clipboard.writeText(requireMcp().claudeCommand());
+    return true;
+  });
   ipcMain.handle('automator:retry-backend', async (event) => {
     assertMainFrame(event);
     if (quitRequested) throw new Error('Automator is shutting down.');
@@ -1344,6 +1409,8 @@ async function initializeApp(): Promise<void> {
     writeLog('App.InitializationFailed', 'Backend startup failed; the recovery window will remain available.', { error: backendFailure });
   }
   if (quitRequested) return;
+  await startMcp();
+  if (quitRequested) return;
   if (!testMode || process.env.AUTOMATOR_TEST_TRAY === '1') trayIconReady = createTray();
   createWindow();
   app.on('activate', () => void showLauncher());
@@ -1374,7 +1441,8 @@ if (singleInstance) {
     tray?.destroy();
     tray = undefined;
     trayIconReady = false;
-    void stopBackend().catch((error) => writeLog('Backend.StopFailed', 'The backend did not stop cleanly.', { error: String(error) }))
+    void stopMcp().then(() => stopBackend())
+      .catch((error) => writeLog('Backend.StopFailed', 'The backend did not stop cleanly.', { error: String(error) }))
       .finally(() => {
         quitFinalized = true;
         app.quit();

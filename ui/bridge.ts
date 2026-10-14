@@ -13,6 +13,7 @@ import {
 } from '../contracts/rpc.ts';
 import type { AutomationHttpIpcResponse } from '../contracts/automationHttpIpc.ts';
 import type { RunActivitySnapshot } from '../contracts/activity.ts';
+import type { McpStatus } from '../contracts/mcp.ts';
 import type { AutomatorBridge, FocusRequest, HostInfo, InitialState } from './types.d';
 
 const tabs: BackendUiState['tabs'] = [
@@ -159,6 +160,15 @@ class BrowserPreviewBridge implements AutomatorBridge {
   async relinkBinding() { return null; }
   async openLogFolder() { return false; }
   async retryBackend() { return this.getInitialState(); }
+  private mcp: McpStatus = { enabled: true, state: 'listening', port: 47821, url: 'http://127.0.0.1:47821/mcp', error: null };
+  async getMcpStatus() { return { ...this.mcp }; }
+  async setMcpEnabled(enabled: boolean) {
+    this.mcp = { ...this.mcp, enabled, state: enabled ? 'listening' : 'off', url: enabled ? `http://127.0.0.1:${this.mcp.port}/mcp` : null };
+    return { ...this.mcp };
+  }
+  async setMcpPort(port: number) { this.mcp = { ...this.mcp, port, url: this.mcp.enabled ? `http://127.0.0.1:${port}/mcp` : null }; return { ...this.mcp }; }
+  async rotateMcpToken() { return { ...this.mcp }; }
+  async copyMcpCommand() { return true; }
   async getAutomationKeyboardEligibility() { return { eligible: false, revision: 0 }; }
   async subscribeAutomationKeyboard() { return { subscribed: false }; }
   async unsubscribeAutomationKeyboard() { return { unsubscribed: true }; }

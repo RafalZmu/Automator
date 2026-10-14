@@ -15,6 +15,7 @@ import type {
   FileExplorerLaunchRequest,
 } from '../contracts/rpc';
 import type { RunActivitySnapshot } from '../contracts/activity';
+import type { McpStatus } from '../contracts/mcp';
 import type { ScriptRunnerInterpreter } from '../contracts/scriptRunner';
 import type { AutomationHttpIpcResponse } from '../contracts/automationHttpIpc';
 
@@ -72,6 +73,11 @@ export interface AutomatorBridge {
   relinkBinding(bindingId: string): Promise<BackendUiState | null>;
   openLogFolder(): Promise<boolean>;
   retryBackend(): Promise<InitialState>;
+  getMcpStatus(): Promise<McpStatus>;
+  setMcpEnabled(enabled: boolean): Promise<McpStatus>;
+  setMcpPort(port: number): Promise<McpStatus>;
+  rotateMcpToken(): Promise<McpStatus>;
+  copyMcpCommand(): Promise<boolean>;
   getAutomationKeyboardEligibility(moduleId: string): Promise<AutomationKeyboardEligibilityResult>;
   subscribeAutomationKeyboard(moduleId: string): Promise<{ subscribed: boolean }>;
   unsubscribeAutomationKeyboard(moduleId: string): Promise<{ unsubscribed: boolean }>;
