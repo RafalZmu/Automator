@@ -1,6 +1,6 @@
 import { GlobalVariableHints } from '../variables/GlobalVariables';
 import {
-  Braces, Check, Clock3, FileCode2, Pencil, Play, Plus, Save, Square, Terminal, Trash2, X,
+  Braces, Check, Clock3, FileCode2, Loader2, Pencil, Play, Plus, Save, Square, Terminal, Trash2, X,
 } from 'lucide-react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AutomationServices } from '../automationServices';
@@ -19,24 +19,14 @@ import { ExplorerActionsPanel } from './ExplorerActionsPanel';
 import { FileExplorerLaunchContext } from '../FileExplorerLaunchContext';
 import { ScriptParameterBuilder } from './ScriptParameterBuilder';
 import { ScriptParameterFields } from './ScriptParameterFields';
+import {
+  activeScriptRun, cancelScriptRun, clearFinishedScriptRuns, describeRunState, recordExternalScriptRun, startScriptRun, useScriptRuns,
+} from './scriptRunStore';
 
 type ViewProps = {
   tab: BackendUiState['tabs'][number];
   moduleState: BackendUiState['moduleStates'][number] | undefined;
   services: AutomationServices;
-};
-
-type RunOutput = {
-  profileId: string;
-  exitCode: number | null;
-  timedOut: boolean;
-  stdout: string;
-  stderr: string;
-  stdoutTruncated: boolean;
-  stderrTruncated: boolean;
-  durationMilliseconds: number;
-  structuredOutput: unknown;
-  parseFailure: boolean;
 };
 
 type InterpreterDefaults = Record<ScriptRunnerInterpreter, string>;
@@ -91,6 +81,18 @@ function readInterpreterDefaults(value: unknown): InterpreterDefaults {
   };
 }
 
+const formatRunTime = (timestamp: number) => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const formatDuration = (milliseconds: number) => milliseconds < 1000 ? `${milliseconds} ms` : `${(milliseconds / 1000).toFixed(1)} s`;
+
+function ElapsedTime({ since }: { since: number }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return <>{Math.max(0, Math.floor((now - since) / 1000))} s</>;
+}
+
 const trustNote = 'Scripts run as your Windows user with the same access as Automator. They are not sandboxed. Review and trust this code before running it.';
 
 export function ScriptRunnerView({ tab, services }: ViewProps) {
@@ -102,8 +104,15 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   // Remembered input values for the profile being edited, and whether its input definitions are expanded.
   const [editValues, setEditValues] = useState<Record<string, ScriptTemplateValue>>({});
   const [definitionsOpen, setDefinitionsOpen] = useState(false);
-  const [output, setOutput] = useState<RunOutput | null>(null);
-  const [runningId, setRunningId] = useState<string | null>(null);
+  // The saved profile whose row hosts the editor. The key field is editable, so the row is matched by the original id.
+  const [editingOriginalId, setEditingOriginalId] = useState<string | null>(null);
+  // Runs live in a window-level store, so they keep going and stay visible when this view is closed and reopened.
+  const runs = useScriptRuns();
+  const activeRun = runs.find((run) => run.finishedAt === null);
+  const [explorerRunningId, setRunningId] = useState<string | null>(null);
+  const runningId = activeRun?.profileId ?? explorerRunningId;
+  // null shows the newest finished run, 'none' hides the result panel, anything else is a chosen history entry.
+  const [shownRunId, setShownRunId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [templates, setTemplates] = useState<ScriptTemplateDescriptor[]>([]);
   const [explorerOpen, setExplorerOpen] = useState(false);
@@ -114,8 +123,9 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   // The one profile whose inputs are open in the Run form.
   const [runTarget, setRunTarget] = useState<ScriptProfile | null>(null);
   const [runValues, setRunValues] = useState<Record<string, ScriptTemplateValue>>({});
-  const runController = useRef<AbortController | null>(null);
   const moduleSettingsRef = useRef<ModuleSettingsValue>({});
+  const profilesRef = useRef<ScriptProfile[]>([]);
+  profilesRef.current = profiles;
 
   const closeLibrary = useCallback(() => {
     setLibraryOpen(false);
@@ -128,6 +138,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   }, []);
   const beginEditing = useCallback((profile: ScriptProfile) => {
     setEditing(profile);
+    setEditingOriginalId(profile.id);
     setEditValues(initialParameterValues(profileParameters(profile, templates), profile.values, profile.templateOrigin?.id));
     setDefinitionsOpen(!profile.templateOrigin && (profile.parameters ?? []).length === 0);
   }, [templates]);
@@ -137,7 +148,13 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     closeLibrary();
     closeRunForm();
   }, [closeLibrary, closeRunForm]);
-  const explorerResult = useCallback((data: unknown) => { if (data && typeof data === 'object' && 'profileId' in data) setOutput(data as RunOutput); }, []);
+  const explorerResult = useCallback((data: unknown) => {
+    if (data && typeof data === 'object' && 'profileId' in data) {
+      const profileId = String((data as { profileId: unknown }).profileId);
+      recordExternalScriptRun({ id: profileId, name: profilesRef.current.find((profile) => profile.id === profileId)?.name ?? profileId }, { status: 'success', message: '', data });
+      setShownRunId(null);
+    }
+  }, []);
 
   const loadModuleSettings = useCallback(async (savedProfiles: ScriptProfile[]) => {
     const bridge = window.automator;
@@ -189,7 +206,6 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
 
   useEffect(() => {
     void refresh();
-    return () => runController.current?.abort();
   }, [refresh]);
 
   useEffect(() => {
@@ -197,7 +213,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     if (!settingsReady || editing || runningId !== null || !request || request.actionId !== FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID) return;
     try {
       beginEditing(createPowerShellProfileDraft(request.filePath, interpreterDefaults.powershell, profiles.map(profile => profile.id)));
-      setOutput(null);
+      setShownRunId('none');
       setExplorerOpen(false);
       closeLibrary();
       closeRunForm();
@@ -256,38 +272,50 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   };
 
   const openEditor = (profile: ScriptProfile) => {
-    setOutput(null);
+    if (editingRowId === profile.id) {
+      setEditing(null);
+      return;
+    }
+    closeRunForm();
+    setShownRunId('none');
     beginEditing({ ...profile, arguments: [...profile.arguments], parameters: profile.parameters ? [...profile.parameters] : profile.parameters });
   };
 
   const openNewEditor = () => {
-    setOutput(null);
+    setShownRunId('none');
     beginEditing(blankProfile(interpreterDefaults));
   };
 
   const openRunForm = (profile: ScriptProfile) => {
+    setEditing(null);
     setRunTarget(profile);
     setRunValues(initialParameterValues(profileParameters(profile, templates), profile.values, profile.templateOrigin?.id));
   };
 
+  const cancelActiveRun = () => {
+    const active = activeScriptRun();
+    if (active) void cancelScriptRun(active.id);
+  };
+
   const dispatchRun = async (profile: ScriptProfile, values: Record<string, ScriptTemplateValue> | undefined) => {
-    if (runController.current) {
-      runController.current.abort();
+    if (activeScriptRun()) {
+      cancelActiveRun();
       return;
     }
-    const controller = new AbortController();
-    runController.current = controller;
-    setRunningId(profile.id);
+    const bridge = window.automator;
+    const action = tab.actions.find((candidate) => candidate.id === 'runProfile');
+    if (!bridge || !action) {
+      setNotice('Running scripts is not available in this window.');
+      return;
+    }
     setNotice('');
+    setShownRunId(null);
     try {
-      const result = await services.modules.dispatch('runProfile', { id: profile.id, ...(values ? { values } : {}) }, { signal: controller.signal });
-      if (result.data && typeof result.data === 'object' && 'profileId' in result.data) setOutput(result.data as RunOutput);
-      setNotice(result.message);
+      const record = await startScriptRun({ bridge, moduleId: tab.id, contractVersion: tab.contractVersion, action }, profile, values);
+      setNotice(record.message);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'The script could not be run.');
     } finally {
-      if (runController.current === controller) runController.current = null;
-      setRunningId(null);
       setRunValues((current) => clearSensitiveValues(profileParameters(profile, templates), current));
     }
   };
@@ -299,7 +327,8 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     }
     if (profileParameters(profile, templates).length > 0) {
       setNotice('');
-      openRunForm(profile);
+      if (runTarget?.id === profile.id && runningId === null) closeRunForm();
+      else openRunForm(profile);
       return;
     }
     await dispatchRun(profile, undefined);
@@ -369,7 +398,6 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     try {
       const result = await services.modules.dispatch('deleteProfile', { id: profile.id });
       setNotice(result.message);
-      if (output?.profileId === profile.id) setOutput(null);
       if (runTarget?.id === profile.id) closeRunForm();
       await refresh();
     } catch (error) {
@@ -379,7 +407,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
 
   const commands = useMemo(() => [
     { id: 'new-script-profile', label: 'Create script', keywords: ['new', 'python', 'bash', 'powershell'], disabled: !settingsReady || runningId !== null, run: () => openNewEditor() },
-    ...(runningId ? [{ id: 'cancel-script-run', label: 'Cancel running script', keywords: ['stop', 'terminate'], run: () => runController.current?.abort() }] : []),
+    ...(runningId ? [{ id: 'cancel-script-run', label: 'Cancel running script', keywords: ['stop', 'terminate'], run: () => cancelActiveRun() }] : []),
     ...profiles.flatMap((profile) => {
       const hasInputs = profileParameters(profile, templates).length > 0;
       return [
@@ -418,6 +446,17 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     }
   };
 
+  const latestFinishedId = runs.find((run) => run.finishedAt !== null)?.id;
+  const shownRun = shownRunId === 'none' ? undefined : runs.find((run) => run.id === (shownRunId ?? latestFinishedId));
+  const output = shownRun?.output ?? null;
+  const editingRowId = editing && profiles.some((profile) => profile.id === editingOriginalId) ? editingOriginalId : null;
+  // Keep the expanded inputs in view when they open from the Library or the command palette.
+  useEffect(() => {
+    if (runTarget) document.querySelector('.script-run-panel')?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [runTarget?.id]);
+  useEffect(() => {
+    if (editingRowId) document.querySelector('.script-profile-item > .script-editor')?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [editingRowId]);
   const runParameters = runTarget ? profileParameters(runTarget, templates) : [];
   const runIsActive = runTarget !== null && runningId === runTarget.id;
   const editingTemplate = editing?.templateOrigin ? templates.find((item) => item.id === editing.templateOrigin?.id && item.version === editing.templateOrigin?.version) : undefined;
@@ -428,81 +467,8 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     : [];
   const editingTemplateHasPassword = editingTemplate?.parameters.some((parameter) => parameter.sensitive) ?? false;
 
-  return (
-    <section className="module-view script-runner-view" aria-label="Script Runner">
-      <div className="script-heading">
-        <div className="script-heading-title">
-          <span className="script-module-icon"><Terminal size={16} /></span>
-          <div><h1>Script Runner</h1><p>Saved Python, Bash, and PowerShell scripts with typed inputs</p></div>
-        </div>
-        <div className="script-editor-actions">
-          <button className="secondary-button" type="button" disabled={runningId !== null} onClick={() => setExplorerOpen((current) => !current)}>Explorer actions</button>
-          <button className="secondary-button" type="button" onClick={() => libraryOpen ? closeLibrary() : setLibraryOpen(true)}>Library</button>
-          <button className="primary-button" type="button" disabled={!settingsReady || runningId !== null} onClick={openNewEditor}>
-            <Plus size={14} /> New script
-          </button>
-        </div>
-      </div>
-
-      {notice && <p className="script-notice" role="status">{notice}</p>}
-
-      <ExplorerActionsPanel services={services} profiles={profiles} templates={templates} open={explorerOpen} onOpen={openExplorer} busy={runningId !== null} onRunning={setRunningId} onResult={explorerResult} />
-
-      {libraryOpen && <section className="script-editor" aria-label="Script template library">
-        <div className="script-editor-heading"><FileCode2 size={16} /><strong>Script Library</strong><button className="icon-button" type="button" aria-label="Close library" onClick={closeLibrary}><X size={15} /></button></div>
-        <label className="script-field-wide"><span>Search templates</span><input type="search" value={templateQuery} placeholder="Name, description, or tag" onChange={(event) => setTemplateQuery(event.target.value)} /></label>
-        <div className="script-profile-list">{filterScriptTemplates(templates, templateQuery).map((template) => {
-          const targetDatabaseParameter = (template.id === 'firebird-3-backup-zip' || template.id === 'firebird-3-backup')
-            ? template.parameters.find((parameter) => parameter.key === 'database')
-            : undefined;
-          const installedProfile = profiles.find((profile) => profile.templateOrigin?.id === template.id
-            && profile.templateOrigin?.version === template.version);
-          return <article className="script-profile-row script-template-row" key={template.id}>
-            <span className="script-profile-icon"><Terminal size={16} /></span>
-            <div className="script-profile-copy"><strong>{template.name}</strong><span>{template.description} · v{template.version} · {template.tags.join(', ')}</span></div>
-            <button className="secondary-button" type="button" disabled={runningId !== null && !installedProfile} onClick={() => showTemplateDetails(template)}>Details</button>
-            <button className={installedProfile ? 'secondary-button' : 'primary-button'} type="button" disabled={!settingsReady || Boolean(installedProfile) || runningId !== null} onClick={() => void installTemplate(template)}>
-              {installedProfile ? 'Profile added' : <><Plus size={13} />Add to Script Runner</>}
-            </button>
-            {targetDatabaseParameter?.type === 'file' && <div className="script-template-target">
-              <PathField label={`${targetDatabaseParameter.label}${targetDatabaseParameter.required ? ' *' : ''}`} kind="file" required={targetDatabaseParameter.required} value={String(libraryValues[targetDatabaseParameter.key] ?? '')} onChange={(value) => setLibraryValues((current) => ({ ...current, [targetDatabaseParameter.key]: value }))} onBrowse={() => services.files.pickPath('file')} />
-            </div>}
-          </article>;
-        })}</div>
-        {libraryDetail && <div className="script-fields script-template-details">
-          <h2 className="script-field-wide">{libraryDetail.name} · v{libraryDetail.version}</h2>
-          <p className="script-field-wide">{libraryDetail.description}</p>
-          <p className="script-trust-note script-field-wide">{trustNote} Passwords are never saved with a profile; you enter them when you run it.</p>
-          <ScriptParameterFields parameters={templateDetailParameters(libraryDetail)} values={libraryValues} services={services}
-            onChange={(key, value) => setLibraryValues((current) => ({ ...current, [key]: value }))} />
-          <div className="script-editor-actions script-field-wide">
-            <button className="secondary-button" type="button" onClick={() => setLibraryDetail(null)}>Close</button>
-            <button className="primary-button" type="button" disabled={!settingsReady || runningId !== null} onClick={() => void installTemplate(libraryDetail, libraryValues)}><Plus size={13} /> Add with these values</button>
-          </div>
-        </div>}
-      </section>}
-
-      {runTarget && <section className="script-editor script-run-form" aria-label={`Run ${runTarget.name}`}>
-        <div className="script-editor-heading">
-          <Play size={16} /><strong>{runTarget.name}</strong>
-          <span className="script-run-hint">{runTarget.templateOrigin ? 'Library template' : `${interpreterName(runTarget.interpreter)} script`}</span>
-          {!runIsActive && <button className="icon-button" type="button" aria-label="Close inputs" onClick={closeRunForm}><X size={15} /></button>}
-        </div>
-        {runTarget.templateOrigin && <p className="script-trust-note">{trustNote}</p>}
-        <div className="script-fields">
-          <ScriptParameterFields parameters={runParameters} values={runValues} services={services}
-            onChange={(key, value) => setRunValues((current) => ({ ...current, [key]: value }))} />
-        </div>
-        <div className="script-editor-actions">
-          {runIsActive
-            ? <button className="secondary-button" type="button" onClick={() => runController.current?.abort()}><Square size={13} /> Cancel run</button>
-            : <>
-              <button className="secondary-button" type="button" disabled={runningId !== null} onClick={() => void rememberValues(runTarget, runValues)}>Remember these values</button>
-              <button className="primary-button" type="button" disabled={runningId !== null} onClick={() => void submitRun()}><Play size={14} /> Run</button>
-            </>}
-        </div>
-      </section>}
-
+  const renderEditor = () => (
+    <>
       {editing && editing.templateOrigin && (
         <form className="script-editor" onSubmit={(event) => void saveProfile(event)}>
           <div className="script-editor-heading"><FileCode2 size={16} /><strong>Library profile</strong>
@@ -570,34 +536,131 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
           <div className="script-editor-actions"><button className="secondary-button" type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary-button" type="submit"><Save size={14} /> Save script</button></div>
         </form>
       )}
+    </>
+  );
+
+  return (
+    <section className="module-view script-runner-view" aria-label="Script Runner">
+      <div className="script-heading">
+        <div className="script-heading-title">
+          <span className="script-module-icon"><Terminal size={16} /></span>
+          <div><h1>Script Runner</h1><p>Saved Python, Bash, and PowerShell scripts with typed inputs</p></div>
+        </div>
+        <div className="script-editor-actions">
+          <button className="secondary-button" type="button" disabled={runningId !== null} onClick={() => setExplorerOpen((current) => !current)}>Explorer actions</button>
+          <button className="secondary-button" type="button" onClick={() => libraryOpen ? closeLibrary() : setLibraryOpen(true)}>Library</button>
+          <button className="primary-button" type="button" disabled={!settingsReady || runningId !== null} onClick={openNewEditor}>
+            <Plus size={14} /> New script
+          </button>
+        </div>
+      </div>
+
+      {notice && <p className="script-notice" role="status">{notice}</p>}
+
+      {activeRun && <section className="script-running" role="status" aria-label="Script running">
+        <Loader2 size={15} className="script-running-spinner" />
+        <div className="script-running-copy"><strong>{activeRun.profileName}</strong><span>{activeRun.state === 'canceled' ? 'Canceling…' : 'Running'} · <ElapsedTime since={activeRun.startedAt} /></span></div>
+        <button className="secondary-button" type="button" disabled={activeRun.state === 'canceled'} onClick={cancelActiveRun}><Square size={13} /> Cancel run</button>
+      </section>}
+
+      <ExplorerActionsPanel services={services} profiles={profiles} templates={templates} open={explorerOpen} onOpen={openExplorer} busy={runningId !== null} onRunning={setRunningId} onResult={explorerResult} />
+
+      {libraryOpen && <section className="script-editor" aria-label="Script template library">
+        <div className="script-editor-heading"><FileCode2 size={16} /><strong>Script Library</strong><button className="icon-button" type="button" aria-label="Close library" onClick={closeLibrary}><X size={15} /></button></div>
+        <label className="script-field-wide"><span>Search templates</span><input type="search" value={templateQuery} placeholder="Name, description, or tag" onChange={(event) => setTemplateQuery(event.target.value)} /></label>
+        <div className="script-profile-list">{filterScriptTemplates(templates, templateQuery).map((template) => {
+          const targetDatabaseParameter = (template.id === 'firebird-3-backup-zip' || template.id === 'firebird-3-backup')
+            ? template.parameters.find((parameter) => parameter.key === 'database')
+            : undefined;
+          const installedProfile = profiles.find((profile) => profile.templateOrigin?.id === template.id
+            && profile.templateOrigin?.version === template.version);
+          return <article className="script-profile-row script-template-row" key={template.id}>
+            <span className="script-profile-icon"><Terminal size={16} /></span>
+            <div className="script-profile-copy"><strong>{template.name}</strong><span>{template.description} · v{template.version} · {template.tags.join(', ')}</span></div>
+            <button className="secondary-button" type="button" disabled={runningId !== null && !installedProfile} onClick={() => showTemplateDetails(template)}>Details</button>
+            <button className={installedProfile ? 'secondary-button' : 'primary-button'} type="button" disabled={!settingsReady || Boolean(installedProfile) || runningId !== null} onClick={() => void installTemplate(template)}>
+              {installedProfile ? 'Profile added' : <><Plus size={13} />Add to Script Runner</>}
+            </button>
+            {targetDatabaseParameter?.type === 'file' && <div className="script-template-target">
+              <PathField label={`${targetDatabaseParameter.label}${targetDatabaseParameter.required ? ' *' : ''}`} kind="file" required={targetDatabaseParameter.required} value={String(libraryValues[targetDatabaseParameter.key] ?? '')} onChange={(value) => setLibraryValues((current) => ({ ...current, [targetDatabaseParameter.key]: value }))} onBrowse={() => services.files.pickPath('file')} />
+            </div>}
+          </article>;
+        })}</div>
+        {libraryDetail && <div className="script-fields script-template-details">
+          <h2 className="script-field-wide">{libraryDetail.name} · v{libraryDetail.version}</h2>
+          <p className="script-field-wide">{libraryDetail.description}</p>
+          <p className="script-trust-note script-field-wide">{trustNote} Passwords are never saved with a profile; you enter them when you run it.</p>
+          <ScriptParameterFields parameters={templateDetailParameters(libraryDetail)} values={libraryValues} services={services}
+            onChange={(key, value) => setLibraryValues((current) => ({ ...current, [key]: value }))} />
+          <div className="script-editor-actions script-field-wide">
+            <button className="secondary-button" type="button" onClick={() => setLibraryDetail(null)}>Close</button>
+            <button className="primary-button" type="button" disabled={!settingsReady || runningId !== null} onClick={() => void installTemplate(libraryDetail, libraryValues)}><Plus size={13} /> Add with these values</button>
+          </div>
+        </div>}
+      </section>}
+
+      {editing && editingRowId === null && renderEditor()}
 
       <div className="script-profile-list" aria-live="polite">
         {profiles.length ? profiles.map((profile) => {
           const inputCount = profileParameters(profile, templates).length;
           return (
-            <article className="script-profile-row" key={profile.id}>
+            <div className="script-profile-item" key={profile.id} data-expanded={runTarget?.id === profile.id || editingRowId === profile.id}>
+            <article className="script-profile-row">
               <span className="script-profile-icon">{profile.interpreter === 'python' ? <Braces size={16} /> : <Terminal size={16} />}</span>
               <div className="script-profile-copy"><strong>{profile.name}</strong><span>{interpreterName(profile.interpreter)} · {profile.scriptPath || 'Script path missing'}{inputCount ? ` · ${inputCount} input${inputCount === 1 ? '' : 's'}` : ''}</span></div>
               <span className="script-profile-time"><Clock3 size={12} /> {profile.timeoutSeconds}s</span>
-              <button className="icon-button script-row-action" type="button" aria-label={runningId === profile.id ? `Cancel ${profile.name}` : `Run ${profile.name}`} title={runningId === profile.id ? 'Cancel run' : inputCount ? 'Enter inputs and run' : 'Run script'} disabled={runningId !== null && runningId !== profile.id} onClick={() => void runProfile(profile)}>
+              <button className="icon-button script-row-action" type="button" aria-label={runningId === profile.id ? `Cancel ${profile.name}` : `Run ${profile.name}`} title={runningId === profile.id ? 'Cancel run' : inputCount ? 'Enter inputs and run' : 'Run script'} disabled={runningId !== null && runningId !== profile.id} aria-expanded={inputCount ? runTarget?.id === profile.id : undefined} onClick={() => void runProfile(profile)}>
                 {runningId === profile.id ? <Square size={14} /> : <Play size={15} />}
               </button>
               <button className="icon-button script-row-action" type="button" aria-label={`Edit ${profile.name}`} title="Edit" disabled={runningId !== null} onClick={() => openEditor(profile)}><Pencil size={14} /></button>
               <InlineConfirmButton className="icon-button script-row-action" label={`Remove ${profile.name}`} confirmLabel={`Yes, remove ${profile.name}`} title="Remove" disabled={runningId !== null} onConfirm={() => deleteProfile(profile)}><Trash2 size={14} /></InlineConfirmButton>
             </article>
+            {editingRowId === profile.id && renderEditor()}
+            {runTarget?.id === profile.id && <section className="script-run-panel" aria-label={`Run ${runTarget.name}`}>
+              {runTarget.templateOrigin && <p className="script-trust-note">{trustNote}</p>}
+              <div className="script-fields">
+                <ScriptParameterFields parameters={runParameters} values={runValues} services={services}
+                  onChange={(key, value) => setRunValues((current) => ({ ...current, [key]: value }))} />
+              </div>
+              <div className="script-editor-actions">
+                {runIsActive
+                  ? <button className="secondary-button" type="button" onClick={() => cancelActiveRun()}><Square size={13} /> Cancel run</button>
+                  : <>
+                    <button className="secondary-button" type="button" aria-label="Close inputs" onClick={closeRunForm}>Close</button>
+                    <button className="secondary-button" type="button" disabled={runningId !== null} onClick={() => void rememberValues(runTarget, runValues)}>Remember these values</button>
+                    <button className="primary-button" type="button" disabled={runningId !== null} onClick={() => void submitRun()}><Play size={14} /> Run</button>
+                  </>}
+              </div>
+            </section>}
+            </div>
           );
         }) : !editing ? <div className="script-empty"><span className="empty-icon"><Terminal size={20} /></span><strong>No scripts yet</strong><p>Add a Python, Bash, or PowerShell script and declare its inputs, or add a ready-made script from the Library.</p><button className="secondary-button" type="button" disabled={!settingsReady} onClick={openNewEditor}><Plus size={13} /> Create a script</button></div> : null}
       </div>
 
-      {output && <section className="script-output" aria-label="Script output">
-        <header><div><Check size={14} /><strong>Latest result</strong><span>{output.durationMilliseconds} ms</span></div><button className="icon-button" type="button" aria-label="Clear script output" onClick={() => setOutput(null)}><X size={14} /></button></header>
-        {output.timedOut && <p className="script-output-status">The script timed out.</p>}
-        {output.exitCode !== null && output.exitCode !== 0 && <p className="script-output-status">Exit code {output.exitCode}</p>}
-        {output.parseFailure && <p className="script-output-status">The output was not valid JSON.</p>}
-        {output.structuredOutput !== null && output.structuredOutput !== undefined && <pre>{JSON.stringify(output.structuredOutput, null, 2)}</pre>}
-        {output.stdout && <pre>{output.stdout}{output.stdoutTruncated ? '\n… output truncated' : ''}</pre>}
-        {output.stderr && <pre className="script-stderr">{output.stderr}{output.stderrTruncated ? '\n… output truncated' : ''}</pre>}
-        {!output.stdout && !output.stderr && output.structuredOutput == null && <p className="script-no-output">The script did not produce output.</p>}
+      {shownRun && shownRun.finishedAt !== null && <section className="script-output" aria-label="Script output">
+        <header><div><Check size={14} /><strong>{shownRun.id === latestFinishedId ? 'Latest result' : 'Past result'}</strong><span>{shownRun.profileName} · {formatRunTime(shownRun.startedAt)} · {output?.durationMilliseconds ?? shownRun.finishedAt - shownRun.startedAt} ms</span></div><button className="icon-button" type="button" aria-label="Clear script output" onClick={() => setShownRunId('none')}><X size={14} /></button></header>
+        {shownRun.state === 'canceled' && <p className="script-output-status">The run was canceled.</p>}
+        {!output && shownRun.state !== 'canceled' && shownRun.message && <p className="script-output-status">{shownRun.message}</p>}
+        {output?.timedOut && <p className="script-output-status">The script timed out.</p>}
+        {output && output.exitCode !== null && output.exitCode !== 0 && <p className="script-output-status">Exit code {output.exitCode}</p>}
+        {output?.parseFailure && <p className="script-output-status">The output was not valid JSON.</p>}
+        {output && output.structuredOutput !== null && output.structuredOutput !== undefined && <pre>{JSON.stringify(output.structuredOutput, null, 2)}</pre>}
+        {output?.stdout && <pre>{output.stdout}{output.stdoutTruncated ? '\n… output truncated' : ''}</pre>}
+        {output?.stderr && <pre className="script-stderr">{output.stderr}{output.stderrTruncated ? '\n… output truncated' : ''}</pre>}
+        {output && !output.stdout && !output.stderr && output.structuredOutput == null && <p className="script-no-output">The script did not produce output.</p>}
+      </section>}
+
+      {runs.length > 0 && <section className="script-history" aria-label="Run history">
+        <header><strong>Run history</strong><small>Kept in this window until Automator restarts. Run activity keeps a permanent record of when each run happened, without its output.</small>
+          {runs.some((run) => run.finishedAt !== null) && <button className="secondary-button" type="button" onClick={() => { clearFinishedScriptRuns(); setShownRunId(null); }}>Clear history</button>}</header>
+        <ul>{runs.map((run) => <li key={run.id}>
+          <button type="button" className="script-history-item" aria-pressed={shownRun?.id === run.id} disabled={run.finishedAt === null} onClick={() => setShownRunId(run.id)}>
+            <span className={`script-run-state is-${run.state}`}>{describeRunState(run.state)}</span>
+            <strong>{run.profileName}</strong>
+            <span>{formatRunTime(run.startedAt)}{run.finishedAt !== null ? ` · ${formatDuration(run.finishedAt - run.startedAt)}` : ''}</span>
+          </button>
+        </li>)}</ul>
       </section>}
     </section>
   );

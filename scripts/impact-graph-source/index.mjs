@@ -1,29 +1,41 @@
 import { execFileSync } from 'node:child_process';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { stableFileId, stableFunctionId, classifyFile, unmappedDiagnostic, normalizeSourcePath } from './schema.mjs';
 import ownership from './ownership.json' with { type: 'json' };
 import * as ts from 'typescript/unstable/sync';
 import { scanTypeScript } from './typescript.mjs';
 
+// The indexer project ships with Automator, so it is addressed absolutely: the scanned repository may be elsewhere.
+const indexerProject = fileURLToPath(new URL('./csharp/ImpactGraph.CSharpIndexer.csproj', import.meta.url));
 const excluded = p => p.startsWith('scripts/impact-graph-source/') || p.startsWith('tests/impact-graph/fixtures/') || /(^|\/)(node_modules|bin|obj|dist|artifacts|coverage)\//i.test(p) || /\.g\.cs$/i.test(p);
-export async function buildSourceIndex({ root, outputPath }) {
+export async function buildSourceIndex({ root, outputPath, tsconfigs = ['tsconfig.json'] }) {
   root = path.resolve(root);
   const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0')
     .filter(p => /\.(cs|ts|tsx)$/.test(p) && !excluded(p)).map(normalizeSourcePath).sort();
   const tsPaths = tracked.filter(p => /\.(ts|tsx)$/.test(p));
   const csPaths = tracked.filter(p => p.endsWith('.cs'));
-  const tsResult = scanTypeScript({ root, paths: tsPaths, ts });
+  // Each tsconfig owns the TypeScript files in its directory (Dysponent2 has two Angular/Playwright projects).
+  const tsScans = tsconfigs.map(tsconfig => {
+    const dir = path.posix.dirname(normalizeSourcePath(tsconfig));
+    const paths = tsPaths.filter(p => dir === '.' || p.startsWith(`${dir}/`));
+    return scanTypeScript({ root, paths, ts, tsconfig });
+  });
+  const tsResult = {
+    files: tsScans.flatMap(r => r.files), functions: tsScans.flatMap(r => r.functions), calls: tsScans.flatMap(r => r.calls),
+    dependencies: tsScans.flatMap(r => r.dependencies), diagnostics: tsScans.flatMap(r => r.diagnostics),
+  };
   const missingTs = tsPaths.filter(p => !tsResult.files.some(f => normalizeSourcePath(f.path) === p));
   const csResult = { files: [], functions: [], calls: [], dependencies: [], diagnostics: [] };
   if (csPaths.length) {
     const projects = execFileSync('git', ['ls-files', '-z', '*.csproj'], { cwd:root, encoding:'utf8' }).split('\0').filter(p=>p && (p.startsWith('src/') || /^tests\/Automator\..*\.Specs\.csproj$/.test(p)));
-    execFileSync('dotnet', ['build', 'scripts/impact-graph-source/csharp/ImpactGraph.CSharpIndexer.csproj', '--nologo'], { cwd:root, encoding:'utf8', maxBuffer:64*1024*1024, stdio:['ignore','ignore','pipe'] });
+    execFileSync('dotnet', ['build', indexerProject, '--nologo'], { cwd:root, encoding:'utf8', maxBuffer:64*1024*1024, stdio:['ignore','ignore','pipe'] });
     for (const [index, project] of projects.entries()) {
       const temp = path.join(os.tmpdir(), `impact-graph-csharp-${process.pid}-${index}.json`);
       try {
-        execFileSync('dotnet', ['run', '--no-build', '--project', 'scripts/impact-graph-source/csharp/ImpactGraph.CSharpIndexer.csproj', '--', '--root', root, '--output', temp, '--project', project], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio:['ignore','ignore','pipe'] });
+        execFileSync('dotnet', ['run', '--no-build', '--project', indexerProject, '--', '--root', root, '--output', temp, '--project', project], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio:['ignore','ignore','pipe'] });
         const result = JSON.parse(await readFile(temp, 'utf8'));
         csResult.files.push(...result.files); csResult.functions.push(...result.functions); csResult.calls.push(...result.calls); csResult.dependencies.push(...result.dependencies); csResult.diagnostics.push(...result.diagnostics);
       } catch (error) {

@@ -31,12 +31,19 @@ The Library also includes **Archive stale .fdb databases**. Set a source folder 
 - Validate arguments, avoid interactive prompts, return a meaningful nonzero exit code on failure, and keep expected runtime within the profile timeout.
 - Treat scripts as trusted code with the same access as Automator. Never place credentials in source files, arguments, output, or logs.
 
+## Running state and run history
+
+A run belongs to the window, not to the Script Runner view. Start a script from the compact window's action search, close the window, and reopen it: the script keeps running, a **Running** banner with elapsed time and Cancel appears at the top of Script Runner, and a pill with the script name shows in the header on every screen (click it to jump to Script Runner). Only one script runs at a time.
+
+Finished runs appear in **Run history** below the result: status (Succeeded, Failed, Timed out, Canceled, Error), start time, and duration, newest first, up to 30. Select an entry to read its output as a past result; **Clear history** removes finished entries. File Explorer action runs are listed too. History and output are memory-only in the window that ran the script and are cleared when Automator restarts; the Run activity list keeps permanent metadata without output. The compact launcher and the Workspace window each keep their own history.
+
 ## Removing profiles
 
 The Remove button on a profile row uses a two-step inline confirmation: the first click shows Yes and Cancel, Escape or Cancel dismisses them, and they reset after six seconds. The command-palette delete keeps its own confirmation prompt.
 
 ## Code map
 
+- `ui/modules/scriptRunStore.ts` owns running and finished runs for the window (memory only); `tests/script-run-store.test.mjs` covers it.
 - `ui/modules/ScriptRunnerView.tsx` contains profile editing, interpreter defaults, Explorer registration handoff, run/cancel, and output presentation. `scriptTemplateViewModel.ts` creates validated PowerShell profile drafts from `.ps1` Explorer requests.
 - `contracts/scriptRunner.ts` validates renderer-facing profile and result shapes.
 - `src/Automator.Application/Automation/ScriptRunnerModule.cs` validates profiles, expands global variables in argument values, invokes the process capability, and interprets text/JSON output.

@@ -24,11 +24,12 @@ import { GlobalVariablesContext, GlobalVariablesEditor } from './variables/Globa
 import { NotificationCenter } from './activity/NotificationCenter';
 import { RunActivityView } from './activity/RunActivityView';
 import { LatestModuleResult } from './activity/LatestModuleResult';
+import { useScriptRuns } from './modules/scriptRunStore';
+import { useBrowserRun } from './modules/browserRunStore';
 import { rememberTransientResult } from './activity/transientResults';
 import { FileExplorerLaunchContext } from './FileExplorerLaunchContext';
-
 import { AgentAccessSettings } from './AgentAccessSettings';
-import { useBrowserRun } from './modules/browserRunStore';
+
 type Binding = BackendUiState['bindings'][number];
 type SettingsDraft = Pick<BackendUiState, 'hotkey' | 'theme' | 'startWithWindows' | 'bindings'>;
 
@@ -217,9 +218,9 @@ function SettingsDialog({
               </label>
             </section>
 
-            <section className="settings-section">
             <AgentAccessSettings bridge={bridge} reportError={reportError} />
 
+            <section className="settings-section">
               <div className="section-heading"><Sparkles size={15} /><h2>Application aliases</h2></div>
               {draft.bindings.length === 0 ? <p className="settings-empty">No saved applications yet. Add one from the catalog.</p> : (
                 <div className="settings-bindings">
@@ -297,6 +298,7 @@ export function App() {
   const [runActivity, setRunActivity] = useState<RunActivitySnapshot>({ contractVersion: 1, entries: [] });
   const [activityOpen, setActivityOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const runningScript = useScriptRuns().find((run) => run.finishedAt === null);
   const runningBrowser = useBrowserRun().active;
   const [selectedActivityRunId, setSelectedActivityRunId] = useState<string | null>(null);
   const [localQuery, setLocalQuery] = useState('');
@@ -830,6 +832,13 @@ export function App() {
           {preview && <span className="preview-badge">Preview</span>}
         </div>
         <div className="topbar-actions">
+          {runningScript && <button className="script-running-pill" type="button" title="Open Script Runner" aria-label={`${runningScript.profileName} is running. Open Script Runner`}
+            onClick={() => {
+              const tab = state.tabs.find((candidate) => candidate.id === 'script-runner');
+              if (!tab) return;
+              setActivityOpen(false); setNotificationsOpen(false); setQuickActionsHome(false);
+              void runCommand(() => bridge.selectTab(tab.slot));
+            }}><span className="script-running-dot" />{runningScript.profileName}</button>}
           {runningBrowser && <button className="script-running-pill" type="button" title="Open Browser Automation" aria-label={`${runningBrowser.target} is running. Open Browser Automation`}
             onClick={() => {
               const tab = state.tabs.find((candidate) => candidate.id === 'browser-automation');

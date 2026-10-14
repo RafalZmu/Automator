@@ -25,6 +25,11 @@ Read the root AGENTS.md first. Script Runner executes saved, trusted user script
 - Keep path picker IPC limited to the active Script Runner tab and the allowlisted `file`/`directory` picker kinds. Native dialog options remain host controlled. Browser preview has no local filesystem and should show a recoverable path-resolution message for dropped items.
 - The path field is a reusable UI component only. Do not migrate unrelated tabs or add a generic cross-tab file capability without updating their own contributor guides and authorization boundaries.
 
+## Run lifecycle
+
+- Start runs through `startScriptRun` in `ui/modules/scriptRunStore.ts`, never from component state, and dispatch through the bridge rather than the per-tab `services` object: `services` is disposed (cancelling in-flight actions) when the active tab changes, and the view unmounts when the compact window reopens on its home surface. Do not abort a run in an unmount cleanup.
+- One run at a time. Output and history are memory-only (30 entries); never write them to storage, logs, or Run activity, which stays metadata-only. Explorer runs report into the same store through `recordExternalScriptRun`.
+
 ## Script authoring guidance
 
 Write scripts to accept explicit arguments, use the configured working directory rather than assuming Automator's current directory, validate inputs, and exit promptly. Python scripts should write machine-readable JSON with the standard JSON library; PowerShell scripts should emit one JSON value in JSON mode; Bash scripts should use the configured Bash-compatible syntax and avoid interactive shell state. Test scripts should use isolated temporary files and clean them up.

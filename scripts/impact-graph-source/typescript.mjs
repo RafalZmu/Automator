@@ -54,9 +54,9 @@ function visit(node, callback) {
   node.forEachChild(child => visit(child, callback));
 }
 
-export function scanTypeScript({ root, paths, ts }) {
+export function scanTypeScript({ root, paths, ts, tsconfig = 'tsconfig.json' }) {
   const absoluteRoot = path.resolve(root);
-  const configPath = path.join(absoluteRoot, 'tsconfig.json');
+  const configPath = path.join(absoluteRoot, tsconfig);
   const api = typeof ts.API === 'function' ? new ts.API({ cwd: absoluteRoot }) : ts;
   const snapshot = api.updateSnapshot({ openProjects: [configPath] });
   const project = snapshot.getProject(configPath);
