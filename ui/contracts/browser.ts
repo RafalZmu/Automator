@@ -304,3 +304,87 @@ export function readBrowserActionResult(value: unknown): BrowserAutomationAction
     links,
   };
 }
+
+export type PlaywrightRunKind = 'file' | 'test' | 'tag';
+export type PlaywrightRunState = 'success' | 'failed' | 'timedOut' | 'canceled' | 'error';
+
+export type PlaywrightTestOutcome = { title: string; file: string; line: number; project: string | null; status: string };
+
+/** One finished Playwright run kept in the library database. */
+export type PlaywrightRunRecord = {
+  id: string;
+  kind: PlaywrightRunKind;
+  target: string;
+  state: PlaywrightRunState;
+  message: string;
+  startedUtc: string;
+  finishedUtc: string;
+  durationMilliseconds: number;
+  exitCode: number | null;
+  summary: { passed: number; failed: number; skipped: number; interrupted: number } | null;
+  tests: PlaywrightTestOutcome[];
+  outputTruncated: boolean;
+  projectRoot: string;
+};
+
+/** A run that the backend is executing right now, whichever window or agent started it. */
+export type PlaywrightActiveRun = { id: string; kind: PlaywrightRunKind; target: string; startedUtc: string };
+
+const runKinds = new Set<string>(['file', 'test', 'tag']);
+const runStates = new Set<string>(['success', 'failed', 'timedOut', 'canceled', 'error']);
+
+function readCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function readIsoTime(value: unknown): string | null {
+  return typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+export function readPlaywrightTestOutcomes(value: unknown): PlaywrightTestOutcome[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 256).flatMap((test): PlaywrightTestOutcome[] => {
+    if (!isRecord(test) || typeof test.title !== 'string' || typeof test.file !== 'string' || typeof test.status !== 'string') return [];
+    return [{ title: test.title.slice(0, 512), file: test.file.slice(0, 512), line: readCount(test.line),
+      project: typeof test.project === 'string' ? test.project.slice(0, 128) : null, status: test.status.slice(0, 32) }];
+  });
+}
+
+export function readPlaywrightRunSummary(value: unknown): PlaywrightRunRecord['summary'] {
+  if (!isRecord(value)) return null;
+  return { passed: readCount(value.passed), failed: readCount(value.failed), skipped: readCount(value.skipped), interrupted: readCount(value.interrupted) };
+}
+
+export function readPlaywrightRunHistory(value: unknown): { runs: PlaywrightRunRecord[]; active: PlaywrightActiveRun[] } | null {
+  if (!isRecord(value) || !Array.isArray(value.runs)) return null;
+  const runs = value.runs.slice(0, 200).flatMap((candidate): PlaywrightRunRecord[] => {
+    if (!isRecord(candidate) || typeof candidate.id !== 'string' || typeof candidate.target !== 'string'
+        || typeof candidate.kind !== 'string' || !runKinds.has(candidate.kind)
+        || typeof candidate.state !== 'string' || !runStates.has(candidate.state)) return [];
+    const startedUtc = readIsoTime(candidate.startedUtc);
+    const finishedUtc = readIsoTime(candidate.finishedUtc);
+    if (!startedUtc || !finishedUtc) return [];
+    return [{
+      id: candidate.id,
+      kind: candidate.kind as PlaywrightRunKind,
+      target: candidate.target.slice(0, 512),
+      state: candidate.state as PlaywrightRunState,
+      message: typeof candidate.message === 'string' ? candidate.message.slice(0, 1024) : '',
+      startedUtc,
+      finishedUtc,
+      durationMilliseconds: readCount(candidate.durationMilliseconds),
+      exitCode: typeof candidate.exitCode === 'number' && Number.isInteger(candidate.exitCode) ? candidate.exitCode : null,
+      summary: readPlaywrightRunSummary(candidate.summary),
+      tests: readPlaywrightTestOutcomes(candidate.tests),
+      outputTruncated: candidate.outputTruncated === true,
+      projectRoot: typeof candidate.projectRoot === 'string' ? candidate.projectRoot.slice(0, 1024) : '',
+    }];
+  });
+  const active = Array.isArray(value.active) ? value.active.slice(0, 16).flatMap((candidate): PlaywrightActiveRun[] => {
+    if (!isRecord(candidate) || typeof candidate.id !== 'string' || typeof candidate.target !== 'string'
+        || typeof candidate.kind !== 'string' || !runKinds.has(candidate.kind)) return [];
+    const startedUtc = readIsoTime(candidate.startedUtc);
+    return startedUtc ? [{ id: candidate.id, kind: candidate.kind as PlaywrightRunKind, target: candidate.target.slice(0, 512), startedUtc }] : [];
+  }) : [];
+  return { runs, active };
+}

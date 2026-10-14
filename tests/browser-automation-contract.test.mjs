@@ -5,6 +5,7 @@ import {
   validatePlaywrightSectionPath,
   readBrowserActionResult,
   readBrowserProfiles,
+  readPlaywrightRunHistory,
   validateBrowserAction,
   validateBrowserProfile,
 } from '../ui/contracts/browser.ts';
@@ -72,4 +73,23 @@ test('Playwright section path validation allows test files under the project and
   assert.equal(validatePlaywrightSectionPath('tests/notes.txt'), null);
   assert.equal(validatePlaywrightSectionPath('/outside.spec.ts'), null);
   assert.equal(validatePlaywrightSectionPath('tests/new.test.mts'), null);
+});
+
+test('Playwright run history decoding keeps bounded known fields and drops malformed rows', () => {
+  const run = {
+    id: 'a1', kind: 'file', target: 'tests/example.spec.ts', state: 'failed', message: 'x: 0 passed, 1 failed, 0 skipped.',
+    startedUtc: '2026-10-14T10:00:00+00:00', finishedUtc: '2026-10-14T10:00:02+00:00', durationMilliseconds: 2000, exitCode: 1,
+    summary: { passed: 0, failed: 1, skipped: 0, interrupted: 0 },
+    tests: [{ title: 'one', file: 'tests/example.spec.ts', line: 3, project: null, status: 'failed' }, { title: 7 }],
+    outputTruncated: false, projectRoot: 'C:\Playwright',
+  };
+  const parsed = readPlaywrightRunHistory({
+    runs: [run, { ...run, id: 'b2', kind: 'shell' }, { ...run, id: 'c3', state: 'weird' }, { ...run, id: 'd4', finishedUtc: 'nope' }, null],
+    active: [{ id: 'live', kind: 'tag', target: 'tag smoke', startedUtc: '2026-10-14T10:01:00+00:00' }, { id: 5 }],
+  });
+  assert.deepEqual(parsed.runs.map((item) => item.id), ['a1']);
+  assert.equal(parsed.runs[0].tests.length, 1);
+  assert.equal(parsed.runs[0].summary.failed, 1);
+  assert.deepEqual(parsed.active.map((item) => item.id), ['live']);
+  assert.equal(readPlaywrightRunHistory({ runs: 'bad' }), null);
 });

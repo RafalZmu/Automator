@@ -28,6 +28,7 @@ import { rememberTransientResult } from './activity/transientResults';
 import { FileExplorerLaunchContext } from './FileExplorerLaunchContext';
 
 import { AgentAccessSettings } from './AgentAccessSettings';
+import { useBrowserRun } from './modules/browserRunStore';
 type Binding = BackendUiState['bindings'][number];
 type SettingsDraft = Pick<BackendUiState, 'hotkey' | 'theme' | 'startWithWindows' | 'bindings'>;
 
@@ -296,6 +297,7 @@ export function App() {
   const [runActivity, setRunActivity] = useState<RunActivitySnapshot>({ contractVersion: 1, entries: [] });
   const [activityOpen, setActivityOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const runningBrowser = useBrowserRun().active;
   const [selectedActivityRunId, setSelectedActivityRunId] = useState<string | null>(null);
   const [localQuery, setLocalQuery] = useState('');
   const [localAlias, setLocalAlias] = useState('');
@@ -828,6 +830,13 @@ export function App() {
           {preview && <span className="preview-badge">Preview</span>}
         </div>
         <div className="topbar-actions">
+          {runningBrowser && <button className="script-running-pill" type="button" title="Open Browser Automation" aria-label={`${runningBrowser.target} is running. Open Browser Automation`}
+            onClick={() => {
+              const tab = state.tabs.find((candidate) => candidate.id === 'browser-automation');
+              if (!tab) return;
+              setActivityOpen(false); setNotificationsOpen(false); setQuickActionsHome(false);
+              void runCommand(() => bridge.selectTab(tab.slot));
+            }}><span className="script-running-dot" />{runningBrowser.target}</button>}
           {isWorkspaceSurface && <>
             <button className="icon-button" type="button" aria-label="Run activity" aria-pressed={activityOpen} title="Run activity" onClick={() => { setActivityOpen((value) => !value); setNotificationsOpen(false); }}><Activity size={16} /></button>
             <div className="notification-anchor">

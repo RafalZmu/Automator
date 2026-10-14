@@ -9,9 +9,16 @@ When the configured managed project is first created, Automator creates a tests 
 
 Runs started from the Playwright Test Explorer are listed in Run Activity without a saved profile identifier.
 
+## Running state and run history
+
+A run belongs to the window, not to the Browser Automation view. Start a test, section or tag group (from the tab or from the compact window's action search), close the window and reopen it: the run keeps going, a **Running** banner with elapsed time and Cancel appears at the top of the tab, and a pill with the target shows in the header on every screen (click it to jump back). Only one run is active per window; a run started by another window or an agent shows as running too (without Cancel) until it ends.
+
+Every finished run is saved to the Automator library database (`browser-automation/run-history`): target, kind, state (Passed, Failed, Timed out, Canceled, Error), start time, duration, exit code, the passed/failed/skipped summary and up to 256 per-test outcomes. The newest 200 are kept across restarts and listed under **Run history**; select an entry to read its outcomes, or use **Clear history**. Raw runner output is never stored. Run Activity keeps its own metadata-only entry for each run.
+
 ## Code map
 
-- ui/modules/BrowserAutomationView.tsx renders project selection, discovered files/tests, tag editing, grouped runs, and browser profiles.
+- ui/modules/BrowserAutomationView.tsx renders project selection, discovered files/tests, tag editing, grouped runs, the running banner and the saved run history.
+- ui/modules/browserRunStore.ts owns the active run for the window (memory only); tests/browser-run-store.test.mjs covers it. `listRunHistory` and `deleteRunHistory` are the backend actions behind the history; tests/Automator.Application.Specs/BrowserRunHistorySpecs.cs covers them, and tests/electron/browser-run-history.test.cjs checks the running banner across tabs, saving, restart persistence and clearing against the real host.
 - contracts/browserAutomation.ts parses explorer state and validates renderer inputs.
 - src/Automator.Application/Automation/BrowserAutomationModule.cs and PlaywrightTestExplorer.cs own module actions, discovery, section creation, tags, and run requests.
 - src/Automator.Infrastructure/Automation/BrowserAutomationProxy.cs, PlaywrightAutomationBrowserService.cs, and browser-worker.cjs own the isolated browser runtime.

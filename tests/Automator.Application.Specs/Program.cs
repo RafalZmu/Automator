@@ -64,6 +64,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("workflow engine stops after the first failed profile", WorkflowEngineStopsAfterFailure),
     ("canceled workflows persist only a safe cancellation summary", CanceledWorkflowPersistsSafeHistory),
     ("run activity retains bounded metadata and projects existing workflow/scheduler history", RunActivitySpecs.RunAsync),
+    ("Playwright test runs are saved to the library with outcomes, cancellation and removal", BrowserRunHistorySpecs.RunAsync),
     ("pending service work does not block serialized launcher commands", ServiceWorkDoesNotBlockLauncherCommands),
 };
 

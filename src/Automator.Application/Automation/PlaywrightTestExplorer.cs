@@ -16,6 +16,8 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
     private const string ExplorerCollection = "test-explorer";
     private const string ProjectRecordId = "active-project";
     private const string TagCollection = "test-tags";
+    private const string RunHistoryCollection = "run-history";
+    private const int MaximumRunHistory = 200;
     private const int SchemaVersion = 1;
     private const int MaximumDiscoveredTests = 2000;
     private const int MaximumTagRecords = 4096;
@@ -31,6 +33,8 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
     {
         PropertyNameCaseInsensitive = true,
     };
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ActiveRunSummary> ActiveRuns = new(StringComparer.Ordinal);
 
     public static string? ConfiguredManagedProjectRoot => GetConfiguredManagedProjectRoot();
 
@@ -297,13 +301,23 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
                 throw new InvalidDataException("Choose a file, test, or tag group to run.");
         }
 
+        var runId = Guid.NewGuid().ToString("N");
+        var startedUtc = DateTimeOffset.UtcNow;
+        ActiveRuns[runId] = new ActiveRunSummary(runId, kind, displayTarget, startedUtc);
+        var recorded = false;
         try
         {
             var process = await processes.ExecuteAsync(new AutomationProcessRequest(runner.NodePath!, arguments, root,
                 TimeSpan.FromSeconds(Math.Min(timeoutSeconds, (int)MaximumRunTimeout.TotalSeconds))), cancellationToken).ConfigureAwait(false);
+            var truncated = process.StandardOutputTruncated || process.StandardErrorTruncated;
             if (process.TimedOut)
-                return Result(AutomationStatus.Warning, $"Playwright run for {displayTarget} exceeded its {timeoutSeconds}-second limit.",
-                    new { timedOut = true, exitCode = (int?)null, durationMilliseconds = process.DurationMilliseconds, summary = (RunSummary?)null, tests = Array.Empty<PlaywrightTestOutcome>(), outputTruncated = process.StandardOutputTruncated || process.StandardErrorTruncated });
+            {
+                var timedOutMessage = $"Playwright run for {displayTarget} exceeded its {timeoutSeconds}-second limit.";
+                recorded = await PersistRunAsync(new BrowserRunRecord(runId, kind, displayTarget, "timedOut", timedOutMessage, startedUtc,
+                    DateTimeOffset.UtcNow, process.DurationMilliseconds, null, null, Array.Empty<PlaywrightTestOutcome>(), truncated, root), CancellationToken.None).ConfigureAwait(false);
+                return Result(AutomationStatus.Warning, timedOutMessage,
+                    new { runId, timedOut = true, exitCode = (int?)null, durationMilliseconds = process.DurationMilliseconds, summary = (RunSummary?)null, tests = Array.Empty<PlaywrightTestOutcome>(), outputTruncated = truncated });
+            }
 
             var report = ParseJsonReport(process.StandardOutput, discovered.Tests);
             var status = process.ExitCode == 0 ? AutomationStatus.Success : AutomationStatus.Error;
@@ -311,20 +325,89 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
             var message = summary is null
                 ? process.ExitCode == 0 ? $"Playwright completed {displayTarget}; per-test summary was unavailable." : $"Playwright failed while running {displayTarget} (exit code {process.ExitCode})."
                 : $"{displayTarget}: {summary.Passed} passed, {summary.Failed} failed, {summary.Skipped} skipped{(summary.Interrupted > 0 ? $", {summary.Interrupted} interrupted" : string.Empty)}.";
+            recorded = await PersistRunAsync(new BrowserRunRecord(runId, kind, displayTarget, process.ExitCode == 0 ? "success" : "failed", message, startedUtc,
+                DateTimeOffset.UtcNow, process.DurationMilliseconds, process.ExitCode, summary, report.Tests, truncated, root), CancellationToken.None).ConfigureAwait(false);
             return Result(status, message, new
             {
+                runId,
                 timedOut = false,
                 exitCode = process.ExitCode,
                 durationMilliseconds = process.DurationMilliseconds,
                 summary,
                 tests = report.Tests,
-                outputTruncated = process.StandardOutputTruncated || process.StandardErrorTruncated,
+                outputTruncated = truncated,
             });
+        }
+        catch (OperationCanceledException)
+        {
+            if (!recorded) await PersistRunAsync(FailedRun(runId, kind, displayTarget, "canceled", "The run was canceled.", startedUtc, root), CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+        catch (Exception)
+        {
+            if (!recorded) await PersistRunAsync(FailedRun(runId, kind, displayTarget, "error", "The Playwright run could not be completed.", startedUtc, root), CancellationToken.None).ConfigureAwait(false);
+            throw;
         }
         finally
         {
+            ActiveRuns.TryRemove(runId, out _);
             if (temporaryList is not null) TryDelete(temporaryList);
         }
+    }
+
+    public async Task<AutomationResult> ListRunHistoryAsync(CancellationToken cancellationToken)
+    {
+        var rows = await library.ListAsync(RunHistoryCollection, cancellationToken).ConfigureAwait(false);
+        var runs = new List<BrowserRunRecord>();
+        foreach (var row in rows)
+        {
+            if (row.SchemaVersion != SchemaVersion) continue;
+            try
+            {
+                var record = row.Data.Deserialize<BrowserRunRecord>(JsonOptions);
+                if (record is { Id.Length: > 0, Target.Length: > 0, Tests: not null } && record.Id == row.Id) runs.Add(record);
+            }
+            catch (JsonException) { }
+        }
+        var ordered = runs.OrderByDescending(run => run.StartedUtc).Take(MaximumRunHistory).ToArray();
+        var active = ActiveRuns.Values.OrderByDescending(run => run.StartedUtc).ToArray();
+        return Result(AutomationStatus.Success, $"{ordered.Length} saved Playwright run{(ordered.Length == 1 ? string.Empty : "s")}.", new { runs = ordered, active });
+    }
+
+    public async Task<AutomationResult> DeleteRunHistoryAsync(JsonElement input, CancellationToken cancellationToken)
+    {
+        if (input.ValueKind == JsonValueKind.Object && input.TryGetProperty("id", out _))
+        {
+            var id = ReadString(input, "id", 64);
+            var removed = await library.DeleteAsync(RunHistoryCollection, id, cancellationToken).ConfigureAwait(false);
+            return Result(AutomationStatus.Success, removed ? "Removed the run from history." : "That run was already removed.", new { removed = removed ? 1 : 0 });
+        }
+        var count = 0;
+        foreach (var row in await library.ListAsync(RunHistoryCollection, cancellationToken).ConfigureAwait(false))
+            if (await library.DeleteAsync(RunHistoryCollection, row.Id, cancellationToken).ConfigureAwait(false)) count++;
+        return Result(AutomationStatus.Success, count == 0 ? "The run history is already empty." : "Cleared the run history.", new { removed = count });
+    }
+
+    private static BrowserRunRecord FailedRun(string id, string kind, string target, string state, string message, DateTimeOffset startedUtc, string root)
+    {
+        var finished = DateTimeOffset.UtcNow;
+        return new BrowserRunRecord(id, kind, target, state, message, startedUtc, finished,
+            Math.Max(0, (long)(finished - startedUtc).TotalMilliseconds), null, null, Array.Empty<PlaywrightTestOutcome>(), false, root);
+    }
+
+    /// <summary>History is best effort: a storage failure must never change the run's own outcome.</summary>
+    private async Task<bool> PersistRunAsync(BrowserRunRecord record, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await library.UpsertAsync(RunHistoryCollection, record.Id, SchemaVersion,
+                JsonSerializer.SerializeToElement(record, JsonOptions), cancellationToken).ConfigureAwait(false);
+            var rows = await library.ListAsync(RunHistoryCollection, cancellationToken).ConfigureAwait(false);
+            foreach (var old in rows.OrderByDescending(row => row.UpdatedUtc).Skip(MaximumRunHistory))
+                await library.DeleteAsync(RunHistoryCollection, old.Id, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException) { return false; }
     }
 
     private async Task<(IReadOnlyList<PlaywrightTestIdentity> Tests, bool Truncated)> DiscoverTestsAsync(
@@ -772,6 +855,10 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         public static RunnerState MissingProject => Unavailable("Choose a Playwright project folder to browse its tests.");
         public static RunnerState Unavailable(string message) => new(false, null, null, null, message);
     }
+    private sealed record ActiveRunSummary(string Id, string Kind, string Target, DateTimeOffset StartedUtc);
+    private sealed record BrowserRunRecord(string Id, string Kind, string Target, string State, string Message, DateTimeOffset StartedUtc,
+        DateTimeOffset FinishedUtc, long DurationMilliseconds, int? ExitCode, RunSummary? Summary, IReadOnlyList<PlaywrightTestOutcome> Tests,
+        bool OutputTruncated, string ProjectRoot);
     private sealed record RunSummary(int Passed, int Failed, int Skipped, int Interrupted);
     private sealed record PlaywrightTestOutcome(string Title, string File, int Line, string? Project, string Status);
     private sealed record PlaywrightRunnerSummary(bool Available, string? Version, string Message);
