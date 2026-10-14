@@ -730,12 +730,44 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
                         status = TryString(results[results.GetArrayLength() - 1], "status");
                     status ??= TryString(test, "status");
                     if (status is null) continue;
-                    outcomes.Add(new PlaywrightTestOutcome(title, currentFile, line, project, status));
+                    var (reason, error) = status is "passed" or "skipped" ? (null, null) : ReadFailure(test, status);
+                    outcomes.Add(new PlaywrightTestOutcome(title, currentFile, line, project, status, reason, error));
                 }
             }
         }
         if (suite.TryGetProperty("suites", out var nested) && nested.ValueKind == JsonValueKind.Array)
             foreach (var child in nested.EnumerateArray()) WalkSuites(child, currentFile, outcomes);
+    }
+
+    private const int MaximumErrorExcerpt = 500;
+
+    /// <summary>Reads the last attempt's first error and says why the test did not pass.</summary>
+    private static (string? Reason, string? Error) ReadFailure(JsonElement test, string status)
+    {
+        string? message = null;
+        if (test.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array && results.GetArrayLength() > 0)
+        {
+            var last = results[results.GetArrayLength() - 1];
+            if (last.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
+                foreach (var error in errors.EnumerateArray())
+                    if (TryString(error, "message") is { Length: > 0 } text) { message = text; break; }
+            if (message is null && last.TryGetProperty("error", out var single)) message = TryString(single, "message");
+        }
+        if (string.IsNullOrWhiteSpace(message))
+            return (status == "timedOut" ? "testTimeout" : status == "interrupted" ? "interrupted" : null, null);
+        var clean = StripAnsi(message).Replace("\r", string.Empty).Trim();
+        return (ClassifyFailure(status, clean), clean.Length <= MaximumErrorExcerpt ? clean : clean[..MaximumErrorExcerpt] + "…");
+    }
+
+    internal static string ClassifyFailure(string status, string message)
+    {
+        if (status == "interrupted") return "interrupted";
+        var timedOutWaiting = Regex.IsMatch(message, "Timeout:? \\d+ms( exceeded)?|timed? ?out", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        if (status == "timedOut" || message.Contains("Test timeout of", StringComparison.Ordinal)) return "testTimeout";
+        var isExpect = message.Contains("expect(", StringComparison.Ordinal) || message.Contains("Expected:", StringComparison.Ordinal)
+            || message.Contains("Received:", StringComparison.Ordinal);
+        if (isExpect) return timedOutWaiting ? "expectTimeout" : "assertion";
+        return timedOutWaiting ? "actionTimeout" : "error";
     }
 
     private static int ReadPositiveInt(string value) => int.TryParse(value, out var result) && result > 0 ? result : 0;
@@ -860,7 +892,8 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         DateTimeOffset FinishedUtc, long DurationMilliseconds, int? ExitCode, RunSummary? Summary, IReadOnlyList<PlaywrightTestOutcome> Tests,
         bool OutputTruncated, string ProjectRoot);
     private sealed record RunSummary(int Passed, int Failed, int Skipped, int Interrupted);
-    private sealed record PlaywrightTestOutcome(string Title, string File, int Line, string? Project, string Status);
+    private sealed record PlaywrightTestOutcome(string Title, string File, int Line, string? Project, string Status,
+        string? Reason = null, string? Error = null);
     private sealed record PlaywrightRunnerSummary(bool Available, string? Version, string Message);
     private sealed record StaleTagSummary(string File, string Title, IReadOnlyList<string> Tags);
     private sealed record PlaywrightTestFileSection(string Path, IReadOnlyList<PlaywrightTestIdentity> Tests);

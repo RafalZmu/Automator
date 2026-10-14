@@ -80,7 +80,7 @@ test('Playwright run history decoding keeps bounded known fields and drops malfo
     id: 'a1', kind: 'file', target: 'tests/example.spec.ts', state: 'failed', message: 'x: 0 passed, 1 failed, 0 skipped.',
     startedUtc: '2026-10-14T10:00:00+00:00', finishedUtc: '2026-10-14T10:00:02+00:00', durationMilliseconds: 2000, exitCode: 1,
     summary: { passed: 0, failed: 1, skipped: 0, interrupted: 0 },
-    tests: [{ title: 'one', file: 'tests/example.spec.ts', line: 3, project: null, status: 'failed' }, { title: 7 }],
+    tests: [{ title: 'one', file: 'tests/example.spec.ts', line: 3, project: null, status: 'failed', reason: 'assertion', error: 'Expected: 4' }, { title: 'two', file: 'f', line: 1, status: 'failed', reason: 'bogus' }, { title: 7 }],
     outputTruncated: false, projectRoot: 'C:\Playwright',
   };
   const parsed = readPlaywrightRunHistory({
@@ -88,7 +88,9 @@ test('Playwright run history decoding keeps bounded known fields and drops malfo
     active: [{ id: 'live', kind: 'tag', target: 'tag smoke', startedUtc: '2026-10-14T10:01:00+00:00' }, { id: 5 }],
   });
   assert.deepEqual(parsed.runs.map((item) => item.id), ['a1']);
-  assert.equal(parsed.runs[0].tests.length, 1);
+  assert.equal(parsed.runs[0].tests.length, 2);
+  assert.deepEqual([parsed.runs[0].tests[0].reason, parsed.runs[0].tests[0].error], ['assertion', 'Expected: 4']);
+  assert.deepEqual([parsed.runs[0].tests[1].reason, parsed.runs[0].tests[1].error], [null, null]);
   assert.equal(parsed.runs[0].summary.failed, 1);
   assert.deepEqual(parsed.active.map((item) => item.id), ['live']);
   assert.equal(readPlaywrightRunHistory({ runs: 'bad' }), null);

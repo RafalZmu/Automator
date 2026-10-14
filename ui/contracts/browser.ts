@@ -308,7 +308,19 @@ export function readBrowserActionResult(value: unknown): BrowserAutomationAction
 export type PlaywrightRunKind = 'file' | 'test' | 'tag';
 export type PlaywrightRunState = 'success' | 'failed' | 'timedOut' | 'canceled' | 'error';
 
-export type PlaywrightTestOutcome = { title: string; file: string; line: number; project: string | null; status: string };
+export type PlaywrightFailureReason = 'testTimeout' | 'expectTimeout' | 'assertion' | 'actionTimeout' | 'error' | 'interrupted';
+
+export type PlaywrightTestOutcome = {
+  title: string; file: string; line: number; project: string | null; status: string;
+  reason: PlaywrightFailureReason | null; error: string | null;
+};
+
+const failureReasons = new Set<string>(['testTimeout', 'expectTimeout', 'assertion', 'actionTimeout', 'error', 'interrupted']);
+
+export const failureReasonLabels: Record<PlaywrightFailureReason, string> = {
+  testTimeout: 'Test timeout', expectTimeout: 'Expect timed out waiting', assertion: 'Assertion failed',
+  actionTimeout: 'Action timed out', error: 'Error', interrupted: 'Interrupted',
+};
 
 /** One finished Playwright run kept in the library database. */
 export type PlaywrightRunRecord = {
@@ -346,7 +358,9 @@ export function readPlaywrightTestOutcomes(value: unknown): PlaywrightTestOutcom
   return value.slice(0, 256).flatMap((test): PlaywrightTestOutcome[] => {
     if (!isRecord(test) || typeof test.title !== 'string' || typeof test.file !== 'string' || typeof test.status !== 'string') return [];
     return [{ title: test.title.slice(0, 512), file: test.file.slice(0, 512), line: readCount(test.line),
-      project: typeof test.project === 'string' ? test.project.slice(0, 128) : null, status: test.status.slice(0, 32) }];
+      project: typeof test.project === 'string' ? test.project.slice(0, 128) : null, status: test.status.slice(0, 32),
+      reason: typeof test.reason === 'string' && failureReasons.has(test.reason) ? test.reason as PlaywrightFailureReason : null,
+      error: typeof test.error === 'string' && test.error ? test.error.slice(0, 600) : null }];
   });
 }
 

@@ -5,9 +5,10 @@ public sealed class AutomationRequestExecutor
 {
     private readonly object _gate = new();
     private readonly Dictionary<(string ModuleId, string RequestId), CancellationTokenSource> _requests = [];
+    private readonly HashSet<(string ModuleId, string RequestId)> _surviveModuleCancel = [];
 
     public async Task<T> ExecuteAsync<T>(string moduleId, string requestId, CancellationToken contextToken,
-        Func<CancellationToken, Task<T>> operation)
+        Func<CancellationToken, Task<T>> operation, bool survivesModuleCancel = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(moduleId);
         ArgumentException.ThrowIfNullOrWhiteSpace(requestId);
@@ -22,6 +23,7 @@ public sealed class AutomationRequestExecutor
                 lifetime.Dispose();
                 throw new InvalidOperationException($"Request '{requestId}' is already active for module '{moduleId}'.");
             }
+            if (survivesModuleCancel) _surviveModuleCancel.Add(key);
         }
 
         try
@@ -30,7 +32,7 @@ public sealed class AutomationRequestExecutor
         }
         finally
         {
-            lock (_gate) _requests.Remove(key);
+            lock (_gate) { _requests.Remove(key); _surviveModuleCancel.Remove(key); }
             lifetime.Dispose();
         }
     }
@@ -44,7 +46,8 @@ public sealed class AutomationRequestExecutor
         return true;
     }
 
-    public int CancelModule(string moduleId) => CancelMatching(key => string.Equals(key.ModuleId, moduleId, StringComparison.Ordinal));
+    /// <summary>Cancels a module's requests, except long runs that were started to outlive tab changes.</summary>
+    public int CancelModule(string moduleId) => CancelMatching(key => string.Equals(key.ModuleId, moduleId, StringComparison.Ordinal) && !_surviveModuleCancel.Contains(key));
 
     public int CancelAll() => CancelMatching(static _ => true);
 

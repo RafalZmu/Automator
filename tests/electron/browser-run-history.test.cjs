@@ -38,6 +38,15 @@ async function openBrowserAutomation(app) {
   return page;
 }
 
+const slowSpec = [
+  "import { test } from '@playwright/test';",
+  '',
+  "test('slow check', async () => {",
+  '  await new Promise((resolve) => setTimeout(resolve, 6000));',
+  '});',
+  '',
+].join('\n');
+
 test('a Playwright run keeps its running state across tabs and is saved to the run history database', async () => {
   const dataDirectory = path.join(workspace, 'artifacts', 'test-data', 'electron-ui', 'browser-run-history', randomUUID());
   const backendDataDirectory = path.join(dataDirectory, 'backend');
@@ -48,7 +57,7 @@ test('a Playwright run keeps its running state across tabs and is saved to the r
       "import { test } from '@playwright/test';\n\ntest('slow check', async () => {\n  await new Promise((resolve) => setTimeout(resolve, 6000));\n});\n");
     await page.getByRole('button', { name: 'Refresh tests' }).click();
     await page.getByText('slow check', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
-    assert.equal(await page.getByRole('region', { name: 'Playwright run history' }).count(), 0, 'a new database has no run history');
+    await page.getByRole('region', { name: 'Playwright run history' }).getByText('No runs yet').waitFor({ state: 'visible' });
 
     await page.getByRole('button', { name: 'Run section tests/slow.spec.ts' }).click();
     const banner = page.getByRole('status', { name: 'Playwright run in progress' });
@@ -79,7 +88,35 @@ test('a Playwright run keeps its running state across tabs and is saved to the r
     assert.match(await restored.first().innerText(), /Passed/);
 
     await page.getByRole('button', { name: 'Clear history' }).click();
-    await page.getByRole('region', { name: 'Playwright run history' }).waitFor({ state: 'detached', timeout: 15_000 });
+    await page.getByRole('region', { name: 'Playwright run history' }).getByText('No runs yet').waitFor({ state: 'visible', timeout: 15_000 });
+  } finally {
+    await app.close();
+  }
+});
+
+test('a run started in the compact window is not canceled when the window leaves the tab', async () => {
+  const dataDirectory = path.join(workspace, 'artifacts', 'test-data', 'electron-ui', 'browser-run-compact', randomUUID());
+  const app = await launchHost('browser-run-compact', dataDirectory, path.join(dataDirectory, 'backend'));
+  try {
+    const launcher = await app.firstWindow();
+    await launcher.getByPlaceholder('Search apps, profiles, and actions…').waitFor({ state: 'visible' });
+    await launcher.getByRole('tab', { name: 'Browser Automation, tab 4' }).click();
+    // Tests are discovered on open without pressing Refresh.
+    await launcher.getByText('Automator example test', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
+    await fs.writeFile(path.join(dataDirectory, 'Playwright', 'tests', 'slow.spec.ts'),
+      slowSpec);
+    await launcher.getByRole('button', { name: 'Refresh tests' }).click();
+    await launcher.getByText('slow check', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
+    await launcher.getByRole('button', { name: 'Run section tests/slow.spec.ts' }).click();
+    await launcher.getByRole('status', { name: 'Playwright run in progress' }).waitFor({ state: 'visible', timeout: 15_000 });
+
+    await launcher.evaluate(() => window.automator.selectTab(2));
+    await launcher.getByRole('region', { name: 'Script Runner' }).waitFor({ state: 'visible' });
+    await launcher.waitForTimeout(9_000);
+    await launcher.evaluate(() => window.automator.selectTab(4));
+    const entry = launcher.getByRole('region', { name: 'Playwright run history' }).getByRole('button', { name: /tests\/slow\.spec\.ts/ });
+    try { await entry.waitFor({ state: 'visible', timeout: 30_000 }); } catch (error) { console.log('BODY', await launcher.locator('body').innerText()); throw error; }
+    assert.match(await entry.first().innerText(), /Passed/);
   } finally {
     await app.close();
   }

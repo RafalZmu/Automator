@@ -419,7 +419,10 @@ public sealed class BackendServer : IAsyncDisposable
         var activeTab = ResolveRequestedTab(parameters.ModuleId, parameters.HostWindowContext, request);
         var registered = ValidateRegisteredModule(activeTab, request, requireSettingsVersion: false);
         var workspace = parameters.HostWindowContext?.Role == "workspace";
-        var context = workspace
+        // Long runs must outlive the compact window: its shared context ends when the panel hides or the tab changes,
+        // which would cancel the run. Selection was validated above; the run is still cancelable by request id.
+        var detached = workspace || IsDetachedRunAction(parameters.ModuleId, parameters.ActionId);
+        var context = detached
             ? CreateModuleServices(activeTab, request)
             : RequireActiveServiceContext(parameters.ModuleId, null, request, parameters.HostWindowContext)!;
 
@@ -463,7 +466,7 @@ public sealed class BackendServer : IAsyncDisposable
                             await PublishActivityChangedSafelyAsync().ConfigureAwait(false);
                         }
                     }
-                }).ConfigureAwait(false);
+                }, IsDetachedRunAction(parameters.ModuleId, parameters.ActionId)).ConfigureAwait(false);
         }
         catch (InvalidOperationException exception) when (exception.Message.Contains("already active for module", StringComparison.Ordinal))
         {
@@ -482,9 +485,13 @@ public sealed class BackendServer : IAsyncDisposable
         }
         finally
         {
-            if (workspace) await context.DisposeAsync().ConfigureAwait(false);
+            if (detached) await context.DisposeAsync().ConfigureAwait(false);
         }
     }
+
+    private static bool IsDetachedRunAction(string moduleId, string actionId) =>
+        (moduleId == "browser-automation" && actionId == "runTests")
+        || (moduleId == "script-runner" && actionId is "runProfile" or "runAgain");
 
     private Task<AutomationVariableSnapshot> GetGlobalVariablesAsync(RpcRequest request)
     {

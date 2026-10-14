@@ -64,24 +64,52 @@ public static class BrowserRunHistorySpecs
             };
             await Check.ThrowsAsync<OperationCanceledException>(() => Dispatch("runTests", "{\"kind\":\"file\",\"file\":\"tests/example.spec.ts\"}", cancellation.Token));
 
+            var reasons = new[]
+            {
+                ("timeout", "timedOut", "Test timeout of 30000ms exceeded."),
+                ("mismatch", "failed", string.Join("\n", "Error: expect(received).toBe(expected) // Object.is equality", "", "Expected: 4", "Received: 5")),
+                ("waiting", "failed", string.Join("\n", "Error: expect(locator).toBeVisible() failed", "", "Locator: getByText('x')", "Expected: visible", "Received: <element(s) not found>", "Timeout: 5000ms")),
+                ("click", "failed", string.Join("\n", "Error: page.click: Timeout 30000ms exceeded.", "Call log:", "  - waiting for locator('#go')")),
+                ("boom", "failed", "TypeError: boom is not a function"),
+            };
+            var esc = ((char)27).ToString();
+            var specs = string.Join(",", reasons.Select((item, index) => JsonSerializer.Serialize(new
+            {
+                title = item.Item1, line = index + 1,
+                tests = new[] { new { projectName = "", results = new[] { new { status = item.Item2, errors = new[] { new { message = esc + "[31m" + item.Item3 + esc + "[39m" } } } } } },
+            })));
+            var reasonReport = "{\"suites\":[{\"file\":\"tests/example.spec.ts\",\"specs\":[" + specs + "]}]}";
+            process.Handler = request => request.Arguments.Contains("--list")
+                ? new(0, false, List, "", false, false, 5) : new(1, false, reasonReport, "", false, false, 50);
+            var reasonRun = await Dispatch("runTests", "{\"kind\":\"file\",\"file\":\"tests/example.spec.ts\"}");
+            var outcomes = reasonRun.Data.GetProperty("tests").EnumerateArray().ToDictionary(test => test.GetProperty("title").GetString()!);
+            Check.Equal("testTimeout", outcomes["timeout"].GetProperty("reason").GetString());
+            Check.Equal("assertion", outcomes["mismatch"].GetProperty("reason").GetString());
+            Check.Equal("expectTimeout", outcomes["waiting"].GetProperty("reason").GetString());
+            Check.Equal("actionTimeout", outcomes["click"].GetProperty("reason").GetString());
+            Check.Equal("error", outcomes["boom"].GetProperty("reason").GetString());
+            Check.True(outcomes["mismatch"].GetProperty("error").GetString()!.StartsWith("Error: expect(received)", StringComparison.Ordinal));
+            Check.True(!outcomes["mismatch"].GetProperty("error").GetString()!.Contains(esc));
+            Check.Equal("Test timeout of 30000ms exceeded.", outcomes["timeout"].GetProperty("error").GetString());
+
             var listed = await Dispatch("listRunHistory", "{}");
             var runs = listed.Data.GetProperty("runs").EnumerateArray().ToArray();
-            Check.Equal(3, runs.Length);
+            Check.Equal(4, runs.Length);
             Check.Equal(0, listed.Data.GetProperty("active").GetArrayLength());
-            Check.True(runs.Select(run => run.GetProperty("state").GetString()).OrderBy(state => state).SequenceEqual(["canceled", "failed", "success"]));
+            Check.True(runs.Select(run => run.GetProperty("state").GetString()).OrderBy(state => state).SequenceEqual(["canceled", "failed", "failed", "success"]));
             var saved = runs.Single(run => run.GetProperty("id").GetString() == runId);
             Check.Equal("success", saved.GetProperty("state").GetString());
             Check.Equal("tests/example.spec.ts", saved.GetProperty("target").GetString());
             Check.Equal(1234L, saved.GetProperty("durationMilliseconds").GetInt64());
             Check.Equal(1, saved.GetProperty("summary").GetProperty("passed").GetInt32());
             Check.Equal("passed", saved.GetProperty("tests")[0].GetProperty("status").GetString());
-            Check.True(library.Count("run-history") == 3);
+            Check.True(library.Count("run-history") == 4);
 
             var removed = await Dispatch("deleteRunHistory", $"{{\"id\":\"{runId}\"}}");
             Check.Equal(1, removed.Data.GetProperty("removed").GetInt32());
-            Check.Equal(2, (await Dispatch("listRunHistory", "{}")).Data.GetProperty("runs").GetArrayLength());
+            Check.Equal(3, (await Dispatch("listRunHistory", "{}")).Data.GetProperty("runs").GetArrayLength());
             var cleared = await Dispatch("deleteRunHistory", "{}");
-            Check.Equal(2, cleared.Data.GetProperty("removed").GetInt32());
+            Check.Equal(3, cleared.Data.GetProperty("removed").GetInt32());
             Check.Equal(0, (await Dispatch("listRunHistory", "{}")).Data.GetProperty("runs").GetArrayLength());
         }
         finally
