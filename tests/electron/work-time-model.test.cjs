@@ -204,6 +204,29 @@ test('work-time reports filter inclusive local dates and tags without changing s
   assert.deepEqual(entries.map((item) => item.id), ['today', 'monday', 'last-week']);
 });
 
+test('work-time tag suggestions offer previously used tags, newest first, without repeating tags already in the field', async () => {
+  const { getRecentWorkTimeTags, suggestWorkTimeTags, applyWorkTimeTagSuggestion, parseWorkTimeTags } = await import(modelUrl);
+  const entries = [
+    { tags: ['Planning', 'old'] },
+    { tags: ['release'] },
+    { tags: ['planning', 'bug fix'] },
+  ];
+
+  const known = getRecentWorkTimeTags(entries);
+  assert.deepEqual(known, ['planning', 'bug fix', 'release', 'old'], 'newest entry first, one spelling per case-insensitive tag');
+  assert.deepEqual(suggestWorkTimeTags(known, ''), known);
+  assert.deepEqual(suggestWorkTimeTags(known, 'release, '), ['planning', 'bug fix', 'old'], 'tags already in the field are not offered again');
+  assert.deepEqual(suggestWorkTimeTags(known, 'Release, PL'), ['planning'], 'the fragment after the last comma narrows case-insensitively');
+  assert.deepEqual(suggestWorkTimeTags(['beta', 'delta', 'alpha'], 'a'), ['alpha', 'beta', 'delta'], 'prefix matches precede substring matches');
+  assert.deepEqual(suggestWorkTimeTags(known, 'planning'), [], 'a fully typed tag is not suggested back');
+  assert.deepEqual(suggestWorkTimeTags(known, '', 2), ['planning', 'bug fix'], 'the list respects the limit');
+
+  assert.equal(applyWorkTimeTagSuggestion('', 'planning'), 'planning, ');
+  assert.equal(applyWorkTimeTagSuggestion('release, pl', 'planning'), 'release, planning, ');
+  assert.equal(applyWorkTimeTagSuggestion(' release ,, ', 'old'), 'release, old, ');
+  assert.deepEqual(parseWorkTimeTags('release, planning, '), ['release', 'planning']);
+});
+
 test('work-time CSV export preserves exact milliseconds and escapes spreadsheet formulas and delimiters', async () => {
   const { createWorkTimeCsv } = await import(modelUrl);
   const entry = {

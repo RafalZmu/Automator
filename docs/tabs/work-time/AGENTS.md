@@ -29,6 +29,8 @@ Read the root AGENTS.md first. Slot 7 is the Work Time logger; the legacy Focus 
 - Render every running/paused timer and every ended draft independently. Resume is unavailable while another timer runs. End/discard/save operations must target the selected ID; discarding a paused timer and discarding an ended draft require confirmation.
 - Prefill each ended draft's editable description and tags independently so saving one draft cannot overwrite details for another.
 
+- Render every tag field through `WorkTimeTagsInput` so suggestions stay consistent. Keep the suggestion rules (`getRecentWorkTimeTags`, `suggestWorkTimeTags`, `applyWorkTimeTagSuggestion`) in `workTimeViewModel.ts`: newest-used first, case-insensitive, skipping tags already in the field. Suggestions are renderer-only and come from loaded history plus drafts; do not log or persist a separate tag list. Draft tag text is held per draft ID like draft descriptions.
+
 Discard on timers and drafts uses `InlineConfirmButton` (`ui/components/InlineConfirmButton.tsx`). Keep the visible `Discard` and `Discard draft` names and do not reintroduce `window.confirm`.
 
 ## Code and checks

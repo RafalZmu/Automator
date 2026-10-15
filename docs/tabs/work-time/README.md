@@ -4,6 +4,8 @@ Work Time logs elapsed work intervals rather than running a Pomodoro cycle. Star
 
 Time can also be registered without any timer. The “Add time without the timer” card (Launcher and Workspace) takes an amount of time in hours and minutes (for example 1 hour 5 minutes), a required description, and optional tags. The entry ends at the moment it is added and starts that duration earlier, and is saved as one continuous segment. The duration must be at least one minute, with up to 99 hours and minutes from 0 to 59. Manual entries may overlap other entries, and they do not affect running timers or drafts. To record a specific past time, add the entry and then edit its start and end in the Workspace work log.
 
+Every tag field (new manual entry, ended draft, and editing a saved entry) is a comma-separated text box that suggests tags used before. Suggestions appear as “Used before” chips under the field, most recently used first (up to 8). They come from the loaded saved entries and the current drafts, skip tags already in the field, and narrow as you type after the last comma; click a chip to insert it. Tags from older, not-yet-loaded history pages are not suggested until those pages are loaded.
+
 The history supports filtering by date and tag, editing or deleting entries, viewing totals, and exporting a CSV report. The log opens with the newest 250 entries and shows “Showing N of M entries”; “Load older entries” appends the next page through `getHistory`. Any saved change reloads the newest page and discards the loaded older pages. Report totals cover only the loaded entries, not every stored entry; load older pages first for totals across the whole log. Exporting loads every remaining page before it builds the CSV, so the file covers all stored entries that match the filters. Editing a saved entry can also correct its start and end times. Changing either time replaces the entry with one continuous segment from the new start to the new end, so any pauses it had are removed and its duration becomes the new interval; the edit form warns about this for entries with pauses. Saving with both times unchanged keeps the entry's pauses, segments, and exact timestamps. Multiple timers and ended drafts remain available after a restart.
 
 While this tab is active, press **S** to pause the running timer, or focus the New timer description when none is running. It never chooses a paused timer to resume. The shortcut is also listed in the tab command menu and does not run while editing text.
@@ -17,7 +19,8 @@ Discard on a paused timer and Discard draft use the same two-step inline confirm
 ## Code map
 
 - ui/modules/FocusSessionsView.tsx renders the Work Time tab; its filename is retained from the older Focus Sessions module.
-- ui/modules/workTimeViewModel.ts handles elapsed-time display, local working-period overlap, filters, tags, report totals, and CSV generation.
+- ui/modules/workTimeViewModel.ts handles elapsed-time display, local working-period overlap, filters, tags (including `parseWorkTimeTags` and tag suggestions), report totals, and CSV generation.
+- ui/modules/WorkTimeTagsInput.tsx is the shared tag field with suggestion chips used by the manual-entry card, ended drafts, and the Workspace edit form.
 - src/Automator.Application/Automation/FocusSessionsModule.cs exposes the slot 7 actions under the legacy module ID.
 - AutomationWorkTimeCoordinator.cs persists named running/paused timers, independent unsaved drafts, running segments, and saved entries; AutomationWorkTimeContracts.cs defines their data.
 - Tests: tests/electron/work-time-model.test.cjs and tests/Automator.Focus.Specs.

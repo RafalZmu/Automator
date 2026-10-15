@@ -65,6 +65,13 @@
 .work-time-tags-input > svg { flex: none; color: var(--accent); }
 .work-time-tags-input input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--ink); background: transparent; font: inherit; font-size: 9px; }
 .work-time-tags-input small { flex: none; color: var(--muted); font-size: 7px; font-weight: 400; }
+.work-time-tags-field { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.work-time-tag-suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.work-time-tag-suggestions > span { color: var(--muted); font-size: 7px; font-weight: 400; }
+.work-time-tag-suggestion { padding: 2px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--accent-strong); background: var(--accent-soft); font: inherit; font-size: 7px; cursor: pointer; }
+.work-time-tag-suggestion:hover, .work-time-tag-suggestion:focus-visible { border-color: rgba(24,130,152,.48); outline: 0; }
+.work-time-edit-tags { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 7px; font-weight: 620; }
+.work-time-edit-form .work-time-tags-input input { min-height: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; }
 .work-time-character-count { margin-top: -6px; color: var(--muted); font-size: 7px; text-align: right; }
 .work-time-entry-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 1px; }
 .work-time-entry-actions .primary-button, .work-time-entry-actions .secondary-button, .work-time-discard { min-height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 9px; font-size: 8px; }

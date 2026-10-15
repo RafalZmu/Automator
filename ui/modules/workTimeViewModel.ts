@@ -343,6 +343,49 @@ export function getWorkTimeTags(entries: readonly Pick<WorkTimeEntry, 'tags'>[])
     left.localeCompare(right, undefined, { sensitivity: 'base' }) || left.localeCompare(right));
 }
 
+export const WORK_TIME_TAG_SUGGESTION_LIMIT = 8;
+
+/** Splits a comma-separated tag field into trimmed, non-empty tags. */
+export function parseWorkTimeTags(text: string): string[] {
+  return text.split(',').map((tag) => tag.trim()).filter(Boolean);
+}
+
+/** Tags already used by the given entries (listed oldest to newest), most recently used first, one per case-insensitive name. */
+export function getRecentWorkTimeTags(entries: readonly Pick<WorkTimeEntry, 'tags'>[]): string[] {
+  const tags = new Map<string, string>();
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    for (const tag of entries[index].tags) {
+      const key = tag.toLocaleLowerCase();
+      if (!tags.has(key)) tags.set(key, tag);
+    }
+  }
+  return [...tags.values()];
+}
+
+/**
+ * Suggests known tags for a comma-separated field. Tags already complete in the field are skipped, and the fragment after
+ * the last comma narrows the list (prefix matches first, then substring matches). Order within each group follows `known`.
+ */
+export function suggestWorkTimeTags(known: readonly string[], text: string, limit = WORK_TIME_TAG_SUGGESTION_LIMIT): string[] {
+  const parts = text.split(',');
+  const fragment = (parts.pop() ?? '').trim().toLocaleLowerCase();
+  const used = new Set(parts.map((tag) => tag.trim().toLocaleLowerCase()).filter(Boolean));
+  const prefix: string[] = [];
+  const inner: string[] = [];
+  for (const tag of known) {
+    const key = tag.toLocaleLowerCase();
+    if (used.has(key) || key === fragment) continue;
+    if (!fragment || key.startsWith(fragment)) prefix.push(tag);
+    else if (key.includes(fragment)) inner.push(tag);
+  }
+  return [...prefix, ...inner].slice(0, Math.max(0, limit));
+}
+
+/** Replaces the fragment being typed after the last comma with the chosen tag and leaves the field ready for the next one. */
+export function applyWorkTimeTagSuggestion(text: string, tag: string): string {
+  return `${[...parseWorkTimeTags(text.split(',').slice(0, -1).join(',')), tag].join(', ')}, `;
+}
+
 function csvCell(value: string | number): string {
   const text = String(value);
   const safe = /^[\t\r\n ]*[=+\-@]/.test(text) ? `'${text}` : text;

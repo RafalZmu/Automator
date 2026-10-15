@@ -83,6 +83,16 @@ Run focused model cases with node --experimental-strip-types --test --test-concu
 
 **Expected result:** Matching entries are returned case-insensitively, date bounds are inclusive, tags are normalized for display, and the source list is unchanged.
 
+### work-time tag suggestions offer previously used tags, newest first, without repeating tags already in the field
+
+**Steps**
+
+1. Build entries whose tags differ in case and recency.
+2. Request suggestions for an empty field, for a field with completed tags, for a partly typed tag, and with a small limit.
+3. Apply a suggestion to fields containing a partial or empty fragment.
+
+**Expected result:** Suggestions list each tag once, most recently used first, omit tags already in the field and fully typed tags, narrow by the text after the last comma with prefix matches first, respect the limit, and applying one yields a comma-separated list ready for the next tag.
+
 ### work-time CSV export preserves exact milliseconds and escapes spreadsheet formulas and delimiters
 
 **Steps**
@@ -187,6 +197,7 @@ The test filename and view-model module retain the old Focus Sessions name for c
 1. Open Work Time in the compact launcher and verify that report controls are absent.
 2. Name and start timer A, pause it, then start timer B. End paused A while B is running, then end B and verify both separate draft forms are visible.
 3. Reject a whitespace-only description; save B, verify A's description and tags are unchanged, then save A.
+3a. In the launcher's manual-entry tags field type `rep`, click the “Add tag reporting” suggestion, and verify the field becomes `reporting, ` and that tag is no longer suggested.
 4. Open Workspace, filter the two saved rows, edit a saved description and tags, then export the filtered report to an isolated CSV path.
 5. Verify CSV content, confirm deletion, and check that reports remain absent from the compact launcher.
 

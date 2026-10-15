@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Activity, Check, Clock3, Download, History, Pause, Play, Tag, Trash2, X } from 'lucide-react';
+import { Activity, Check, Clock3, Download, History, Pause, Play, Trash2, X } from 'lucide-react';
 import type { AutomationModuleActionRequest, BackendUiState } from '../../contracts/rpc';
 import type { AutomationServices } from '../automationServices';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import { InlineConfirmButton } from '../components/InlineConfirmButton';
 import { isWorkTimeToggleShortcut } from './workTimeShortcut';
+import { WorkTimeTagsInput } from './WorkTimeTagsInput';
 import {
   calculateWorkTimeReportTotals,
   calculateWorkTimeIntervalMilliseconds,
@@ -12,10 +13,12 @@ import {
   elapsedWorkTimeMilliseconds,
   filterWorkTimeEntries,
   formatWorkTimeDuration,
+  getRecentWorkTimeTags,
   getWorkTimeTags,
   isWorkTimeDescriptionValid,
   localDateTimeInputValue,
   mergeWorkTimeHistory,
+  parseWorkTimeTags,
   readWorkTimeHistoryPage,
   readWorkTimeSnapshot,
   resolveWorkTimeDuration,
@@ -42,6 +45,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
   const [olderHistory, setOlderHistory] = useState<WorkTimeEntry[]>([]);
   const [startDescription, setStartDescription] = useState('');
   const [draftDescriptions, setDraftDescriptions] = useState<Record<string, string>>({});
+  const [draftTags, setDraftTags] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [now, setNow] = useState(Date.now());
@@ -130,18 +134,22 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
       setNotice('Enter a work description before saving.');
       return;
     }
-    const tags = String(form.get('tags') ?? '').split(',').map((tag) => tag.trim()).filter(Boolean);
+    const tags = parseWorkTimeTags(String(form.get('tags') ?? ''));
     void dispatch('saveEntry', { id, description, tags }).then((saved) => {
-      if (saved) setDraftDescriptions((current) => {
+      if (!saved) return;
+      const forget = (current: Record<string, string>) => {
         const next = { ...current };
         delete next[id];
         return next;
-      });
+      };
+      setDraftDescriptions(forget);
+      setDraftTags(forget);
     });
   };
   const history = useMemo(() => mergeWorkTimeHistory(snapshot?.history ?? [], olderHistory), [snapshot, olderHistory]);
   const reportEntries = useMemo(() => filterWorkTimeEntries(history, reportFilter).slice().reverse(), [history, reportFilter]);
   const reportTags = useMemo(() => getWorkTimeTags(history), [history]);
+  const knownTags = useMemo(() => getRecentWorkTimeTags([...history, ...(snapshot?.pendingEntries ?? [])]), [history, snapshot]);
   const reportTotals = useMemo(() => calculateWorkTimeReportTotals(history, new Date(now), workingPeriodOnly), [history, now, workingPeriodOnly]);
   const hasSavedHistory = (snapshot?.historyTotal ?? 0) > 0;
 
@@ -195,7 +203,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
       startedUtc: interval.startedUtc,
       stoppedUtc: interval.stoppedUtc,
       description: editDescription.trim(),
-      tags: editTags.split(',').map((tag) => tag.trim()).filter(Boolean),
+      tags: parseWorkTimeTags(editTags),
     });
     if (ok) setEditingEntryId(null);
   };
@@ -218,7 +226,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
       startedUtc: interval.startedUtc,
       stoppedUtc: interval.stoppedUtc,
       description: manualDescriptionValue,
-      tags: manualTags.split(',').map((tag) => tag.trim()).filter(Boolean),
+      tags: parseWorkTimeTags(manualTags),
     });
     if (!ok) return;
     setManualHours('');
@@ -339,11 +347,10 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
             <textarea aria-label="Manual entry description" value={manualDescription} maxLength={500} rows={2} placeholder="What did you work on?"
               disabled={!!busy} onChange={(event) => setManualDescription(event.target.value)} />
           </label>
-          <label className="work-time-field">
+          <div className="work-time-field">
             <span>Tags <b>Optional</b></span>
-            <div className="work-time-tags-input"><Tag size={13} /><input aria-label="Manual entry tags" value={manualTags} maxLength={500} placeholder="planning, release, bug fix"
-              disabled={!!busy} onChange={(event) => setManualTags(event.target.value)} /><small>Separate with commas</small></div>
-          </label>
+            <WorkTimeTagsInput ariaLabel="Manual entry tags" value={manualTags} knownTags={knownTags} disabled={!!busy} onChange={setManualTags} />
+          </div>
           <div className="work-time-entry-actions">
             <button className="primary-button" type="submit" disabled={!!busy || !manualDescriptionValue || 'error' in manualInterval}><Check size={13} /> Add entry</button>
           </div>
@@ -389,9 +396,10 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
               onChange={(event) => setDraftDescriptions((current) => ({ ...current, [entry.id]: event.target.value }))}
               maxLength={500} rows={2} placeholder="What did you work on?" disabled={!!busy} required />
           </label>
-          <label className="work-time-field"><span>Tags <b>Optional</b></span>
-            <div className="work-time-tags-input"><Tag size={13} /><input name="tags" aria-label={`Work tags ${entry.description || entry.id}`} defaultValue={entry.tags.join(', ')} maxLength={500} placeholder="planning, release, bug fix" disabled={!!busy} /><small>Separate with commas</small></div>
-          </label>
+          <div className="work-time-field"><span>Tags <b>Optional</b></span>
+            <WorkTimeTagsInput name="tags" ariaLabel={`Work tags ${entry.description || entry.id}`} value={draftTags[entry.id] ?? entry.tags.join(', ')} knownTags={knownTags} disabled={!!busy}
+              onChange={(value) => setDraftTags((current) => ({ ...current, [entry.id]: value }))} />
+          </div>
           <div className="work-time-entry-actions">
             <button className="primary-button" type="submit" disabled={!!busy || !isWorkTimeDescriptionValid(draftDescriptions[entry.id] ?? entry.description)}><Check size={13} /> Save entry</button>
             <InlineConfirmButton className="work-time-discard" label="Discard draft" confirmLabel="Yes, discard draft" disabled={!!busy}
@@ -433,7 +441,7 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
                 <label><span>Start</span><input aria-label="Edit work start time" type="datetime-local" step={1} value={editStart} onChange={(event) => setEditStart(event.target.value)} disabled={!!busy} /></label>
                 <label><span>End</span><input aria-label="Edit work end time" type="datetime-local" step={1} value={editStop} onChange={(event) => setEditStop(event.target.value)} disabled={!!busy} /></label>
                 <label><span>Description</span><input aria-label="Edit work description" maxLength={500} value={editDescription} onChange={(event) => setEditDescription(event.target.value)} disabled={!!busy} /></label>
-                <label><span>Tags</span><input aria-label="Edit work tags" maxLength={500} value={editTags} onChange={(event) => setEditTags(event.target.value)} disabled={!!busy} /></label>
+                <div className="work-time-edit-tags"><span>Tags</span><WorkTimeTagsInput ariaLabel="Edit work tags" value={editTags} knownTags={knownTags} disabled={!!busy} hint={false} placeholder="" onChange={setEditTags} /></div>
                 {editError && <p className="work-time-field-error work-time-edit-error" role="alert">{editError}</p>}
                 {!editError && editCollapsesPauses && <p className="work-time-field-hint work-time-edit-error">Changing the start or end replaces this entry's pauses with one continuous interval.</p>}
                 <div className="work-time-report-actions">

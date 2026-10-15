@@ -503,6 +503,13 @@ test('Work Time supports multiple named timers and Workspace-only reports with e
     assert.equal(await draftA.getByRole('textbox', { name: 'Work tags Timer A' }).inputValue(), 'reporting, priority',
       'saving B preserves A draft tags');
     await draftA.getByRole('button', { name: 'Save entry' }).click();
+    await draftA.waitFor({ state: 'detached' });
+    const manualTagsField = launcher.getByRole('textbox', { name: 'Manual entry tags' });
+    await manualTagsField.fill('rep');
+    await launcher.getByRole('button', { name: 'Add tag reporting' }).click();
+    assert.equal(await manualTagsField.inputValue(), 'reporting, ', 'a tag used in a saved entry is suggested and fills the field when clicked');
+    assert.equal(await launcher.getByRole('button', { name: 'Add tag reporting' }).count(), 0, 'a tag already in the field is not suggested again');
+    await manualTagsField.fill('');
 
     const workspacePromise = app.waitForEvent('window');
     await launcher.getByRole('button', { name: 'Open Workspace' }).click();
