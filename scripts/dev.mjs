@@ -67,6 +67,7 @@ try {
   env.AUTOMATOR_SHOW_ON_START = '1';
   env.AUTOMATOR_BROWSER_NODE_PATH = process.execPath;
   env.AUTOMATOR_BROWSER_WORKER_PATH = path.join(root, 'src', 'Automator.Infrastructure', 'Automation', 'browser-worker.cjs');
+  env.AUTOMATOR_PLAYWRIGHT_RUN_REPORTER_PATH = path.join(root, 'src', 'Automator.Infrastructure', 'Automation', 'playwright-run-reporter.cjs');
   env.AUTOMATOR_PLAYWRIGHT_MODULE_ROOT = path.join(root, 'node_modules', 'playwright');
   electron = spawn(electronExecutable, [mainEntry], {
     cwd: root,

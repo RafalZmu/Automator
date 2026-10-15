@@ -41,8 +41,10 @@ Run a focused contract test with node --experimental-strip-types --test TEST_FIL
 2. Send real synthetic Right Ctrl input; verify the launcher opens, focuses search, and records the previous foreground window.
 3. Move the pointer and verify the open panel does not move; send number keys and a letter through the global hook.
 4. Send Escape and verify the app closes while the fixture receives no launcher input.
+5. Move the pointer to a different spot, send Right Ctrl again, and verify the reopened panel is placed under the new pointer position.
+6. Send Escape and verify the reopened panel closes and the fixture is foreground again.
 
-**Expected result:** Native input routes to Automator only while appropriate; tab selection, query input, panel placement, foreground restoration, and Escape behavior match the launcher contract.
+**Expected result:** Native input routes to Automator only while appropriate; tab selection, query input, panel placement, foreground restoration, and Escape behavior match the launcher contract. Every open places the panel under the pointer, not only the first one.
 
 ### settings and tab transitions preserve focus in the isolated desktop host
 

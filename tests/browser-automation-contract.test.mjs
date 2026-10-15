@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  countPlaywrightOutcomes,
+  failureReasonLabels,
   parsePlaywrightTestList,
   validatePlaywrightSectionPath,
   readBrowserActionResult,
@@ -79,8 +81,14 @@ test('Playwright run history decoding keeps bounded known fields and drops malfo
   const run = {
     id: 'a1', kind: 'file', target: 'tests/example.spec.ts', state: 'failed', message: 'x: 0 passed, 1 failed, 0 skipped.',
     startedUtc: '2026-10-14T10:00:00+00:00', finishedUtc: '2026-10-14T10:00:02+00:00', durationMilliseconds: 2000, exitCode: 1,
-    summary: { passed: 0, failed: 1, skipped: 0, interrupted: 0 },
-    tests: [{ title: 'one', file: 'tests/example.spec.ts', line: 3, project: null, status: 'failed', reason: 'assertion', error: 'Expected: 4' }, { title: 'two', file: 'f', line: 1, status: 'failed', reason: 'bogus' }, { title: 7 }],
+    summary: { passed: 0, failed: 1, skipped: 0, interrupted: 0, timedOut: 2, flaky: 1 },
+    tests: [
+      { title: 'one', file: 'tests/example.spec.ts', line: 3, project: null, status: 'failed', reason: 'expectTimeout', error: 'Timeout: 5000ms',
+        step: 'expect.toBeVisible', failureLine: 42, snippet: '> 42 | await expect(x).toBeVisible();', attempts: 2 },
+      { title: 'two', file: 'f', line: 1, status: 'failed', reason: 'bogus' },
+      { title: 'three', file: 'f', line: 2, status: 'timedOut', reason: 'hookTimeout', error: 'Test timeout of 30000ms exceeded while running "beforeEach" hook.' },
+      { title: 7 },
+    ],
     outputTruncated: false, projectRoot: 'C:\Playwright',
   };
   const parsed = readPlaywrightRunHistory({
@@ -88,10 +96,22 @@ test('Playwright run history decoding keeps bounded known fields and drops malfo
     active: [{ id: 'live', kind: 'tag', target: 'tag smoke', startedUtc: '2026-10-14T10:01:00+00:00' }, { id: 5 }],
   });
   assert.deepEqual(parsed.runs.map((item) => item.id), ['a1']);
-  assert.equal(parsed.runs[0].tests.length, 2);
-  assert.deepEqual([parsed.runs[0].tests[0].reason, parsed.runs[0].tests[0].error], ['assertion', 'Expected: 4']);
-  assert.deepEqual([parsed.runs[0].tests[1].reason, parsed.runs[0].tests[1].error], [null, null]);
+  assert.equal(parsed.runs[0].tests.length, 3);
+  assert.deepEqual([parsed.runs[0].tests[0].reason, parsed.runs[0].tests[0].step, parsed.runs[0].tests[0].failureLine, parsed.runs[0].tests[0].attempts],
+    ['expectTimeout', 'expect.toBeVisible', 42, 2]);
+  assert.match(parsed.runs[0].tests[0].snippet, /> 42/);
+  assert.deepEqual([parsed.runs[0].tests[1].reason, parsed.runs[0].tests[1].error, parsed.runs[0].tests[1].failureLine, parsed.runs[0].tests[1].attempts],
+    [null, null, null, 1]);
+  assert.equal(parsed.runs[0].tests[2].reason, 'hookTimeout');
   assert.equal(parsed.runs[0].summary.failed, 1);
+  assert.deepEqual([parsed.runs[0].summary.timedOut, parsed.runs[0].summary.flaky], [2, 1]);
+  assert.deepEqual(countPlaywrightOutcomes(parsed.runs[0]), { passed: 0, failed: 1, skipped: 0, interrupted: 0, timedOut: 2, flaky: 1 });
+  const unsummarized = { ...parsed.runs[0], summary: null, tests: [
+    { ...parsed.runs[0].tests[0], status: 'flaky' }, { ...parsed.runs[0].tests[2] }, { ...parsed.runs[0].tests[1], status: 'passed' },
+  ] };
+  assert.deepEqual(countPlaywrightOutcomes(unsummarized), { passed: 1, failed: 0, skipped: 0, interrupted: 0, timedOut: 1, flaky: 1 });
+  assert.equal(failureReasonLabels.expectTimeout, 'Expect timed out');
+  assert.equal(failureReasonLabels.assertion, 'Expect failed');
   assert.deepEqual(parsed.active.map((item) => item.id), ['live']);
   assert.equal(readPlaywrightRunHistory({ runs: 'bad' }), null);
 });

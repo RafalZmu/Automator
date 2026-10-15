@@ -25,6 +25,14 @@ async function launchHost(name, dataDirectory, backendDataDirectory) {
   });
 }
 
+// The run history starts collapsed; expand it before reading its entries.
+async function openRunHistory(page) {
+  const toggle = page.getByRole('button', { name: /^Run history/ });
+  await toggle.waitFor({ state: 'visible' });
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await page.getByRole('region', { name: 'Playwright run history' }).waitFor({ state: 'visible' });
+}
+
 async function openBrowserAutomation(app) {
   const launcher = await app.firstWindow();
   await launcher.getByPlaceholder('Search apps, profiles, and actions…').waitFor({ state: 'visible' });
@@ -57,6 +65,7 @@ test('a Playwright run keeps its running state across tabs and is saved to the r
       "import { test } from '@playwright/test';\n\ntest('slow check', async () => {\n  await new Promise((resolve) => setTimeout(resolve, 6000));\n});\n");
     await page.getByRole('button', { name: 'Refresh tests' }).click();
     await page.getByText('slow check', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
+    await openRunHistory(page);
     await page.getByRole('region', { name: 'Playwright run history' }).getByText('No runs yet').waitFor({ state: 'visible' });
 
     await page.getByRole('button', { name: 'Run section tests/slow.spec.ts' }).click();
@@ -83,7 +92,8 @@ test('a Playwright run keeps its running state across tabs and is saved to the r
     await app.close();
     app = await launchHost('browser-run-history', dataDirectory, backendDataDirectory);
     page = await openBrowserAutomation(app);
-    const restored = page.getByRole('region', { name: 'Playwright run history' }).getByRole('button', { name: /tests\/slow\.spec\.ts/ });
+    await openRunHistory(page);
+    const restored =page.getByRole('region', { name: 'Playwright run history' }).getByRole('button', { name: /tests\/slow\.spec\.ts/ });
     await restored.waitFor({ state: 'visible', timeout: 15_000 });
     assert.match(await restored.first().innerText(), /Passed/);
 
@@ -114,7 +124,8 @@ test('a run started in the compact window is not canceled when the window leaves
     await launcher.getByRole('region', { name: 'Script Runner' }).waitFor({ state: 'visible' });
     await launcher.waitForTimeout(9_000);
     await launcher.evaluate(() => window.automator.selectTab(4));
-    const entry = launcher.getByRole('region', { name: 'Playwright run history' }).getByRole('button', { name: /tests\/slow\.spec\.ts/ });
+    await openRunHistory(launcher);
+    const entry =launcher.getByRole('region', { name: 'Playwright run history' }).getByRole('button', { name: /tests\/slow\.spec\.ts/ });
     try { await entry.waitFor({ state: 'visible', timeout: 30_000 }); } catch (error) { console.log('BODY', await launcher.locator('body').innerText()); throw error; }
     assert.match(await entry.first().innerText(), /Passed/);
   } finally {

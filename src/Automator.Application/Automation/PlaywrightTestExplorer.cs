@@ -18,6 +18,12 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
     private const string TagCollection = "test-tags";
     private const string RunHistoryCollection = "run-history";
     private const int MaximumRunHistory = 200;
+    private const int MaximumRunOutcomes = 256;
+    private const int MaximumRunEvents = 4000;
+    private const int MaximumRunEventCharacters = 64 * 1024;
+    private const int MaximumSnippetExcerpt = 800;
+    private const int MaximumStepLength = 200;
+    private const string RunEventsVariable = "AUTOMATOR_PLAYWRIGHT_RUN_EVENTS";
     private const int SchemaVersion = 1;
     private const int MaximumDiscoveredTests = 2000;
     private const int MaximumTagRecords = 4096;
@@ -29,6 +35,9 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         "^(?:\\[(?<project>[^\\]]{1,128})\\]\\s*[›>]\\s*)?(?<file>.+?\\.(?:spec|test)\\.[jt]s)(?::(?<line>\\d{1,8})(?::(?<column>\\d{1,8}))?)?\\s*[›>]\\s*(?<titles>.+)$",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex SafeTag = new("^[A-Za-z0-9][A-Za-z0-9 ._-]{0,47}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex TimeoutMarker = new("\\bTimeout:? \\d+ms\\b|\\btimeout of \\d+ms exceeded",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex HookOrFixtureMarker = new("\\bwhile (?:running|setting up) \"", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true,
@@ -261,6 +270,10 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         if (input.ValueKind == JsonValueKind.Object && input.TryGetProperty("timeoutSeconds", out var timeoutValue)
             && (!timeoutValue.TryGetInt32(out timeoutSeconds) || timeoutSeconds is < 1 or > 1800))
             throw new InvalidDataException("Playwright run timeout must be from 1 to 1,800 seconds.");
+        var runId = Guid.NewGuid().ToString("N");
+        var startedUtc = DateTimeOffset.UtcNow;
+        var (eventsFile, reporterPath) = PrepareRunReporting(runId);
+        var reporterFlag = reporterPath is null ? "--reporter=json" : $"--reporter=json,{reporterPath}";
         switch (kind)
         {
             case "file":
@@ -270,7 +283,7 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
                 if (selected.Length == 0)
                     throw new InvalidDataException("That test file has no discovered tests. Refresh the explorer first.");
                 temporaryList = await WriteTestListAsync(selected.Select(test => test.ListEntry), cancellationToken).ConfigureAwait(false);
-                arguments = [runner.CliPath!, "test", "--workers=1", "--reporter=json", "--test-list", temporaryList];
+                arguments = [runner.CliPath!, "test", "--workers=1", reporterFlag, "--test-list", temporaryList];
                 displayTarget = relativeFile;
                 break;
             }
@@ -280,7 +293,7 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
                 var test = discovered.Tests.FirstOrDefault(candidate => string.Equals(candidate.Id, id, StringComparison.Ordinal));
                 if (test is null) throw new InvalidDataException("That test is no longer discovered. Refresh the explorer first.");
                 temporaryList = await WriteTestListAsync([test.ListEntry], cancellationToken).ConfigureAwait(false);
-                arguments = [runner.CliPath!, "test", "--workers=1", "--reporter=json", "--test-list", temporaryList];
+                arguments = [runner.CliPath!, "test", "--workers=1", reporterFlag, "--test-list", temporaryList];
                 displayTarget = test.TitlePath[^1];
                 break;
             }
@@ -293,7 +306,7 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
                 var selected = discovered.Tests.Where(test => taggedIds.Contains(test.Id)).ToArray();
                 if (selected.Length == 0) return Result(AutomationStatus.Information, $"No current tests have the “{tag}” tag.", new { tag, selectedTests = 0 });
                 temporaryList = await WriteTestListAsync(selected.Select(test => test.ListEntry), cancellationToken).ConfigureAwait(false);
-                arguments = [runner.CliPath!, "test", "--workers=1", "--reporter=json", "--test-list", temporaryList];
+                arguments = [runner.CliPath!, "test", "--workers=1", reporterFlag, "--test-list", temporaryList];
                 displayTarget = $"tag {tag}";
                 break;
             }
@@ -301,30 +314,36 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
                 throw new InvalidDataException("Choose a file, test, or tag group to run.");
         }
 
-        var runId = Guid.NewGuid().ToString("N");
-        var startedUtc = DateTimeOffset.UtcNow;
         ActiveRuns[runId] = new ActiveRunSummary(runId, kind, displayTarget, startedUtc);
         var recorded = false;
         try
         {
+            IReadOnlyDictionary<string, string>? environment = eventsFile is null ? null
+                : new Dictionary<string, string> { [RunEventsVariable] = eventsFile };
             var process = await processes.ExecuteAsync(new AutomationProcessRequest(runner.NodePath!, arguments, root,
-                TimeSpan.FromSeconds(Math.Min(timeoutSeconds, (int)MaximumRunTimeout.TotalSeconds))), cancellationToken).ConfigureAwait(false);
+                TimeSpan.FromSeconds(Math.Min(timeoutSeconds, (int)MaximumRunTimeout.TotalSeconds)), EnvironmentVariables: environment), cancellationToken).ConfigureAwait(false);
             var truncated = process.StandardOutputTruncated || process.StandardErrorTruncated;
+            IReadOnlyList<RunEvent> events = eventsFile is null ? Array.Empty<RunEvent>() : ReadRunEvents(eventsFile);
             if (process.TimedOut)
             {
                 var timedOutMessage = $"Playwright run for {displayTarget} exceeded its {timeoutSeconds}-second limit.";
+                var stopped = OutcomesFromEvents(events, root, $"Automator stopped the run at its {timeoutSeconds}-second limit while this test was running.");
+                var stoppedSummary = SummarizeOutcomes(stopped);
                 recorded = await PersistRunAsync(new BrowserRunRecord(runId, kind, displayTarget, "timedOut", timedOutMessage, startedUtc,
-                    DateTimeOffset.UtcNow, process.DurationMilliseconds, null, null, Array.Empty<PlaywrightTestOutcome>(), truncated, root), CancellationToken.None).ConfigureAwait(false);
+                    DateTimeOffset.UtcNow, process.DurationMilliseconds, null, stoppedSummary, stopped, truncated, root), CancellationToken.None).ConfigureAwait(false);
                 return Result(AutomationStatus.Warning, timedOutMessage,
-                    new { runId, timedOut = true, exitCode = (int?)null, durationMilliseconds = process.DurationMilliseconds, summary = (RunSummary?)null, tests = Array.Empty<PlaywrightTestOutcome>(), outputTruncated = truncated });
+                    new { runId, timedOut = true, exitCode = (int?)null, durationMilliseconds = process.DurationMilliseconds, summary = stoppedSummary, tests = stopped, outputTruncated = truncated });
             }
 
-            var report = ParseJsonReport(process.StandardOutput, discovered.Tests);
+            // The run's own events are the source when present; the JSON report only covers runs without a reporter.
+            var fromEvents = OutcomesFromEvents(events, root, runnerLimitMessage: null);
+            (RunSummary? Summary, IReadOnlyList<PlaywrightTestOutcome> Tests) report = fromEvents.Count > 0
+                ? (SummarizeOutcomes(fromEvents), fromEvents) : ParseJsonReport(process.StandardOutput, discovered.Tests);
             var status = process.ExitCode == 0 ? AutomationStatus.Success : AutomationStatus.Error;
             var summary = report.Summary;
             var message = summary is null
                 ? process.ExitCode == 0 ? $"Playwright completed {displayTarget}; per-test summary was unavailable." : $"Playwright failed while running {displayTarget} (exit code {process.ExitCode})."
-                : $"{displayTarget}: {summary.Passed} passed, {summary.Failed} failed, {summary.Skipped} skipped{(summary.Interrupted > 0 ? $", {summary.Interrupted} interrupted" : string.Empty)}.";
+                : $"{displayTarget}: {FormatSummary(summary)}.";
             recorded = await PersistRunAsync(new BrowserRunRecord(runId, kind, displayTarget, process.ExitCode == 0 ? "success" : "failed", message, startedUtc,
                 DateTimeOffset.UtcNow, process.DurationMilliseconds, process.ExitCode, summary, report.Tests, truncated, root), CancellationToken.None).ConfigureAwait(false);
             return Result(status, message, new
@@ -352,8 +371,44 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         {
             ActiveRuns.TryRemove(runId, out _);
             if (temporaryList is not null) TryDelete(temporaryList);
+            if (eventsFile is not null) TryDelete(eventsFile);
         }
     }
+
+    /// <summary>Run events come from Automator's reporter in a temp file it owns. Without the reporter the JSON report alone is used.</summary>
+    private static (string? EventsFile, string? ReporterPath) PrepareRunReporting(string runId)
+    {
+        var configured = Environment.GetEnvironmentVariable("AUTOMATOR_PLAYWRIGHT_RUN_REPORTER_PATH");
+        var reporter = !string.IsNullOrWhiteSpace(configured) ? configured : Path.Combine(AppContext.BaseDirectory, "playwright-run-reporter.cjs");
+        // The Playwright CLI splits --reporter on commas, so a reporter path containing one cannot be passed.
+        if (!File.Exists(reporter) || reporter.Contains(',')) return (null, null);
+        try
+        {
+            var folder = Path.Combine(Path.GetTempPath(), "automator-playwright-runs");
+            Directory.CreateDirectory(folder);
+            return (Path.Combine(folder, $"{runId}.ndjson"), Path.GetFullPath(reporter));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return (null, null);
+        }
+    }
+
+    private static string FormatSummary(RunSummary summary)
+    {
+        var parts = new List<string> { $"{summary.Passed} passed" };
+        if (summary.Flaky > 0) parts.Add($"{summary.Flaky} flaky");
+        parts.Add($"{summary.Failed} failed");
+        if (summary.TimedOut > 0) parts.Add($"{summary.TimedOut} timed out");
+        parts.Add($"{summary.Skipped} skipped");
+        if (summary.Interrupted > 0) parts.Add($"{summary.Interrupted} interrupted");
+        return string.Join(", ", parts);
+    }
+
+    private static RunSummary SummarizeOutcomes(IReadOnlyList<PlaywrightTestOutcome> tests) => new(
+        tests.Count(test => test.Status == "passed"), tests.Count(test => test.Status == "failed"),
+        tests.Count(test => test.Status == "skipped"), tests.Count(test => test.Status == "interrupted"),
+        tests.Count(test => test.Status == "timedOut"), tests.Count(test => test.Status == "flaky"));
 
     public async Task<AutomationResult> ListRunHistoryAsync(CancellationToken cancellationToken)
     {
@@ -697,11 +752,8 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
             using var document = JsonDocument.Parse(output);
             var outcomes = new List<PlaywrightTestOutcome>();
             WalkSuites(document.RootElement, string.Empty, outcomes);
-            if (outcomes.Count > 256) outcomes = outcomes.Take(256).ToList();
-            var summary = new RunSummary(outcomes.Count(test => test.Status == "passed"),
-                outcomes.Count(test => test.Status is "failed" or "timedOut"),
-                outcomes.Count(test => test.Status == "skipped"), outcomes.Count(test => test.Status == "interrupted"));
-            return (summary, outcomes);
+            var capped = outcomes.Take(MaximumRunOutcomes).ToArray();
+            return (SummarizeOutcomes(capped), capped);
         }
         catch (JsonException)
         {
@@ -725,13 +777,18 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
                 foreach (var test in tests.EnumerateArray())
                 {
                     var project = TryString(test, "projectName");
-                    string? status = null;
-                    if (test.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array && results.GetArrayLength() > 0)
-                        status = TryString(results[results.GetArrayLength() - 1], "status");
-                    status ??= TryString(test, "status");
+                    var attempts = test.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array
+                        ? results.EnumerateArray().ToArray() : [];
+                    var status = attempts.Length > 0 ? TryString(attempts[^1], "status") : TryString(test, "status");
                     if (status is null) continue;
-                    var (reason, error) = status is "passed" or "skipped" ? (null, null) : ReadFailure(test, status);
-                    outcomes.Add(new PlaywrightTestOutcome(title, currentFile, line, project, status, reason, error));
+                    // Playwright reports a test that passed only after a failed attempt as "flaky"; its failure is the first failed attempt.
+                    if (TryString(test, "status") == "flaky") status = "flaky";
+                    JsonElement? failure = null;
+                    if (status == "flaky") failure = attempts.Cast<JsonElement?>().FirstOrDefault(attempt => attempt is { } candidate && IsFailedAttempt(candidate));
+                    else if (status is not ("passed" or "skipped") && attempts.Length > 0) failure = attempts[^1];
+                    var details = failure is { } element ? ReadFailure(element, status) : new FailureDetails(ReasonFor(status, null, null), null, null, null, null);
+                    outcomes.Add(new PlaywrightTestOutcome(title, currentFile, line, project, status, details.Reason, details.Error,
+                        details.Step, details.Line, details.Snippet, Math.Max(1, attempts.Length)));
                 }
             }
         }
@@ -741,33 +798,159 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
 
     private const int MaximumErrorExcerpt = 500;
 
-    /// <summary>Reads the last attempt's first error and says why the test did not pass.</summary>
-    private static (string? Reason, string? Error) ReadFailure(JsonElement test, string status)
+    /// <summary>Reads an attempt's first error from Playwright's JSON report, which has no step detail.</summary>
+    private static FailureDetails ReadFailure(JsonElement attempt, string status)
     {
         string? message = null;
-        if (test.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array && results.GetArrayLength() > 0)
-        {
-            var last = results[results.GetArrayLength() - 1];
-            if (last.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
-                foreach (var error in errors.EnumerateArray())
-                    if (TryString(error, "message") is { Length: > 0 } text) { message = text; break; }
-            if (message is null && last.TryGetProperty("error", out var single)) message = TryString(single, "message");
-        }
-        if (string.IsNullOrWhiteSpace(message))
-            return (status == "timedOut" ? "testTimeout" : status == "interrupted" ? "interrupted" : null, null);
-        var clean = StripAnsi(message).Replace("\r", string.Empty).Trim();
-        return (ClassifyFailure(status, clean), clean.Length <= MaximumErrorExcerpt ? clean : clean[..MaximumErrorExcerpt] + "…");
+        if (attempt.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
+            foreach (var error in errors.EnumerateArray())
+                if (TryString(error, "message") is { Length: > 0 } text) { message = text; break; }
+        if (message is null && attempt.TryGetProperty("error", out var single)) message = TryString(single, "message");
+        var line = attempt.TryGetProperty("errorLocation", out var location) ? TryInt(location, "line") : 0;
+        var clean = CleanMessage(message);
+        return new FailureDetails(ReasonFor(status, clean, null), Excerpt(clean, MaximumErrorExcerpt), null, null, line > 0 ? line : null);
     }
 
-    internal static string ClassifyFailure(string status, string message)
+    private static bool IsFailedAttempt(JsonElement attempt) => TryString(attempt, "status") is { } status && status is not ("passed" or "skipped");
+
+    private static FailureDetails DescribeEvent(RunEvent attempt)
+    {
+        var failure = attempt.Failure;
+        var message = CleanMessage(failure?.Message);
+        var step = failure?.Step is { Length: > 0 } name ? Excerpt(name, MaximumStepLength) : null;
+        return new FailureDetails(ReasonFor(attempt.Status ?? "failed", message, failure?.StepCategory), Excerpt(message, MaximumErrorExcerpt),
+            Excerpt(CleanMessage(failure?.Snippet), MaximumSnippetExcerpt), step, failure?.Line);
+    }
+
+    private static string? ReasonFor(string status, string? message, string? stepCategory)
+    {
+        if (!string.IsNullOrWhiteSpace(message)) return ClassifyFailure(status, message, stepCategory);
+        if (status == "interrupted") return "interrupted";
+        if (status == "timedOut") return stepCategory is "hook" or "fixture" ? "hookTimeout" : "testTimeout";
+        return null;
+    }
+
+    /// <summary>Only Playwright's own timeout wording counts as a timeout, so a timed-out word in a received value does not.</summary>
+    internal static string ClassifyFailure(string status, string message, string? stepCategory = null)
     {
         if (status == "interrupted") return "interrupted";
-        var timedOutWaiting = Regex.IsMatch(message, "Timeout:? \\d+ms( exceeded)?|timed? ?out", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        var timeout = TimeoutMarker.IsMatch(message);
+        if (stepCategory is "hook" or "fixture" || HookOrFixtureMarker.IsMatch(message))
+            return timeout || status == "timedOut" ? "hookTimeout" : "error";
         if (status == "timedOut" || message.Contains("Test timeout of", StringComparison.Ordinal)) return "testTimeout";
-        var isExpect = message.Contains("expect(", StringComparison.Ordinal) || message.Contains("Expected:", StringComparison.Ordinal)
-            || message.Contains("Received:", StringComparison.Ordinal);
-        if (isExpect) return timedOutWaiting ? "expectTimeout" : "assertion";
-        return timedOutWaiting ? "actionTimeout" : "error";
+        var isExpect = stepCategory == "expect" || message.Contains("expect(", StringComparison.Ordinal)
+            || message.Contains("Expected:", StringComparison.Ordinal) || message.Contains("Received:", StringComparison.Ordinal);
+        if (isExpect) return timeout ? "expectTimeout" : "assertion";
+        return timeout ? "actionTimeout" : "error";
+    }
+
+    private static string? CleanMessage(string? value)
+    {
+        var clean = value is null ? null : StripAnsi(value).Replace("\r", string.Empty).Trim();
+        return string.IsNullOrEmpty(clean) ? null : clean;
+    }
+
+    private static string? Excerpt(string? value, int maximum) => value is null ? null : value.Length <= maximum ? value : value[..maximum] + "…";
+
+    /// <summary>One outcome per test from the reporter's events. A test still running when the runner stopped is named; otherwise the runner ended before it finished.</summary>
+    private static IReadOnlyList<PlaywrightTestOutcome> OutcomesFromEvents(IReadOnlyList<RunEvent> events, string root, string? runnerLimitMessage)
+    {
+        var order = new List<string>();
+        var identities = new Dictionary<string, RunEvent>(StringComparer.Ordinal);
+        var finishedAttempts = new Dictionary<string, List<RunEvent>>(StringComparer.Ordinal);
+        var startedRetry = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var item in events)
+        {
+            if (!identities.ContainsKey(item.TestId)) { order.Add(item.TestId); identities[item.TestId] = item; }
+            if (item.Kind == "begin")
+            {
+                startedRetry[item.TestId] = Math.Max(item.Retry, startedRetry.GetValueOrDefault(item.TestId, -1));
+                continue;
+            }
+            if (!finishedAttempts.TryGetValue(item.TestId, out var finished)) finishedAttempts[item.TestId] = finished = [];
+            finished.Add(item);
+        }
+
+        var outcomes = new List<PlaywrightTestOutcome>();
+        foreach (var testId in order.Take(MaximumRunOutcomes))
+        {
+            var identity = identities[testId];
+            var file = ToProjectFile(root, identity.File);
+            var attempts = finishedAttempts.TryGetValue(testId, out var finished) ? finished.OrderBy(attempt => attempt.Retry).ToArray() : Array.Empty<RunEvent>();
+            var started = startedRetry.GetValueOrDefault(testId, -1);
+            if (attempts.Length == 0 || started > attempts[^1].Retry)
+            {
+                var stopped = runnerLimitMessage is not null;
+                outcomes.Add(new PlaywrightTestOutcome(identity.Title, file, identity.Line, identity.Project,
+                    stopped ? "timedOut" : "interrupted", stopped ? "runnerLimit" : "interrupted",
+                    stopped ? runnerLimitMessage : "The runner ended before this test finished.", null, null, null, Math.Max(1, started + 1)));
+                continue;
+            }
+
+            var last = attempts[^1];
+            var failing = attempts.FirstOrDefault(attempt => attempt.Status is not ("passed" or "skipped"));
+            var status = last.Status ?? "failed";
+            if (status == "passed" && failing is not null) status = "flaky";
+            RunEvent? failure = null;
+            if (status == "flaky") failure = failing;
+            else if (status is not ("passed" or "skipped")) failure = last;
+            var details = failure is null ? new FailureDetails(null, null, null, null, null) : DescribeEvent(failure);
+            outcomes.Add(new PlaywrightTestOutcome(identity.Title, file, identity.Line, identity.Project, status,
+                details.Reason, details.Error, details.Step, details.Line, details.Snippet, attempts.Length));
+        }
+        return outcomes;
+    }
+
+    private static IReadOnlyList<RunEvent> ReadRunEvents(string file)
+    {
+        var records = new List<RunEvent>();
+        try
+        {
+            if (!File.Exists(file)) return records;
+            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            string? line;
+            while (records.Count < MaximumRunEvents && (line = reader.ReadLine()) is not null)
+            {
+                if (line.Length == 0 || line.Length > MaximumRunEventCharacters) continue;
+                if (ParseRunEvent(line) is { } record) records.Add(record);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+        return records;
+    }
+
+    private static RunEvent? ParseRunEvent(string line)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(line);
+            var item = document.RootElement;
+            var kind = TryString(item, "event");
+            var testId = TryString(item, "testId");
+            if (kind is not ("begin" or "end") || testId is null or { Length: 0 } or { Length: > 96 }) return null;
+            RunEventFailure? failure = null;
+            if (item.TryGetProperty("failure", out var node) && node.ValueKind == JsonValueKind.Object)
+            {
+                var failureLine = TryInt(node, "line");
+                failure = new RunEventFailure(TryString(node, "message"), TryString(node, "snippet"), TryString(node, "step"),
+                    TryString(node, "stepCategory"), failureLine > 0 ? failureLine : null);
+            }
+            return new RunEvent(kind, testId, TryString(item, "file") ?? string.Empty, TryInt(item, "line"),
+                TryString(item, "title") ?? "Untitled test", TryString(item, "project") ?? string.Empty, TryInt(item, "retry"),
+                TryString(item, "status"), failure);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string ToProjectFile(string root, string file)
+    {
+        if (file.Length == 0) return file;
+        var relative = Path.IsPathRooted(file) ? Path.GetRelativePath(root, file) : file;
+        return relative.Replace('\\', '/');
     }
 
     private static int ReadPositiveInt(string value) => int.TryParse(value, out var result) && result > 0 ? result : 0;
@@ -891,9 +1074,13 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
     private sealed record BrowserRunRecord(string Id, string Kind, string Target, string State, string Message, DateTimeOffset StartedUtc,
         DateTimeOffset FinishedUtc, long DurationMilliseconds, int? ExitCode, RunSummary? Summary, IReadOnlyList<PlaywrightTestOutcome> Tests,
         bool OutputTruncated, string ProjectRoot);
-    private sealed record RunSummary(int Passed, int Failed, int Skipped, int Interrupted);
+    private sealed record RunSummary(int Passed, int Failed, int Skipped, int Interrupted, int TimedOut = 0, int Flaky = 0);
     private sealed record PlaywrightTestOutcome(string Title, string File, int Line, string? Project, string Status,
-        string? Reason = null, string? Error = null);
+        string? Reason = null, string? Error = null, string? Step = null, int? FailureLine = null, string? Snippet = null, int Attempts = 1);
+    private sealed record RunEvent(string Kind, string TestId, string File, int Line, string Title, string Project, int Retry,
+        string? Status, RunEventFailure? Failure);
+    private sealed record RunEventFailure(string? Message, string? Snippet, string? Step, string? StepCategory, int? Line);
+    private sealed record FailureDetails(string? Reason, string? Error, string? Snippet, string? Step, int? Line);
     private sealed record PlaywrightRunnerSummary(bool Available, string? Version, string Message);
     private sealed record StaleTagSummary(string File, string Title, IReadOnlyList<string> Tags);
     private sealed record PlaywrightTestFileSection(string Path, IReadOnlyList<PlaywrightTestIdentity> Tests);

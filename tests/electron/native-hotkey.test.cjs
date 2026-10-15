@@ -172,6 +172,20 @@ test('real Right Ctrl and Escape input reaches the global hook from an owned for
     await sendKey(0x1B);
     await waitFor(async () => (await page.evaluate(() => window.automator.getWindowDiagnostics()))?.visible === false, 'Escape to close the focused launcher');
     await waitFor(async () => (await foregroundWindowHandle()) === fixtureHandle, 'Windows to reactivate the previous foreground app after Escape');
+
+    // Each open places the panel under the pointer, so a reopen must follow the pointer moved since the first open.
+    const reopenedPosition = panelBoundsAt(alternatePointer, placement.workArea);
+    assert.notDeepEqual({ x: reopenedPosition.x, y: reopenedPosition.y }, { x: firstBounds.x, y: firstBounds.y },
+      'the reopen check needs a spot that differs from the first open');
+    await setCursorPosition(alternatePointer);
+    await sendKey(0xA3);
+    await waitFor(async () => (await page.evaluate(() => window.automator.getWindowDiagnostics()))?.visible === true, 'Right Ctrl to reopen the tray panel');
+    const reopenedBounds = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds());
+    assert.deepEqual({ x: reopenedBounds.x, y: reopenedBounds.y }, { x: reopenedPosition.x, y: reopenedPosition.y },
+      'reopening must place the panel under the pointer');
+    await sendKey(0x1B);
+    await waitFor(async () => (await page.evaluate(() => window.automator.getWindowDiagnostics()))?.visible === false, 'Escape to close the reopened launcher');
+    await waitFor(async () => (await foregroundWindowHandle()) === fixtureHandle, 'Windows to reactivate the previous foreground app after the reopened launcher closes');
   } finally {
     keySender?.kill();
     await app?.close().catch(() => {});

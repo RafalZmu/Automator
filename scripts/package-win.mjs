@@ -55,6 +55,8 @@ await cp(path.join(root, 'node_modules', 'playwright'), path.join(browserPackage
 await cp(path.join(root, 'node_modules', 'playwright-core'), path.join(browserPackagesDirectory, 'playwright-core'), { recursive: true });
 await copyFile(path.join(root, 'src', 'Automator.Infrastructure', 'Automation', 'browser-worker.cjs'),
   path.join(browserRuntimeDirectory, 'browser-worker.cjs'));
+await copyFile(path.join(root, 'src', 'Automator.Infrastructure', 'Automation', 'playwright-run-reporter.cjs'),
+  path.join(browserRuntimeDirectory, 'playwright-run-reporter.cjs'));
 await run(path.join(browserRuntimeDirectory, 'node.exe'), [
   '--eval',
   "const playwright = require('./playwright'); const core = require('playwright-core'); if (!playwright.chromium || !core.chromium) process.exit(1);",
@@ -74,9 +76,10 @@ const asar = path.join(stableDirectory, 'resources', 'app.asar');
 const backend = path.join(stableDirectory, 'resources', 'backend', 'Automator.Backend.exe');
 const browserNode = path.join(stableDirectory, 'resources', 'browser-runtime', 'node.exe');
 const browserWorker = path.join(stableDirectory, 'resources', 'browser-runtime', 'browser-worker.cjs');
+const playwrightRunReporter = path.join(stableDirectory, 'resources', 'browser-runtime', 'playwright-run-reporter.cjs');
 const playwrightPackage = path.join(stableDirectory, 'resources', 'browser-runtime', 'packages', 'playwright', 'package.json');
 const playwrightCorePackage = path.join(stableDirectory, 'resources', 'browser-runtime', 'packages', 'playwright-core', 'package.json');
-await Promise.all([stat(stableExecutable), stat(asar), stat(backend), stat(browserNode), stat(browserWorker), stat(playwrightPackage), stat(playwrightCorePackage)]);
+await Promise.all([stat(stableExecutable), stat(asar), stat(backend), stat(browserNode), stat(browserWorker), stat(playwrightRunReporter), stat(playwrightPackage), stat(playwrightCorePackage)]);
 const portable = path.join(outputDirectory, `Automator-${packageJson.version}-x64-portable.exe`);
 await stat(portable);
 
@@ -92,6 +95,7 @@ const manifest = {
   backendRuntime: 'win-x64-self-contained',
   browserNodeExecutable: 'resources/browser-runtime/node.exe',
   browserWorkerScript: 'resources/browser-runtime/browser-worker.cjs',
+  playwrightRunReporterScript: 'resources/browser-runtime/playwright-run-reporter.cjs',
   playwrightPackage: 'resources/browser-runtime/packages/playwright',
   playwrightCorePackage: 'resources/browser-runtime/packages/playwright-core',
   browserRuntimeNodeMajor: Number(process.versions.node.split('.')[0]),

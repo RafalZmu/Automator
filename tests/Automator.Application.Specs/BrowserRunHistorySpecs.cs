@@ -19,11 +19,14 @@ public static class BrowserRunHistorySpecs
         await File.WriteAllTextAsync(node, "test node");
         await File.WriteAllTextAsync(Path.Combine(module, "cli.js"), "");
         await File.WriteAllTextAsync(Path.Combine(module, "package.json"), "{\"version\":\"1\"}");
-        var prior = new[] { "AUTOMATOR_PLAYWRIGHT_PROJECT_ROOT", "AUTOMATOR_BROWSER_NODE_PATH", "AUTOMATOR_PLAYWRIGHT_MODULE_ROOT" }
+        var reporter = Path.Combine(root, "playwright-run-reporter.cjs");
+        await File.WriteAllTextAsync(reporter, "module.exports = class {};");
+        var prior = new[] { "AUTOMATOR_PLAYWRIGHT_PROJECT_ROOT", "AUTOMATOR_BROWSER_NODE_PATH", "AUTOMATOR_PLAYWRIGHT_MODULE_ROOT", "AUTOMATOR_PLAYWRIGHT_RUN_REPORTER_PATH" }
             .Select(name => (name, value: Environment.GetEnvironmentVariable(name))).ToArray();
         Environment.SetEnvironmentVariable("AUTOMATOR_PLAYWRIGHT_PROJECT_ROOT", project);
         Environment.SetEnvironmentVariable("AUTOMATOR_BROWSER_NODE_PATH", node);
         Environment.SetEnvironmentVariable("AUTOMATOR_PLAYWRIGHT_MODULE_ROOT", module);
+        Environment.SetEnvironmentVariable("AUTOMATOR_PLAYWRIGHT_RUN_REPORTER_PATH", reporter);
         try
         {
             var library = new MemoryLibrary();
@@ -71,6 +74,8 @@ public static class BrowserRunHistorySpecs
                 ("waiting", "failed", string.Join("\n", "Error: expect(locator).toBeVisible() failed", "", "Locator: getByText('x')", "Expected: visible", "Received: <element(s) not found>", "Timeout: 5000ms")),
                 ("click", "failed", string.Join("\n", "Error: page.click: Timeout 30000ms exceeded.", "Call log:", "  - waiting for locator('#go')")),
                 ("boom", "failed", "TypeError: boom is not a function"),
+                ("hook", "timedOut", "Test timeout of 30000ms exceeded while running \"beforeEach\" hook."),
+                ("received", "failed", string.Join("\n", "Error: expect(received).toBe(expected) // Object.is equality", "", "Expected: 'Ready'", "Received: 'timed out'")),
             };
             var esc = ((char)27).ToString();
             var specs = string.Join(",", reasons.Select((item, index) => JsonSerializer.Serialize(new
@@ -78,7 +83,9 @@ public static class BrowserRunHistorySpecs
                 title = item.Item1, line = index + 1,
                 tests = new[] { new { projectName = "", results = new[] { new { status = item.Item2, errors = new[] { new { message = esc + "[31m" + item.Item3 + esc + "[39m" } } } } } },
             })));
-            var reasonReport = "{\"suites\":[{\"file\":\"tests/example.spec.ts\",\"specs\":[" + specs + "]}]}";
+            // Playwright marks a test that passed on a retry as flaky; the failure shown is the attempt that failed.
+            var flakySpec = "{\"title\":\"flaky\",\"line\":9,\"tests\":[{\"projectName\":\"\",\"status\":\"flaky\",\"results\":[{\"status\":\"timedOut\",\"errors\":[{\"message\":\"Test timeout of 30000ms exceeded.\"}]},{\"status\":\"passed\"}]}]}";
+            var reasonReport = "{\"suites\":[{\"file\":\"tests/example.spec.ts\",\"specs\":[" + specs + "," + flakySpec + "]}]}";
             process.Handler = request => request.Arguments.Contains("--list")
                 ? new(0, false, List, "", false, false, 5) : new(1, false, reasonReport, "", false, false, 50);
             var reasonRun = await Dispatch("runTests", "{\"kind\":\"file\",\"file\":\"tests/example.spec.ts\"}");
@@ -91,6 +98,11 @@ public static class BrowserRunHistorySpecs
             Check.True(outcomes["mismatch"].GetProperty("error").GetString()!.StartsWith("Error: expect(received)", StringComparison.Ordinal));
             Check.True(!outcomes["mismatch"].GetProperty("error").GetString()!.Contains(esc));
             Check.Equal("Test timeout of 30000ms exceeded.", outcomes["timeout"].GetProperty("error").GetString());
+            Check.Equal("hookTimeout", outcomes["hook"].GetProperty("reason").GetString());
+            Check.Equal("assertion", outcomes["received"].GetProperty("reason").GetString());
+            Check.Equal("flaky", outcomes["flaky"].GetProperty("status").GetString());
+            Check.Equal("testTimeout", outcomes["flaky"].GetProperty("reason").GetString());
+            Check.Equal(2, outcomes["flaky"].GetProperty("attempts").GetInt32());
 
             var listed = await Dispatch("listRunHistory", "{}");
             var runs = listed.Data.GetProperty("runs").EnumerateArray().ToArray();
@@ -111,6 +123,80 @@ public static class BrowserRunHistorySpecs
             var cleared = await Dispatch("deleteRunHistory", "{}");
             Check.Equal(3, cleared.Data.GetProperty("removed").GetInt32());
             Check.Equal(0, (await Dispatch("listRunHistory", "{}")).Data.GetProperty("runs").GetArrayLength());
+
+            // With the reporter, the run's events name each test, its failing step and line, flaky retries, and a runner-limit stop.
+            var file = Path.Combine(project, "tests", "example.spec.ts");
+            string Begin(string id, string title, int line, int retry = 0) => JsonSerializer.Serialize(new { @event = "begin", testId = id, file, line, column = 3, title, project = "", retry });
+            string End(string id, string title, int line, string status, int retry = 0, object? failure = null) => JsonSerializer.Serialize(new { @event = "end", testId = id, file, line, column = 3, title, project = "", retry, status, timeoutMs = 30000, durationMs = 20, failure });
+            var lines = new List<string>();
+            var stopAtLimit = false;
+            var eventsPath = string.Empty;
+            process.Handler = request =>
+            {
+                if (request.Arguments.Contains("--list")) return new(0, false, List, "", false, false, 5);
+                Check.True(request.Arguments.Contains($"--reporter=json,{reporter}"));
+                eventsPath = request.EnvironmentVariables!["AUTOMATOR_PLAYWRIGHT_RUN_EVENTS"];
+                File.WriteAllLines(eventsPath, lines);
+                return stopAtLimit ? new(null, true, "", "", false, false, 600000) : new(1, false, "", "", false, false, 300);
+            };
+            lines.AddRange([
+                Begin("hook", "Hook timeout", 4),
+                End("hook", "Hook timeout", 4, "timedOut", failure: new { message = "Test timeout of 30000ms exceeded while running \"beforeEach\" hook.", snippet = "> 9 | await page.click('#go');", step = "locator.click", stepCategory = "pw:api", line = 9 }),
+                Begin("wait", "Expect waits", 12),
+                End("wait", "Expect waits", 12, "failed", failure: new { message = esc + "[31m" + "Error: expect(locator).toBeVisible() failed\n\nLocator: getByText('x')\nExpected: visible\nReceived: <element(s) not found>\nTimeout: 5000ms" + esc + "[39m", step = "expect.toBeVisible", stepCategory = "expect", line = 42 }),
+                Begin("click", "Click waits", 20),
+                End("click", "Click waits", 20, "failed", failure: new { message = "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator('#go')", step = "locator.click", stepCategory = "pw:api", line = 21 }),
+                Begin("flaky", "Flaky", 28, 0),
+                End("flaky", "Flaky", 28, "failed", 0, failure: new { message = "Error: expect(locator).toHaveText(expected) failed\n\nExpected: 'Ready'\nReceived: 'Loading'\nTimeout: 5000ms", step = "expect.toHaveText", stepCategory = "expect", line = 60 }),
+                Begin("flaky", "Flaky", 28, 1),
+                End("flaky", "Flaky", 28, "passed", 1),
+                Begin("ok", "Passes", 36),
+                End("ok", "Passes", 36, "passed"),
+            ]);
+            var eventRun = await Dispatch("runTests", "{\"kind\":\"file\",\"file\":\"tests/example.spec.ts\"}");
+            var byTitle = eventRun.Data.GetProperty("tests").EnumerateArray().ToDictionary(test => test.GetProperty("title").GetString()!);
+            Check.Equal("hookTimeout", byTitle["Hook timeout"].GetProperty("reason").GetString());
+            Check.Equal("locator.click", byTitle["Hook timeout"].GetProperty("step").GetString());
+            Check.Equal(9, byTitle["Hook timeout"].GetProperty("failureLine").GetInt32());
+            Check.True(byTitle["Hook timeout"].GetProperty("snippet").GetString()!.Contains("> 9", StringComparison.Ordinal));
+            Check.Equal("expectTimeout", byTitle["Expect waits"].GetProperty("reason").GetString());
+            Check.Equal("expect.toBeVisible", byTitle["Expect waits"].GetProperty("step").GetString());
+            Check.Equal(42, byTitle["Expect waits"].GetProperty("failureLine").GetInt32());
+            Check.True(byTitle["Expect waits"].GetProperty("error").GetString()!.Contains("Timeout: 5000ms", StringComparison.Ordinal));
+            Check.True(!byTitle["Expect waits"].GetProperty("error").GetString()!.Contains(esc, StringComparison.Ordinal));
+            Check.Equal("actionTimeout", byTitle["Click waits"].GetProperty("reason").GetString());
+            Check.Equal(21, byTitle["Click waits"].GetProperty("failureLine").GetInt32());
+            Check.Equal("flaky", byTitle["Flaky"].GetProperty("status").GetString());
+            Check.Equal(2, byTitle["Flaky"].GetProperty("attempts").GetInt32());
+            Check.Equal("expectTimeout", byTitle["Flaky"].GetProperty("reason").GetString());
+            Check.Equal("expect.toHaveText", byTitle["Flaky"].GetProperty("step").GetString());
+            Check.Equal(JsonValueKind.Null, byTitle["Passes"].GetProperty("reason").ValueKind);
+            var eventSummary = eventRun.Data.GetProperty("summary");
+            Check.Equal(1, eventSummary.GetProperty("passed").GetInt32());
+            Check.Equal(1, eventSummary.GetProperty("flaky").GetInt32());
+            Check.Equal(2, eventSummary.GetProperty("failed").GetInt32());
+            Check.Equal(1, eventSummary.GetProperty("timedOut").GetInt32());
+            Check.True(eventRun.Message.Contains("1 flaky", StringComparison.Ordinal) && eventRun.Message.Contains("1 timed out", StringComparison.Ordinal));
+            Check.True(!File.Exists(eventsPath));
+
+            // A runner-limit stop keeps the tests that finished and names the one that was still running.
+            lines.Clear();
+            lines.AddRange([Begin("ok2", "Done", 36), End("ok2", "Done", 36, "passed"), Begin("long", "Still running", 44)]);
+            stopAtLimit = true;
+            var limited = await Dispatch("runTests", "{\"kind\":\"file\",\"file\":\"tests/example.spec.ts\"}");
+            Check.Equal(AutomationStatus.Warning, limited.Status);
+            Check.True(limited.Data.GetProperty("timedOut").GetBoolean());
+            var limitedTests = limited.Data.GetProperty("tests").EnumerateArray().ToDictionary(test => test.GetProperty("title").GetString()!);
+            Check.Equal("timedOut", limitedTests["Still running"].GetProperty("status").GetString());
+            Check.Equal("runnerLimit", limitedTests["Still running"].GetProperty("reason").GetString());
+            Check.True(limitedTests["Still running"].GetProperty("error").GetString()!.Contains("600-second limit", StringComparison.Ordinal));
+            Check.Equal("passed", limitedTests["Done"].GetProperty("status").GetString());
+            var eventHistory = (await Dispatch("listRunHistory", "{}")).Data.GetProperty("runs").EnumerateArray().ToArray();
+            Check.Equal(2, eventHistory.Length);
+            Check.True(eventHistory.Any(run => run.GetProperty("state").GetString() == "timedOut"));
+            Check.True(eventHistory.Any(run => run.GetProperty("state").GetString() == "failed"));
+            Check.True(!File.Exists(eventsPath));
+            Check.Equal(2, (await Dispatch("deleteRunHistory", "{}")).Data.GetProperty("removed").GetInt32());
         }
         finally
         {

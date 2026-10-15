@@ -308,18 +308,37 @@ export function readBrowserActionResult(value: unknown): BrowserAutomationAction
 export type PlaywrightRunKind = 'file' | 'test' | 'tag';
 export type PlaywrightRunState = 'success' | 'failed' | 'timedOut' | 'canceled' | 'error';
 
-export type PlaywrightFailureReason = 'testTimeout' | 'expectTimeout' | 'assertion' | 'actionTimeout' | 'error' | 'interrupted';
+export type PlaywrightFailureReason = 'testTimeout' | 'hookTimeout' | 'expectTimeout' | 'assertion' | 'actionTimeout' | 'runnerLimit' | 'error' | 'interrupted';
 
+/** `status` is passed, flaky (passed only after a failed attempt), failed, timedOut, skipped or interrupted. */
 export type PlaywrightTestOutcome = {
   title: string; file: string; line: number; project: string | null; status: string;
   reason: PlaywrightFailureReason | null; error: string | null;
+  /** The deepest step that failed, such as expect.toBeVisible or locator.click. */
+  step: string | null; failureLine: number | null; snippet: string | null; attempts: number;
 };
 
-const failureReasons = new Set<string>(['testTimeout', 'expectTimeout', 'assertion', 'actionTimeout', 'error', 'interrupted']);
+const failureReasons = new Set<string>(['testTimeout', 'hookTimeout', 'expectTimeout', 'assertion', 'actionTimeout', 'runnerLimit', 'error', 'interrupted']);
 
 export const failureReasonLabels: Record<PlaywrightFailureReason, string> = {
-  testTimeout: 'Test timeout', expectTimeout: 'Expect timed out waiting', assertion: 'Assertion failed',
-  actionTimeout: 'Action timed out', error: 'Error', interrupted: 'Interrupted',
+  testTimeout: 'Test timed out', hookTimeout: 'Hook or fixture timed out', expectTimeout: 'Expect timed out',
+  assertion: 'Expect failed', actionTimeout: 'Action timed out', runnerLimit: 'Runner limit reached',
+  error: 'Error', interrupted: 'Interrupted',
+};
+
+export const failureReasonHints: Record<PlaywrightFailureReason, string> = {
+  testTimeout: 'The whole test ran past its time limit.',
+  hookTimeout: 'A beforeEach or beforeAll hook, or a fixture, ran past its time limit.',
+  expectTimeout: 'A retrying expect, such as toBeVisible or toHaveText, kept failing until its timeout.',
+  assertion: 'An expect compared a value that did not match.',
+  actionTimeout: 'A page action, such as click or fill, waited past its timeout.',
+  runnerLimit: 'Automator stopped the run at its time limit while this test was still running.',
+  error: 'The test threw an error that is not a timeout.',
+  interrupted: 'The run ended before this test finished.',
+};
+
+export const outcomeStatusLabels: Record<string, string> = {
+  passed: 'Passed', flaky: 'Flaky', failed: 'Failed', timedOut: 'Timed out', skipped: 'Skipped', interrupted: 'Interrupted',
 };
 
 /** One finished Playwright run kept in the library database. */
@@ -333,7 +352,7 @@ export type PlaywrightRunRecord = {
   finishedUtc: string;
   durationMilliseconds: number;
   exitCode: number | null;
-  summary: { passed: number; failed: number; skipped: number; interrupted: number } | null;
+  summary: PlaywrightRunSummary | null;
   tests: PlaywrightTestOutcome[];
   outputTruncated: boolean;
   projectRoot: string;
@@ -360,13 +379,37 @@ export function readPlaywrightTestOutcomes(value: unknown): PlaywrightTestOutcom
     return [{ title: test.title.slice(0, 512), file: test.file.slice(0, 512), line: readCount(test.line),
       project: typeof test.project === 'string' ? test.project.slice(0, 128) : null, status: test.status.slice(0, 32),
       reason: typeof test.reason === 'string' && failureReasons.has(test.reason) ? test.reason as PlaywrightFailureReason : null,
-      error: typeof test.error === 'string' && test.error ? test.error.slice(0, 600) : null }];
+      error: typeof test.error === 'string' && test.error ? test.error.slice(0, 600) : null,
+      step: typeof test.step === 'string' && test.step ? test.step.slice(0, 200) : null,
+      failureLine: readCount(test.failureLine) || null,
+      snippet: typeof test.snippet === 'string' && test.snippet ? test.snippet.slice(0, 900) : null,
+      attempts: Math.max(1, readCount(test.attempts)) }];
   });
 }
 
+export type PlaywrightRunSummary = { passed: number; failed: number; skipped: number; interrupted: number; timedOut: number; flaky: number };
+
 export function readPlaywrightRunSummary(value: unknown): PlaywrightRunRecord['summary'] {
   if (!isRecord(value)) return null;
-  return { passed: readCount(value.passed), failed: readCount(value.failed), skipped: readCount(value.skipped), interrupted: readCount(value.interrupted) };
+  return { passed: readCount(value.passed), failed: readCount(value.failed), skipped: readCount(value.skipped), interrupted: readCount(value.interrupted),
+    timedOut: readCount(value.timedOut), flaky: readCount(value.flaky) };
+}
+
+export type PlaywrightOutcomeCounts = PlaywrightRunSummary;
+
+/** Counts a run's outcomes: its stored summary when present, otherwise its listed tests. */
+export function countPlaywrightOutcomes(run: PlaywrightRunRecord): PlaywrightOutcomeCounts {
+  if (run.summary) return { ...run.summary };
+  const counts: PlaywrightOutcomeCounts = { passed: 0, failed: 0, skipped: 0, interrupted: 0, timedOut: 0, flaky: 0 };
+  for (const test of run.tests) {
+    if (test.status === 'passed') counts.passed++;
+    else if (test.status === 'flaky') counts.flaky++;
+    else if (test.status === 'timedOut') counts.timedOut++;
+    else if (test.status === 'skipped') counts.skipped++;
+    else if (test.status === 'interrupted') counts.interrupted++;
+    else counts.failed++;
+  }
+  return counts;
 }
 
 export function readPlaywrightRunHistory(value: unknown): { runs: PlaywrightRunRecord[]; active: PlaywrightActiveRun[] } | null {

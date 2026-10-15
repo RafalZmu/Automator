@@ -1,12 +1,12 @@
-import { Check, CircleAlert, FilePlus2, FolderOpen, Loader2, LoaderCircle, Play, Plus, RefreshCw, Square, Tag, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, CircleAlert, FilePlus2, FolderOpen, Loader2, LoaderCircle, Play, Plus, RefreshCw, Square, Tag, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { BackendUiState } from '../../contracts/rpc';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import type { AutomationServices } from '../automationServices';
 import {
-  failureReasonLabels, readPlaywrightExplorerState, readPlaywrightRunHistory, validatePlaywrightSectionPath,
-  type PlaywrightActiveRun, type PlaywrightExplorerState, type PlaywrightRunKind, type PlaywrightRunRecord, type PlaywrightRunState,
-  type PlaywrightTestIdentity,
+  countPlaywrightOutcomes, failureReasonHints, failureReasonLabels, outcomeStatusLabels, readPlaywrightExplorerState, readPlaywrightRunHistory,
+  validatePlaywrightSectionPath, type PlaywrightActiveRun, type PlaywrightExplorerState, type PlaywrightRunKind, type PlaywrightRunRecord,
+  type PlaywrightRunState, type PlaywrightTestIdentity, type PlaywrightTestOutcome,
 } from '../contracts/browser';
 import { cancelBrowserRun, startBrowserRun, useBrowserRun } from './browserRunStore';
 
@@ -17,7 +17,7 @@ type ViewProps = {
 };
 
 const styles = `
-.playwright-view{gap:8px}.playwright-heading{display:flex;align-items:center;gap:9px;flex:none}.playwright-heading-copy{flex:1;min-width:0}.playwright-heading h1{margin:0;color:var(--ink);font-size:12px;font-weight:680}.playwright-heading p{margin:3px 0 0;color:var(--muted);font-size:9px}.playwright-project{flex:none;display:flex;align-items:center;gap:6px;padding:7px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28)}.window-shell[data-theme="dark"] .playwright-project{background:rgba(16,25,29,.28)}.playwright-project input{flex:1;min-width:0;height:28px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;outline:0;color:var(--ink);background:var(--control);font:9px inherit}.playwright-project input:focus,.playwright-inline-editor input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(25,139,162,.1)}.playwright-project .secondary-button{flex:none}.playwright-info{display:flex;align-items:center;gap:6px;margin:0;padding:7px 9px;border:1px solid var(--line);border-radius:8px;color:var(--muted-strong);background:rgba(255,255,255,.27);font-size:9px;line-height:1.4}.playwright-info[data-error="true"]{color:var(--danger);background:rgba(255,240,238,.48)}.playwright-toolbar{display:flex;align-items:center;gap:6px;flex:none}.playwright-toolbar .spacer{flex:1}.playwright-toolbar select{height:29px;min-width:105px;padding:4px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--control);font:9px inherit}.playwright-runner{font-size:8px;color:var(--muted);white-space:nowrap}.playwright-list{flex:1;min-height:0;display:flex;flex-direction:column;gap:7px;overflow:auto;padding:1px 2px 3px 0;scrollbar-width:thin}.playwright-file{flex:none;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.26)}.window-shell[data-theme="dark"] .playwright-file{background:rgba(16,25,29,.22)}.playwright-file summary{display:flex;align-items:center;gap:6px;min-height:38px;padding:6px 8px;cursor:pointer;list-style:none}.playwright-file summary::-webkit-details-marker{display:none}.playwright-file-name{flex:1;min-width:0;overflow:hidden;color:var(--ink);font:9px "Cascadia Code",Consolas,monospace;text-overflow:ellipsis;white-space:nowrap}.playwright-file-count{color:var(--muted);font-size:8px;white-space:nowrap}.playwright-file-tools{display:flex;gap:3px}.playwright-test{display:flex;flex-direction:column;gap:4px;padding:7px 8px;border-top:1px solid var(--line)}.playwright-test-main{display:flex;align-items:center;gap:6px;min-width:0}.playwright-test-copy{flex:1;min-width:0}.playwright-test-title{overflow:hidden;color:var(--ink);font-size:9px;text-overflow:ellipsis;white-space:nowrap}.playwright-test-meta{margin-top:2px;color:var(--muted);font-size:7px}.playwright-test-actions{display:flex;align-items:center;gap:2px}.playwright-test-actions .icon-button{width:26px;height:26px}.playwright-tag-list{display:flex;flex-wrap:wrap;gap:4px}.playwright-tag{padding:2px 6px;border:1px solid rgba(26,131,151,.18);border-radius:99px;color:var(--accent-strong);background:var(--accent-soft);font-size:7px}.playwright-inline-editor{display:flex;align-items:center;gap:5px}.playwright-inline-editor input{flex:1;min-width:80px;height:25px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;color:var(--ink);background:var(--control);font:8px inherit}.playwright-inline-editor small{color:var(--muted);font-size:7px}.playwright-form{flex:none;display:flex;flex-direction:column;gap:7px;padding:8px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.32)}.playwright-form header{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:9px}.playwright-form header strong{flex:1}.playwright-form-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}.playwright-form label{display:flex;flex-direction:column;gap:3px;color:var(--muted);font-size:8px}.playwright-form label:first-child{grid-column:1/-1}.playwright-form input{min-width:0;height:28px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--control);font:9px inherit}.playwright-form-actions{display:flex;justify-content:flex-end;gap:5px}.playwright-empty{flex:1;min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--muted);text-align:center}.playwright-empty strong{color:var(--ink);font-size:10px}.playwright-empty p{max-width:320px;margin:0;font-size:8px;line-height:1.5}.playwright-stale{flex:none;display:flex;align-items:center;gap:7px;padding:7px;border:1px solid var(--line);border-radius:8px;color:var(--muted-strong);font-size:8px}.playwright-stale span{flex:1}.playwright-run-result{flex:none;max-height:27%;display:flex;flex-direction:column;gap:5px;padding:7px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28);overflow:auto}.playwright-run-result header{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:9px}.playwright-run-result header strong{flex:1}.playwright-outcome{display:flex;gap:7px;align-items:center;color:var(--muted-strong);font-size:8px}.playwright-outcome[data-status="passed"]{color:var(--success)}.playwright-outcome[data-status="failed"],.playwright-outcome[data-status="timedOut"]{color:var(--danger)}.playwright-outcome span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.playwright-view .icon-button{flex:none}.playwright-view .icon-button:disabled{opacity:.45}.playwright-outcome-block{display:flex;flex-direction:column;gap:3px}.playwright-reason{flex:none;padding:1px 6px;border-radius:9px;color:var(--danger);background:rgba(180,35,24,.1);font-size:7px;font-style:normal;font-weight:650;white-space:nowrap}.playwright-error{max-height:110px;margin:0 0 3px;padding:6px 8px;overflow:auto;border:1px solid var(--line);border-radius:7px;color:var(--muted-strong);background:rgba(255,255,255,.3);font:8px/1.45 "Cascadia Code",Consolas,monospace;white-space:pre-wrap;word-break:break-word}.playwright-history{flex:none;max-height:30%;display:flex;flex-direction:column;gap:5px;padding:7px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28);overflow:auto}.playwright-history header{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:9px}.playwright-history header small{flex:1;color:var(--muted);font-size:8px}.playwright-history ul{display:flex;flex-direction:column;gap:3px;margin:0;padding:0;list-style:none}.playwright-history-item{width:100%;display:flex;align-items:center;gap:8px;padding:5px 7px;border:1px solid transparent;border-radius:7px;color:var(--ink);background:transparent;font:9px inherit;text-align:left;cursor:pointer}.playwright-history-item:hover,.playwright-history-item[aria-pressed="true"]{border-color:var(--line);background:rgba(25,139,162,.08)}.playwright-history-item strong{flex:1;min-width:0;overflow:hidden;font-weight:620;text-overflow:ellipsis;white-space:nowrap}.playwright-history-item span:last-child{color:var(--muted);font-size:8px;white-space:nowrap}
+.playwright-view{gap:8px}.playwright-heading{display:flex;align-items:center;gap:9px;flex:none}.playwright-heading-copy{flex:1;min-width:0}.playwright-heading h1{margin:0;color:var(--ink);font-size:12px;font-weight:680}.playwright-heading p{margin:3px 0 0;color:var(--muted);font-size:9px}.playwright-project{flex:none;display:flex;align-items:center;gap:6px;padding:7px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28)}.window-shell[data-theme="dark"] .playwright-project{background:rgba(16,25,29,.28)}.playwright-project input{flex:1;min-width:0;height:28px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;outline:0;color:var(--ink);background:var(--control);font:9px inherit}.playwright-project input:focus,.playwright-inline-editor input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(25,139,162,.1)}.playwright-project .secondary-button{flex:none}.playwright-info{display:flex;align-items:center;gap:6px;margin:0;padding:7px 9px;border:1px solid var(--line);border-radius:8px;color:var(--muted-strong);background:rgba(255,255,255,.27);font-size:9px;line-height:1.4}.playwright-info[data-error="true"]{color:var(--danger);background:rgba(255,240,238,.48)}.playwright-toolbar{display:flex;align-items:center;gap:6px;flex:none}.playwright-toolbar .spacer{flex:1}.playwright-toolbar select{height:29px;min-width:105px;padding:4px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--control);font:9px inherit}.playwright-runner{font-size:8px;color:var(--muted);white-space:nowrap}.playwright-list{flex:1;min-height:0;display:flex;flex-direction:column;gap:7px;overflow:auto;padding:1px 2px 3px 0;scrollbar-width:thin}.playwright-file{flex:none;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.26)}.window-shell[data-theme="dark"] .playwright-file{background:rgba(16,25,29,.22)}.playwright-file summary{display:flex;align-items:center;gap:6px;min-height:38px;padding:6px 8px;cursor:pointer;list-style:none}.playwright-file summary::-webkit-details-marker{display:none}.playwright-file-name{flex:1;min-width:0;overflow:hidden;color:var(--ink);font:9px "Cascadia Code",Consolas,monospace;text-overflow:ellipsis;white-space:nowrap}.playwright-file-count{color:var(--muted);font-size:8px;white-space:nowrap}.playwright-file-tools{display:flex;gap:3px}.playwright-test{display:flex;flex-direction:column;gap:4px;padding:7px 8px;border-top:1px solid var(--line)}.playwright-test-main{display:flex;align-items:center;gap:6px;min-width:0}.playwright-test-copy{flex:1;min-width:0}.playwright-test-title{overflow:hidden;color:var(--ink);font-size:9px;text-overflow:ellipsis;white-space:nowrap}.playwright-test-meta{margin-top:2px;color:var(--muted);font-size:7px}.playwright-test-actions{display:flex;align-items:center;gap:2px}.playwright-test-actions .icon-button{width:26px;height:26px}.playwright-tag-list{display:flex;flex-wrap:wrap;gap:4px}.playwright-tag{padding:2px 6px;border:1px solid rgba(26,131,151,.18);border-radius:99px;color:var(--accent-strong);background:var(--accent-soft);font-size:7px}.playwright-inline-editor{display:flex;align-items:center;gap:5px}.playwright-inline-editor input{flex:1;min-width:80px;height:25px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;color:var(--ink);background:var(--control);font:8px inherit}.playwright-inline-editor small{color:var(--muted);font-size:7px}.playwright-form{flex:none;display:flex;flex-direction:column;gap:7px;padding:8px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.32)}.playwright-form header{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:9px}.playwright-form header strong{flex:1}.playwright-form-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}.playwright-form label{display:flex;flex-direction:column;gap:3px;color:var(--muted);font-size:8px}.playwright-form label:first-child{grid-column:1/-1}.playwright-form input{min-width:0;height:28px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--control);font:9px inherit}.playwright-form-actions{display:flex;justify-content:flex-end;gap:5px}.playwright-empty{flex:1;min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--muted);text-align:center}.playwright-empty strong{color:var(--ink);font-size:10px}.playwright-empty p{max-width:320px;margin:0;font-size:8px;line-height:1.5}.playwright-stale{flex:none;display:flex;align-items:center;gap:7px;padding:7px;border:1px solid var(--line);border-radius:8px;color:var(--muted-strong);font-size:8px}.playwright-stale span{flex:1}.playwright-run-result{flex:0 1 auto;min-height:0;max-height:46%;display:flex;flex-direction:column;gap:7px;padding:9px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28);overflow:auto}.playwright-run-result header{display:flex;align-items:center;gap:8px;color:var(--ink)}.playwright-run-title{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.playwright-run-title strong{overflow:hidden;color:var(--ink);font-size:12px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}.playwright-run-title small{color:var(--muted);font-size:10px}.playwright-run-counts{display:flex;flex-wrap:wrap;gap:4px}.playwright-count{padding:2px 8px;border-radius:9px;color:var(--muted-strong);background:rgba(90,126,135,.14);font-size:10px;font-weight:650;white-space:nowrap}.playwright-count.is-passed{color:#1f7a5a;background:rgba(47,166,123,.16)}.playwright-count.is-failed{color:var(--danger,#b42318);background:rgba(180,35,24,.12)}.playwright-count.is-timedOut{color:#8a5300;background:rgba(214,139,20,.18)}.playwright-count.is-flaky{color:#5b3fb8;background:rgba(111,86,214,.14)}.playwright-outcome-list{display:flex;flex-direction:column;gap:6px}.playwright-outcome-row{display:flex;flex-direction:column;gap:4px;padding:8px 9px;border:1px solid var(--line);border-left:3px solid var(--danger,#b42318);border-radius:8px;background:rgba(255,255,255,.3)}.playwright-outcome-row[data-status="timedOut"]{border-left-color:#d68b14}.playwright-outcome-row[data-status="flaky"]{border-left-color:#6f56d6}.playwright-outcome-row[data-status="passed"],.playwright-outcome-row[data-status="skipped"]{border-left-color:var(--line)}.playwright-outcome-head{display:flex;align-items:center;gap:7px;min-width:0}.playwright-outcome-head strong{flex:1;min-width:0;overflow:hidden;color:var(--ink);font-size:11px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}.playwright-outcome-status{flex:none;padding:1px 7px;border-radius:9px;color:var(--muted-strong);background:rgba(90,126,135,.14);font-size:10px;font-weight:650;white-space:nowrap}.playwright-outcome-status.is-failed,.playwright-outcome-status.is-timedOut{color:var(--danger,#b42318);background:rgba(180,35,24,.12)}.playwright-outcome-status.is-timedOut{color:#8a5300;background:rgba(214,139,20,.18)}.playwright-outcome-status.is-passed{color:#1f7a5a;background:rgba(47,166,123,.16)}.playwright-outcome-status.is-flaky{color:#5b3fb8;background:rgba(111,86,214,.14)}.playwright-outcome-where{margin:0;color:var(--muted-strong);font:10px/1.45 "Cascadia Code",Consolas,monospace;overflow-wrap:anywhere}.playwright-outcome-where code{font:inherit;color:var(--ink)}.playwright-outcome-hint{margin:0;color:var(--muted);font-size:10px;line-height:1.45}.playwright-snippet{color:var(--muted-strong);font-size:10px}.playwright-snippet summary,.playwright-quiet summary{cursor:pointer;padding:3px 0}.playwright-snippet pre{max-height:150px;margin:4px 0 0;padding:6px 8px;overflow:auto;border:1px solid var(--line);border-radius:7px;color:var(--muted-strong);background:rgba(255,255,255,.3);font:10px/1.45 "Cascadia Code",Consolas,monospace;white-space:pre}.playwright-quiet{color:var(--muted-strong);font-size:11px}.playwright-view .script-run-state{min-width:64px;padding:2px 8px;font-size:10px}.playwright-view .icon-button{flex:none}.playwright-view .icon-button:disabled{opacity:.45}.playwright-reason{flex:none;padding:2px 8px;border-radius:9px;color:var(--danger,#b42318);background:rgba(180,35,24,.1);font-size:10px;font-style:normal;font-weight:650;white-space:nowrap}.playwright-error{max-height:150px;margin:0;padding:6px 8px;overflow:auto;border:1px solid var(--line);border-radius:7px;color:var(--muted-strong);background:rgba(255,255,255,.3);font:10px/1.45 "Cascadia Code",Consolas,monospace;white-space:pre-wrap;word-break:break-word}.playwright-history{flex:none;min-height:0;display:flex;flex-direction:column;gap:6px;padding:8px 9px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28)}.playwright-history[data-open="true"]{flex:0 1 55%;max-height:55%}.playwright-history-body{flex:1;min-height:0;overflow:auto}.playwright-history header{display:flex;align-items:center;gap:8px;color:var(--ink)}.playwright-history-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:7px;padding:4px 2px;border:0;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}.playwright-history-toggle strong{font-size:12px;font-weight:650;white-space:nowrap}.playwright-history-toggle small{flex:1;min-width:0;overflow:hidden;color:var(--muted);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.playwright-history ul{display:flex;flex-direction:column;gap:3px;margin:0;padding:0;list-style:none}.playwright-history-item{width:100%;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:7px 9px;border:1px solid transparent;border-radius:7px;color:var(--ink);background:transparent;font:11px inherit;text-align:left;cursor:pointer}.playwright-history-item:hover,.playwright-history-item[aria-pressed="true"]{border-color:var(--line);background:rgba(25,139,162,.08)}.playwright-history-item .playwright-history-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.playwright-history-item strong{min-width:0;overflow:hidden;font-size:11px;font-weight:620;text-overflow:ellipsis;white-space:nowrap}.playwright-history-item small{color:var(--muted);font-size:10px;white-space:nowrap}.playwright-history-item .playwright-run-counts{flex-basis:100%}
 @media(max-width:430px){.playwright-project{flex-wrap:wrap}.playwright-project input{flex-basis:100%}.playwright-toolbar{flex-wrap:wrap}.playwright-form-fields{grid-template-columns:1fr}.playwright-form label:first-child{grid-column:auto}}
 `;
 
@@ -31,6 +31,53 @@ function formatDuration(milliseconds: number): string {
 
 function formatRunTime(value: string | number): string {
   return new Date(value).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+const historyOpenKey = 'automator.playwrightRunHistoryOpen';
+
+/** Remembers whether the run history is expanded for this viewer. Storage can be unavailable, so every access is guarded. */
+function readHistoryOpen(): boolean {
+  try { return window.localStorage.getItem(historyOpenKey) === '1'; } catch { return false; }
+}
+
+function writeHistoryOpen(open: boolean): void {
+  try { window.localStorage.setItem(historyOpenKey, open ? '1' : '0'); } catch { /* The toggle still works without storage. */ }
+}
+
+/** Failing outcomes first, the most urgent at the top. */
+const outcomeOrder: Record<string, number> = { timedOut: 0, failed: 1, interrupted: 2, flaky: 3, passed: 4, skipped: 5 };
+
+function RunCountChips({ run }: { run: PlaywrightRunRecord }) {
+  const counts = countPlaywrightOutcomes(run);
+  const chips: Array<{ key: keyof typeof counts; text: string }> = [
+    { key: 'passed', text: 'passed' }, { key: 'flaky', text: 'flaky' }, { key: 'failed', text: 'failed' },
+    { key: 'timedOut', text: 'timed out' }, { key: 'skipped', text: 'skipped' }, { key: 'interrupted', text: 'interrupted' },
+  ];
+  const shown = chips.filter((chip) => counts[chip.key] > 0);
+  if (shown.length === 0) return null;
+  return <span className="playwright-run-counts">
+    {shown.map((chip) => <span key={chip.key} className={`playwright-count is-${chip.key}`}>{counts[chip.key]} {chip.text}</span>)}
+  </span>;
+}
+
+function OutcomeRow({ test }: { test: PlaywrightTestOutcome }) {
+  const reason = test.reason;
+  return <article className="playwright-outcome-row" data-status={test.status}>
+    <div className="playwright-outcome-head">
+      <span className={`playwright-outcome-status is-${test.status}`}>{outcomeStatusLabels[test.status] ?? test.status}</span>
+      <strong title={test.title}>{test.title}</strong>
+      {reason && <span className="playwright-reason" data-reason={reason}>{failureReasonLabels[reason]}</span>}
+    </div>
+    <p className="playwright-outcome-where">
+      {test.project ? `[${test.project}] ` : ''}{test.file}:{test.failureLine ?? test.line}
+      {test.step ? <> · at <code>{test.step}</code></> : null}
+      {test.attempts > 1 ? ` · ${test.attempts} attempts` : ''}
+    </p>
+    {reason && <p className="playwright-outcome-hint">{failureReasonHints[reason]}</p>}
+    {test.status === 'flaky' && <p className="playwright-outcome-hint">Passed on a retry. The error below is from the attempt that failed.</p>}
+    {test.error && <pre className="playwright-error">{test.error}</pre>}
+    {test.snippet && <details className="playwright-snippet"><summary>Code around the failure</summary><pre>{test.snippet}</pre></details>}
+  </article>;
 }
 
 function ElapsedTime({ since }: { since: number }) {
@@ -64,6 +111,7 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
   const [history, setHistory] = useState<PlaywrightRunRecord[]>([]);
   const [backendActive, setBackendActive] = useState<PlaywrightActiveRun[]>([]);
   const [shownRunId, setShownRunId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState<boolean>(readHistoryOpen);
   const { active: activeRun, last: lastRun } = useBrowserRun();
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -141,6 +189,7 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
 
   useEffect(() => { void loadState(); }, [loadState]);
   useEffect(() => { void loadHistory(); }, [loadHistory, lastRun?.id]);
+  useEffect(() => { writeHistoryOpen(historyOpen); }, [historyOpen]);
   // A run started by another window or an agent is only visible through the backend, so follow it until it ends.
   const foreignRunning = !activeRun && backendActive.length > 0;
   useEffect(() => {
@@ -303,7 +352,14 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
   useRegisterTabCommands(tab.id, commands);
 
   const shownRun = shownRunId === 'none' ? undefined : history.find((item) => item.id === (shownRunId ?? history[0]?.id));
-  const outcomesByLocation = new Map((shownRun?.tests ?? []).map((outcome) => [`${outcome.file.toLowerCase()}:${outcome.line}:${outcome.title.toLowerCase()}`, outcome.status]));
+  const shownOutcomes = {
+    attention: (shownRun?.tests ?? []).filter((test) => test.status !== 'passed' && test.status !== 'skipped')
+      .sort((first, second) => (outcomeOrder[first.status] ?? 9) - (outcomeOrder[second.status] ?? 9)),
+    quiet: (shownRun?.tests ?? []).filter((test) => test.status === 'passed' || test.status === 'skipped'),
+  };
+  const historySummary = history.length === 0 ? 'No runs yet'
+    : `${history.length} saved · last ${stateLabels[history[0].state]}, ${formatRunTime(history[0].startedUtc)}`;
+  const outcomesByLocation = new Map((shownRun?.tests ?? []).map((outcome) => [`${outcome.file.toLowerCase()}:${outcome.line}:${outcome.title.toLowerCase()}`, outcomeStatusLabels[outcome.status] ?? outcome.status]));
   const staleTagCount = explorer?.staleTags.length ?? 0;
 
   return <section className="module-view playwright-view" aria-label="Playwright Test Explorer">
@@ -374,25 +430,50 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
     </div>
 
     {shownRun && <section className="playwright-run-result" aria-label="Playwright run results">
-      <header><Check size={12} /><strong>{shownRun.id === history[0]?.id ? 'Latest result' : 'Past result'} · {shownRun.target}</strong><span>{formatRunTime(shownRun.startedUtc)} · {formatDuration(shownRun.durationMilliseconds)}</span><button className="icon-button" aria-label="Hide run results" onClick={() => setShownRunId('none')}><X size={12} /></button></header>
+      <header>
+        <span className={`script-run-state is-${shownRun.state}`}>{stateLabels[shownRun.state]}</span>
+        <div className="playwright-run-title">
+          <strong title={shownRun.target}>{shownRun.id === history[0]?.id ? 'Latest run' : 'Past run'} · {shownRun.target}</strong>
+          <small>{formatRunTime(shownRun.startedUtc)} · {formatDuration(shownRun.durationMilliseconds)}</small>
+        </div>
+        <button className="icon-button" aria-label="Hide run results" onClick={() => setShownRunId('none')}><X size={12} /></button>
+      </header>
+      <RunCountChips run={shownRun} />
       <p className="playwright-info" data-error={shownRun.state !== 'success'}>{shownRun.message}{shownRun.outputTruncated ? ' Test runner output was truncated; the run itself continued.' : ''}</p>
-      {shownRun.tests.map((test, index) => <div className="playwright-outcome-block" key={`${test.file}:${test.line}:${test.project}:${index}`}>
-        <div className="playwright-outcome" data-status={test.status}><span>{test.project ? `[${test.project}] ` : ''}{test.file}:{test.line} · {test.title}</span>{test.reason && <em className="playwright-reason" data-reason={test.reason}>{failureReasonLabels[test.reason]}</em>}<strong>{test.status}</strong></div>
-        {test.error && <pre className="playwright-error">{test.error}</pre>}
-      </div>)}
+      {shownOutcomes.attention.length > 0 && <div className="playwright-outcome-list">
+        {shownOutcomes.attention.map((test, index) => <OutcomeRow key={`${test.file}:${test.line}:${test.project}:${index}`} test={test} />)}
+      </div>}
+      {shownOutcomes.quiet.length > 0 && <details className="playwright-quiet">
+        <summary>{shownOutcomes.quiet.length} passed or skipped</summary>
+        <div className="playwright-outcome-list">
+          {shownOutcomes.quiet.map((test, index) => <OutcomeRow key={`${test.file}:${test.line}:${test.project}:quiet-${index}`} test={test} />)}
+        </div>
+      </details>}
+      {shownRun.tests.length === 0 && <p className="playwright-info">No per-test results were saved for this run.</p>}
     </section>}
 
-    <section className="playwright-history" aria-label="Playwright run history">
-      <header><strong>Run history</strong><small>Saved in the Automator library, newest first.</small>
-        <button className="secondary-button" type="button" disabled={!!busy || history.length === 0} onClick={() => void clearHistory()}><Trash2 size={11} /> Clear history</button></header>
-      <ul>{history.map((item) => <li key={item.id}>
-        <button type="button" className="playwright-history-item" aria-pressed={shownRun?.id === item.id} onClick={() => setShownRunId(item.id)}>
-          <span className={`script-run-state is-${item.state}`}>{stateLabels[item.state]}</span>
-          <strong title={item.target}>{item.target}</strong>
-          <span>{formatRunTime(item.startedUtc)} · {formatDuration(item.durationMilliseconds)}{item.summary ? ` · ${item.summary.passed}✓ ${item.summary.failed}✗` : ''}</span>
+    <section className="playwright-history" data-open={historyOpen} aria-label="Playwright run history">
+      <header>
+        <button type="button" className="playwright-history-toggle" aria-expanded={historyOpen} aria-controls="playwright-history-body" onClick={() => setHistoryOpen((open) => !open)}>
+          {historyOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          <strong>Run history</strong>
+          <small>{historySummary}</small>
         </button>
-      </li>)}</ul>
-      {history.length === 0 && <p className="playwright-info">No runs yet. Runs are saved here and kept after Automator restarts.</p>}
+        <button className="secondary-button" type="button" disabled={!!busy || history.length === 0} onClick={() => void clearHistory()}><Trash2 size={11} /> Clear history</button>
+      </header>
+      {historyOpen && <div className="playwright-history-body" id="playwright-history-body">
+        <ul>{history.map((item) => <li key={item.id}>
+          <button type="button" className="playwright-history-item" aria-pressed={shownRun?.id === item.id} onClick={() => setShownRunId(item.id)}>
+            <span className={`script-run-state is-${item.state}`}>{stateLabels[item.state]}</span>
+            <span className="playwright-history-copy">
+              <strong title={item.target}>{item.target}</strong>
+              <small>{formatRunTime(item.startedUtc)} · {formatDuration(item.durationMilliseconds)}</small>
+            </span>
+            <RunCountChips run={item} />
+          </button>
+        </li>)}</ul>
+        {history.length === 0 && <p className="playwright-info">No runs yet. Runs are saved here and kept after Automator restarts.</p>}
+      </div>}
     </section>
   </section>;
 }

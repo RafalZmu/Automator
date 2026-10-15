@@ -118,7 +118,6 @@ let focusSequenceRunning = false;
 let focusRequestPending = false;
 let pendingFocusNonce: string | undefined;
 let pendingFocusMode: BackendUiState['mode'] | undefined;
-let initialPanelPlacementApplied = false;
 let backendGeneration = 0;
 let panelVisibilityEpoch = 0;
 let retryPromise: Promise<{ state: BackendUiState | null; host: ReturnType<typeof getHostInfo> }> | undefined;
@@ -160,12 +159,12 @@ function getWindowHandleHex(window: BrowserWindow): string {
   return `0x${value.toString(16).toUpperCase()}`;
 }
 
+/** Moves a hidden panel under the pointer on the display it is on. An open panel keeps its position. */
 function placeNearPointer(window: BrowserWindow): void {
-  if (initialPanelPlacementApplied) return;
+  if (window.isVisible()) return;
   const pointer = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(pointer);
   window.setBounds(computePanelBounds(pointer, display.workArea, panelSize), false);
-  initialPanelPlacementApplied = true;
 }
 
 function getHostInfo() {
@@ -350,6 +349,7 @@ async function startBackend(): Promise<void> {
   if (app.isPackaged) {
     backendEnvironment.AUTOMATOR_BROWSER_NODE_PATH = path.join(browserRuntimeFolder, 'node.exe');
     backendEnvironment.AUTOMATOR_BROWSER_WORKER_PATH = path.join(browserRuntimeFolder, 'browser-worker.cjs');
+    backendEnvironment.AUTOMATOR_PLAYWRIGHT_RUN_REPORTER_PATH = path.join(browserRuntimeFolder, 'playwright-run-reporter.cjs');
   }
   const child = new BackendProcess(backendExe, [], backendFolder, backendEnvironment, writeLog);
   backend = child;
@@ -971,14 +971,16 @@ async function presentPanel(): Promise<void> {
   const owned = mainWindow;
   const generation = backendGeneration;
   const visibilityEpoch = panelVisibilityEpoch;
-  placeNearPointer(owned);
   await updateWindowContext(false);
   if (quitRequested || mainWindow !== owned || owned.isDestroyed() || generation !== backendGeneration
       || visibilityEpoch !== panelVisibilityEpoch || !currentState?.visible || nativeDialogActive) return;
+  // Place after the backend round trip so the panel appears under the pointer as it is now.
+  placeNearPointer(owned);
   writeLog('Panel.ShowRequested', 'Showing the launcher panel.', {
     visibleBefore: owned.isVisible(),
     loadingMainFrame: owned.webContents.isLoadingMainFrame(),
     previousForegroundHwnd: currentState.previousForegroundHwnd,
+    panelBounds: owned.getBounds(),
   });
   owned.show();
   owned.focus();
