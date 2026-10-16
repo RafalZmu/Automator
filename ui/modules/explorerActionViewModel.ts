@@ -1,7 +1,7 @@
 import type { FileExplorerLaunchRequest } from '../../contracts/rpc';
 import type { ExplorerActionDefinition, ScriptTemplateDescriptor, ScriptTemplateValue } from '../../contracts/scriptRunner';
-import { initialTemplateValues } from './scriptTemplateViewModel.ts';
-export type ExplorerProfile = { id: string; name: string; arguments: string[]; templateOrigin?: { id: string; version: number } | null };
+import { initialParameterValues } from './scriptTemplateViewModel.ts';
+export type ExplorerProfile = { id: string; name: string; arguments: string[]; templateOrigin?: { id: string; version: number } | null; values?: Record<string, ScriptTemplateValue> | null };
 export type ExplorerRunForm = { request: FileExplorerLaunchRequest; action: ExplorerActionDefinition; profile: ExplorerProfile; arguments: string[]; template?: ScriptTemplateDescriptor; values: Record<string, ScriptTemplateValue> };
 export function normalizeExplorerExtensions(value: string): string[] {
   const extensions = value.trim().split(/[\s,;]+/).filter(Boolean).map(item => `.${item.replace(/^\./, '').toLowerCase()}`);
@@ -26,7 +26,7 @@ export function prepareExplorerForm(request: FileExplorerLaunchRequest, actions:
     template = templates.find(item => item.id === profile.templateOrigin?.id && item.version === profile.templateOrigin.version);
     if (!template) throw new Error('This template version is unavailable. Remove and reinstall its profile.');
     if (!template.parameters.some(item => item.key === action.fileParameterKey && (item.type === 'file' || item.type === 'directory'))) throw new Error('The Explorer action needs a declared file or directory template parameter.');
-    values = { ...initialTemplateValues(template), [action.fileParameterKey!]: request.filePath };
+    values = { ...initialParameterValues(template.parameters, profile.values, template.id), [action.fileParameterKey!]: request.filePath };
   } else if (!profile.arguments.some(item => item.includes('{{file.path}}'))) throw new Error('This profile needs {{file.path}} in its saved arguments.');
   return { request, action, profile, arguments: profile.arguments.map(item => item.replaceAll('{{file.path}}', request.filePath)), template, values };
 }

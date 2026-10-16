@@ -25,6 +25,10 @@ internal static class ScriptRunnerTemplateSpecs
         var arguments = ScriptRunnerTemplateCatalog.MapArguments(template, values.RootElement);
         Ensure(arguments.Count == 6 && arguments[0] == "C:\\Data Files\\live.fdb" && arguments[5] == "masterkey",
             "paths and transient values map to individual arguments");
+        using var derived = JsonDocument.Parse("""{"database":"C:\\Data Files\\live.fdb","gbak":"C:\\Program Files\\Firebird\\gbak.exe","username":"SYSDBA","password":"masterkey"}""");
+        var derivedArguments = ScriptRunnerTemplateCatalog.MapArguments(template, derived.RootElement);
+        Ensure(derivedArguments[1] == "C:\\Data Files\\live.fbk" && derivedArguments[2] == "C:\\Data Files\\live.zip",
+            "empty backup and ZIP paths default to the database path with .fbk and .zip");
         using var relativePath = JsonDocument.Parse("""{"database":"data/live.fdb","backup":"D:\\Backup Files\\live.fbk","archive":"D:\\Backup Files\\live.zip","gbak":"C:\\Program Files\\Firebird\\gbak.exe","username":"SYSDBA","password":"masterkey"}""");
         Throws(() => ScriptRunnerTemplateCatalog.MapArguments(template, relativePath.RootElement), "relative file paths rejected");
         var directoryTemplate = template with { Parameters = [template.Parameters[0] with { Type = ScriptRunnerTemplateParameterType.Directory }, .. template.Parameters.Skip(1)] };

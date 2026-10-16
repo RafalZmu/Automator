@@ -49,8 +49,26 @@ internal static class ScriptRunnerTemplateInstallSpecs
             Ensure(!store.LastWrite!.Data.GetRawText().Contains("masterkey", StringComparison.OrdinalIgnoreCase), "no persisted password");
             var script = await File.ReadAllTextAsync(path);
             Ensure(!script.Contains("masterkey", StringComparison.OrdinalIgnoreCase) && !script.Contains("sysdba", StringComparison.OrdinalIgnoreCase), "no credentials in asset");
+            using var copyInput = JsonDocument.Parse("""{"id":"firebird-3-backup-zip","copy":true}""");
+            var copyStore = new MultiRecordLibraryStore();
+            var copyCapabilities = new AutomationCapabilityRegistry(libraryStoreFactory: _ => copyStore);
+            await using var copyContext = copyCapabilities.CreateContext(new AutomationModuleDescriptor(module.Id,
+                module.Definition.Capabilities.Where(capability => capability.Id == AutomationCapabilityIds.LibraryStorage).ToArray()));
+            var original = await module.ExecuteAsync("installTemplate", copyInput.RootElement, module.CreateDefaultSettings(), copyContext, CancellationToken.None);
+            var firstCopy = await module.ExecuteAsync("installTemplate", copyInput.RootElement, module.CreateDefaultSettings(), copyContext, CancellationToken.None);
+            var secondCopy = await module.ExecuteAsync("installTemplate", copyInput.RootElement, module.CreateDefaultSettings(), copyContext, CancellationToken.None);
+            Ensure(original.Status == AutomationStatus.Success && firstCopy.Status == AutomationStatus.Success && secondCopy.Status == AutomationStatus.Success, "additional copies install");
+            var originalProfile = original.Data.GetProperty("profile");
+            var firstCopyProfile = firstCopy.Data.GetProperty("profile");
+            var secondCopyProfile = secondCopy.Data.GetProperty("profile");
+            Ensure(new[] { originalProfile, firstCopyProfile, secondCopyProfile }.Select(item => item.GetProperty("id").GetString()).Distinct().Count() == 3, "each copy is its own profile");
+            Ensure(firstCopyProfile.GetProperty("name").GetString() == originalProfile.GetProperty("name").GetString() + " (2)"
+                && secondCopyProfile.GetProperty("name").GetString() == originalProfile.GetProperty("name").GetString() + " (3)", "copies get numbered names");
+            Ensure(firstCopyProfile.GetProperty("scriptPath").GetString() == path && secondCopyProfile.GetProperty("scriptPath").GetString() == path, "copies share the installed script");
             await File.WriteAllTextAsync(path, "user modification");
-            var duplicate = await module.ExecuteAsync("installTemplate", input.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
+            var modifiedCopy = await module.ExecuteAsync("installTemplate", copyInput.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
+            Ensure(modifiedCopy.Status == AutomationStatus.Error && await File.ReadAllTextAsync(path) == "user modification", "a copy never reuses or overwrites a modified script");
+            var duplicate =await module.ExecuteAsync("installTemplate", input.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
             Ensure(duplicate.Status == AutomationStatus.Information && duplicate.Data.GetProperty("profile").GetProperty("id").GetString() == profile.GetProperty("id").GetString(), "duplicate returns saved profile");
             Ensure(await File.ReadAllTextAsync(path) == "user modification", "duplicate does not overwrite");
             File.Delete(interpreter);
@@ -110,4 +128,21 @@ internal static class ScriptRunnerTemplateInstallSpecs
         public Task UpsertAsync(AutomationLibraryRecord record, CancellationToken cancellationToken) => throw new IOException("Fixture storage failure");
         public Task<bool> DeleteAsync(string moduleId, string collection, string id, CancellationToken cancellationToken) => Task.FromResult(false);
     }
+}
+
+sealed class MultiRecordLibraryStore : IAutomationLibraryStore
+{
+    private readonly List<AutomationLibraryRecord> _records = [];
+    public Task<IReadOnlyList<AutomationLibraryRecord>> ListAsync(string moduleId, string collection, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AutomationLibraryRecord>>(_records.Where(item => item.ModuleId == moduleId && item.Collection == collection).ToArray());
+    public Task<AutomationLibraryRecord?> GetAsync(string moduleId, string collection, string id, CancellationToken cancellationToken) =>
+        Task.FromResult(_records.FirstOrDefault(item => item.ModuleId == moduleId && item.Collection == collection && item.Id == id));
+    public Task UpsertAsync(AutomationLibraryRecord record, CancellationToken cancellationToken)
+    {
+        _records.RemoveAll(item => item.ModuleId == record.ModuleId && item.Collection == record.Collection && item.Id == record.Id);
+        _records.Add(record);
+        return Task.CompletedTask;
+    }
+    public Task<bool> DeleteAsync(string moduleId, string collection, string id, CancellationToken cancellationToken) =>
+        Task.FromResult(_records.RemoveAll(item => item.ModuleId == moduleId && item.Collection == collection && item.Id == id) > 0);
 }

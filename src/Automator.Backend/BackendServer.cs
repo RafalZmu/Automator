@@ -491,7 +491,7 @@ public sealed class BackendServer : IAsyncDisposable
 
     private static bool IsDetachedRunAction(string moduleId, string actionId) =>
         (moduleId == "browser-automation" && actionId == "runTests")
-        || (moduleId == "script-runner" && actionId is "runProfile" or "runAgain");
+        || (moduleId == "script-runner" && actionId is "runProfile" or "runAgain" or "runExplorerAction");
 
     private Task<AutomationVariableSnapshot> GetGlobalVariablesAsync(RpcRequest request)
     {

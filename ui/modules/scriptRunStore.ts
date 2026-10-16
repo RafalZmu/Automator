@@ -74,6 +74,8 @@ function remember(record: ScriptRunRecord) {
  */
 export async function startScriptRun(
   target: ScriptRunTarget, profile: { id: string; name: string }, values: Record<string, ScriptTemplateValue> | undefined,
+  /** Replaces the default runProfile input, for actions such as running from an Explorer file mapping. */
+  input?: Record<string, unknown>,
 ): Promise<ScriptRunRecord> {
   if (activeScriptRun()) throw new Error('A script is already running. Wait for it or cancel it first.');
   const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -87,7 +89,7 @@ export async function startScriptRun(
       moduleId: target.moduleId,
       actionId: target.action.id,
       actionVersion: target.action.version,
-      input: { id: profile.id, ...(values ? { values } : {}) } as AutomationModuleActionRequest['input'],
+      input: (input ?? { id: profile.id, ...(values ? { values } : {}) }) as AutomationModuleActionRequest['input'],
     });
     rememberTransientResult(id, target.moduleId, target.action.id, result);
     const output = readOutput(result.data);
@@ -136,6 +138,15 @@ export function subscribeScriptRuns(listener: () => void): () => void {
   return () => { listeners.delete(listener); };
 }
 export function useScriptRuns(): readonly ScriptRunRecord[] { return useSyncExternalStore(subscribeScriptRuns, getScriptRuns); }
+
+/** One line explaining why a run did not succeed: the script's own error output first, then the run message. */
+export function describeRunError(run: ScriptRunRecord): string {
+  if (run.state === 'success' || run.state === 'running' || run.state === 'canceled') return '';
+  const line = (text: string | undefined) => text?.split(/\r?\n/).map((item) => item.trim()).find(Boolean) ?? '';
+  const text = line(run.output?.stderr) || line(run.message)
+    || (run.state === 'timedOut' ? 'The script timed out.' : run.output?.exitCode ? `Exit code ${run.output.exitCode}` : 'The run failed.');
+  return text.length > 200 ? `${text.slice(0, 199)}…` : text;
+}
 
 export function describeRunState(state: ScriptRunState): string {
   switch (state) {

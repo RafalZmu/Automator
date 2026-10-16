@@ -20,17 +20,19 @@ public sealed class ScriptRunnerTemplateInstaller
     }
 
     public async Task<(ScriptRunnerProfile Profile, bool Installed)> InstallAsync(string id, JsonElement settings,
-        IAutomationLibrary library, CancellationToken cancellationToken, JsonElement? values = null)
+        IAutomationLibrary library, CancellationToken cancellationToken, JsonElement? values = null, bool additionalCopy = false)
     {
         var template = ScriptRunnerTemplateCatalog.Get(id) ?? throw new InvalidDataException("The selected template is not registered.");
         await InstallGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var records = await library.ListAsync(ScriptRunnerModule.ProfileCollection, cancellationToken).ConfigureAwait(false);
+            var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var record in records)
             {
                 var existing = JsonSerializer.Deserialize<ScriptRunnerProfile>(record.Data.GetRawText(), ScriptRunnerModule.JsonOptions);
-                if (existing?.TemplateOrigin is { } origin && origin.Id == template.Id && origin.Version == template.Version)
+                if (existing is not null) usedNames.Add(existing.Name);
+                if (!additionalCopy && existing?.TemplateOrigin is { } origin && origin.Id == template.Id && origin.Version == template.Version)
                 {
                     ScriptRunnerModule.Validate(existing);
                     if (!File.Exists(existing.ScriptPath)) throw new IOException("Installed template script is missing. Restore the script or remove its profile and install again.");
@@ -45,21 +47,33 @@ public sealed class ScriptRunnerTemplateInstaller
             using var source = _openAsset("Automator.Templates." + filename)
                 ?? throw new IOException("Bundled template asset is unavailable. Repair or reinstall Automator.");
             Directory.CreateDirectory(_directory);
-            if (File.Exists(destination)) throw new IOException("Template script already exists. Preserve or move it before installing again; Automator will not overwrite it.");
+            // Another copy of an installed template shares the one installed script, but only when it is still the exact bundled asset.
+            var reuseInstalled = additionalCopy && File.Exists(destination) && SameBytes(source, destination);
+            if (File.Exists(destination) && !reuseInstalled) throw new IOException("Template script already exists. Preserve or move it before installing again; Automator will not overwrite it.");
+            var name = template.Name;
+            if (additionalCopy && usedNames.Contains(name))
+            {
+                var copyNumber = 2;
+                while (usedNames.Contains($"{template.Name} ({copyNumber})")) copyNumber++;
+                name = $"{template.Name} ({copyNumber})";
+            }
             var staging = Path.Combine(_directory, "." + Guid.NewGuid().ToString("N") + ".tmp");
             var moved = false;
             try
             {
-                await using (var target = new FileStream(staging, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                if (!reuseInstalled)
                 {
-                    await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
-                    await target.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    await using (var target = new FileStream(staging, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    {
+                        await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+                        await target.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    File.Move(staging, destination, overwrite: false);
+                    moved = true;
                 }
-                cancellationToken.ThrowIfCancellationRequested();
-                File.Move(staging, destination, overwrite: false);
-                moved = true;
                 // Values remembered at install time are validated against the catalog; sensitive inputs are rejected there.
-                var profile = new ScriptRunnerProfile("template-" + Guid.NewGuid().ToString("N"), template.Name,
+                var profile = new ScriptRunnerProfile("template-" + Guid.NewGuid().ToString("N"), name,
                     template.Interpreter, interpreter, destination, [], _directory, template.OutputMode,
                     template.TimeoutSeconds, new(template.Id, template.Version), Values: values);
                 ScriptRunnerModule.Validate(profile);
@@ -75,6 +89,15 @@ public sealed class ScriptRunnerTemplateInstaller
             finally { if (File.Exists(staging)) File.Delete(staging); }
         }
         finally { InstallGate.Release(); }
+    }
+
+    private static bool SameBytes(Stream source, string path)
+    {
+        using var expected = new MemoryStream();
+        source.CopyTo(expected);
+        if (source.CanSeek) source.Position = 0;
+        var info = new FileInfo(path);
+        return info.Length == expected.Length && expected.ToArray().AsSpan().SequenceEqual(File.ReadAllBytes(path));
     }
 
     /// <summary>Confirms a profile still points at the exact registered asset installed under this data root.</summary>
