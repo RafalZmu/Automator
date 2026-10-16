@@ -57,6 +57,8 @@ export interface AutomatorBridge {
   selectTab(tab: number): Promise<BackendUiState>;
   setQuery(query: string): Promise<BackendUiState>;
   setTextEntryFocused(focused: boolean): Promise<boolean>;
+  /** Widens the compact window to the left for a side panel (or narrows it back). Resolves false when this window is not resized. */
+  setSidePanel(open: boolean, animate?: boolean): Promise<boolean>;
   openCatalog(): Promise<BackendUiState>;
   selectCatalogBinding(bindingId: string): Promise<BackendUiState>;
   selectBinding(bindingId: string): Promise<BackendUiState>;

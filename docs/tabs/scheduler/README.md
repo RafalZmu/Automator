@@ -24,3 +24,7 @@ To schedule a Codex-generated Playwright task, place its saved `playwright-task`
 ## Test case steps
 
 See [TESTS.md](TESTS.md) for recurrence, schedule snapshot, agenda, and calendar cases with their steps and expected results.
+
+## History side panel
+
+Recent runs open as a left side panel in the compact window (the window widens to the left, same behavior as Browser Automation) via the shared `ui/components/SideHistoryPanel.tsx`; the workspace window keeps the inline section. Open state is remembered per tab on this computer.

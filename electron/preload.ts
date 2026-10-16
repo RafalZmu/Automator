@@ -43,6 +43,7 @@ const api: AutomatorBridge = Object.freeze({
   selectTab: (tab: number) => ipcRenderer.invoke('automator:select-tab', { tab }),
   setQuery: (query: string) => ipcRenderer.invoke('automator:set-query', { query }),
   setTextEntryFocused: (focused: boolean) => ipcRenderer.invoke('automator:set-text-entry-focused', { focused }) as Promise<boolean>,
+  setSidePanel: (open: boolean, animate = true) => ipcRenderer.invoke('automator:set-side-panel', { open, animate }) as Promise<boolean>,
   openCatalog: () => ipcRenderer.invoke('automator:open-catalog', {}),
   selectCatalogBinding: (bindingId: string) => ipcRenderer.invoke('automator:select-catalog-binding', { bindingId }),
   selectBinding: (bindingId: string) => ipcRenderer.invoke('automator:select-binding', { bindingId }),

@@ -65,3 +65,5 @@ Update the sibling README when supported profile fields or script output behavio
 Explorer UI: `ui/modules/ExplorerActionsPanel.tsx` and `explorerActionViewModel.ts`; launch queue/context: `ui/App.tsx` and `ui/FileExplorerLaunchContext.ts`; registry adapter: `src/Automator.Windows/WindowsAutomationFileExplorerMenu.cs`. Update this guide, README, and TESTS together when these boundaries change.
 
 PathField uses a React per-instance ID so multiple Library cards and transient forms can reuse the same label without associating it with another input. Preserve that label/control association when changing shared fields.
+
+The history side panel uses the shared `SideHistoryPanel` hook and the host window resize described in the Browser Automation guide; do not reimplement either here.

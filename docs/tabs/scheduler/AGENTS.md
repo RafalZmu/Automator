@@ -21,3 +21,5 @@ Module/coordinator: src/Automator.Application/Automation/SchedulerModule.cs, Aut
 Tests: tests/scheduler-view.test.mjs and tests/Automator.Scheduler.Specs.
 
 Update the sibling README when recurrence types, target kinds, restart policy, or agenda semantics change.
+
+The history side panel uses the shared `SideHistoryPanel` hook and the host window resize described in the Browser Automation guide; do not reimplement either here.

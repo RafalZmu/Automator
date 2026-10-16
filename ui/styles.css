@@ -56,6 +56,21 @@ input { user-select: text; }
   background: var(--surface);
   color: var(--ink);
 }
+/* The compact window is widened to the left by the host while a side panel shows, so the shell's content keeps its screen position. */
+.window-shell[data-surface="launcher"] { padding-left: calc(clamp(14px, 4.6 * min(100vw, 760px) / 100, 24px) + max(0px, 100vw - 760px)); }
+.side-panel-slot { position: absolute; z-index: 2; top: 0; bottom: 0; left: 0; width: max(0px, calc(100vw - 760px)); overflow: hidden; background: rgba(255, 255, 255, .18); pointer-events: auto; }
+.side-panel-slot:empty { display: none; }
+.side-panel-inner { border-right: 1px solid var(--line); position: absolute; top: 0; right: 0; bottom: 0; width: 300px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: clamp(14px, 4.6vh, 23px) 12px 12px 14px; }
+.side-panel-inner header { flex: none; display: flex; align-items: center; gap: 8px; color: var(--ink); }
+.side-panel-inner header strong { flex: 1; font-size: 12px; font-weight: 650; }
+.side-panel-body { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.side-panel-inner ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; max-height: none; }
+.history-bar { flex: none; padding: 4px 9px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255, 255, 255, .28); }
+.history-bar-toggle { width: 100%; display: flex; align-items: center; gap: 7px; padding: 4px 2px; border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.history-bar-toggle[aria-pressed="true"] { color: var(--accent-strong); }
+.history-bar-toggle strong { font-size: 12px; font-weight: 650; white-space: nowrap; }
+.history-bar-toggle small { flex: 1; min-width: 0; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.window-shell[data-theme="dark"] .side-panel-slot { background: rgba(10, 19, 22, .2); }
 .dialog-portal-root { position: absolute; inset: 0; pointer-events: none; }
 
 .window-shell[data-material="acrylic"] { background: rgba(239, 248, 249, .36); }
@@ -481,3 +496,6 @@ kbd { min-width: 17px; padding: 2px 4px; border: 1px solid var(--line); border-r
 .explorer-actions-panel > p { margin: 0; font-size: 10px; line-height: 1.5; color: var(--muted); }
 .explorer-actions-panel [aria-label="Run Explorer action"] { max-height: none; overflow: visible; }
 .explorer-actions-panel > form { display: flex; flex-direction: column; gap: 9px; }
+
+.side-panel-note { margin: 0 0 8px; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.side-panel-body .scheduler-history-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 9px; }
