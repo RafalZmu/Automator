@@ -157,6 +157,7 @@ test('Explorer template mapping prefills the typed file input and keeps credenti
     await launch(action.id);
     const form = page.getByRole('region', { name: 'Run Explorer action', exact: true });
     await form.waitFor();
+    await page.waitForTimeout(2000); console.log('DEBUGREGION ' + JSON.stringify(await page.locator('body').innerText()));
     assert.equal(await form.getByLabel('Selected file', { exact: true }).inputValue(), source);
     assert.equal(await form.getByLabel('Username *', { exact: true }).inputValue(), 'SYSDBA');
     assert.equal(await form.getByLabel('Password *', { exact: true }).inputValue(), 'masterkey');
@@ -242,6 +243,7 @@ test('stopping an Explorer template run clears sensitive inputs and preserves ed
     await launch('stoppable-template');
     const form = page.getByRole('region', { name: 'Run Explorer action', exact: true });
     await form.waitFor();
+    await page.waitForTimeout(2000); console.log('DEBUGREGION ' + JSON.stringify(await page.locator('body').innerText()));
     const backup = path.join(data, 'retained backup.fbk');
     const gbak = path.join(data, 'fixture gbak.exe');
     await form.getByLabel('Backup file *', { exact: true }).fill(backup);
