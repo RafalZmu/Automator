@@ -72,4 +72,4 @@ Explorer action UI lives in `ui/modules/ExplorerActionsPanel.tsx`; `explorerActi
 
 ## Agent access
 
-Saved scripts can be listed, inspected (typed inputs with hints and examples), run, polled and canceled by an MCP client through `list_scripts`, `get_script`, `run_script`, `get_run` and `cancel_run`. Runs use the same `runProfile` action and validation as this tab. See [Agent access](../../sections/agent-access/README.md).
+Saved scripts can be listed, inspected (typed inputs with hints and examples), run, polled and canceled by an MCP client through `list_scripts`, `get_script`, `run_script`, `get_run` and `cancel_run`. Only scripts with the **AI can use** checkbox ticked in the editor (`aiAccess`, off by default) are visible to MCP clients. Runs use the same `runProfile` action and validation as this tab. See [Agent access](../../sections/agent-access/README.md).

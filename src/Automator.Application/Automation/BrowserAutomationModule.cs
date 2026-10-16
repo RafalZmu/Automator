@@ -16,7 +16,10 @@ public sealed record BrowserAutomationProfile(
     string Name,
     string StartUrl,
     IReadOnlyList<string> AllowedHosts,
-    bool AllowLocalNetwork);
+    bool AllowLocalNetwork,
+    // Opt-in: AI agents connected through the MCP server only see and run profiles where this is true.
+    // Profiles saved before this field existed deserialize as false.
+    bool AiAccess = false);
 
 /// <summary>Bundled Browser Automation tab. Browser isolation and request policy are host-owned.</summary>
 public sealed class BrowserAutomationModule : ILauncherTabModuleProvider

@@ -4,6 +4,8 @@ export type BrowserAutomationProfile = {
   startUrl: string;
   allowedHosts: string[];
   allowLocalNetwork: boolean;
+  /** Whether AI agents connected through the MCP server may see and run this profile. Off unless the user opts in. */
+  aiAccess?: boolean;
 };
 
 export type BrowserActionKind =
@@ -228,6 +230,7 @@ export function readBrowserProfiles(value: unknown): BrowserAutomationProfile[] 
       startUrl: candidate.startUrl,
       allowedHosts: [...candidate.allowedHosts],
       allowLocalNetwork: candidate.allowLocalNetwork,
+      aiAccess: candidate.aiAccess === true,
     };
     return validateBrowserProfile(profile).length === 0 ? [profile] : [];
   });

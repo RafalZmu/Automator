@@ -121,12 +121,13 @@ test('scripts are listed with typed inputs, run with values, polled and canceled
     const slow = path.join(host.dataDirectory, 'slow.ps1');
     await fs.writeFile(greet, '[Console]::WriteLine("hello " + $args[0])');
     await fs.writeFile(slow, 'Start-Sleep -Seconds 60');
-    const base = { interpreter: 'powershell', interpreterPath: powershell, workingDirectory: host.dataDirectory, outputMode: 'text' };
+    const base = { interpreter: 'powershell', interpreterPath: powershell, workingDirectory: host.dataDirectory, outputMode: 'text', aiAccess: true };
     await moduleAction(host.page, 'script-runner', 'saveProfile', {
       ...base, id: 'greet', name: 'Greet', scriptPath: greet, arguments: [], timeoutSeconds: 30,
       parameters: [{ key: 'who', label: 'Who', type: 'text', required: true, argumentIndex: 0, description: 'Person to greet', example: 'Ada' }],
     });
     await moduleAction(host.page, 'script-runner', 'saveProfile', { ...base, id: 'slow', name: 'Slow', scriptPath: slow, arguments: [], timeoutSeconds: 120 });
+    await moduleAction(host.page, 'script-runner', 'saveProfile', { ...base, aiAccess: false, id: 'private', name: 'Private', scriptPath: greet, arguments: [], timeoutSeconds: 30 });
 
     const { tool } = await connect(host);
     const listed = (await tool('list_scripts')).payload.scripts;
@@ -134,6 +135,8 @@ test('scripts are listed with typed inputs, run with values, polled and canceled
     const detail = (await tool('get_script', { id: 'greet' })).payload;
     assert.equal(detail.inputs[0].hint, 'Person to greet');
     assert.equal(detail.inputs[0].example, 'Ada');
+    assert.equal((await tool('get_script', { id: 'private' })).isError, true, 'a script without AI access is not visible');
+    assert.equal((await tool('run_script', { id: 'private' })).isError, true, 'a script without AI access is refused');
 
     const missing = await tool('run_script', { id: 'greet' });
     assert.equal(missing.payload.state, 'failed', 'a required input is enforced by the backend');

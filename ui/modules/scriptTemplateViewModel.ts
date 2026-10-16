@@ -10,6 +10,8 @@ export type ScriptProfile = {
   workingDirectory: string;
   outputMode: 'text' | 'json';
   timeoutSeconds: number;
+  /** Whether AI agents connected through the MCP server may see and run this script. Off unless the user opts in. */
+  aiAccess?: boolean;
   templateOrigin?: { id: string; version: number } | null;
   /** Typed parameters declared by a user script. Template profiles take theirs from the library. */
   parameters?: ScriptTemplateParameter[] | null;
