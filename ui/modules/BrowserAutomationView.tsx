@@ -4,9 +4,9 @@ import type { BackendUiState } from '../../contracts/rpc';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import type { AutomationServices } from '../automationServices';
 import {
-  countPlaywrightOutcomes, failureReasonHints, failureReasonLabels, outcomeStatusLabels, readPlaywrightExplorerState, readPlaywrightRunHistory,
+  countPlaywrightOutcomes, failureReasonHints, failureReasonLabels, outcomeStatusLabels, readBrowserProfiles, readPlaywrightExplorerState, readPlaywrightRunHistory,
   validatePlaywrightSectionPath, type PlaywrightActiveRun, type PlaywrightExplorerState, type PlaywrightRunKind, type PlaywrightRunRecord,
-  type PlaywrightRunState, type PlaywrightTestIdentity, type PlaywrightTestOutcome,
+  type BrowserAutomationProfile, type PlaywrightRunState, type PlaywrightTestIdentity, type PlaywrightTestOutcome,
 } from '../contracts/browser';
 import { cancelBrowserRun, startBrowserRun, useBrowserRun } from './browserRunStore';
 
@@ -112,6 +112,7 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
   const [backendActive, setBackendActive] = useState<PlaywrightActiveRun[]>([]);
   const [shownRunId, setShownRunId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState<boolean>(readHistoryOpen);
+  const [profiles, setProfiles] = useState<BrowserAutomationProfile[]>([]);
   const { active: activeRun, last: lastRun } = useBrowserRun();
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -122,6 +123,26 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
     setNoticeIsError(result.status === 'warning' && /could not|failed|unavailable|not found|exceeded/i.test(result.message));
     return result.data;
   }, []);
+
+  const loadProfiles = useCallback(async () => {
+    try {
+      const result = await services.modules.dispatch('listProfiles', {});
+      if (mounted.current && result.status !== 'error') setProfiles(readBrowserProfiles(result.data));
+    } catch { /* The profile list is optional; the explorer keeps working without it. */ }
+  }, [services]);
+  useEffect(() => { void loadProfiles(); }, [loadProfiles]);
+
+  const setAiAccess = async (profile: BrowserAutomationProfile, aiAccess: boolean) => {
+    setBusy('profile');
+    try {
+      const result = await services.modules.dispatch('saveProfile', { ...profile, aiAccess });
+      if (result.status === 'error') throw new Error(result.message);
+      await loadProfiles();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not update the browser profile.');
+      setNoticeIsError(true);
+    } finally { setBusy(null); }
+  };
 
   const loadState = useCallback(async () => {
     let discovering = false;
@@ -384,6 +405,14 @@ export function BrowserAutomationView({ tab, services }: ViewProps) {
       <Loader2 size={15} className="script-running-spinner" />
       <div className="script-running-copy"><strong>{activeRun?.target ?? backendActive[0].target}</strong><span>{activeRun?.canceling ? 'Canceling…' : 'Running'} · <ElapsedTime since={activeRun?.startedAt ?? Date.parse(backendActive[0].startedUtc)} />{!activeRun && ' · started elsewhere'}</span></div>
       {activeRun && <button className="secondary-button" type="button" disabled={activeRun.canceling} onClick={() => void cancelBrowserRun()}><Square size={12} /> Cancel run</button>}
+    </section>}
+
+    {profiles.length > 0 && <section className="playwright-info" aria-label="Browser profiles for AI agents" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+      <strong>Browser profiles AI can use</strong>
+      {profiles.map((profile) => <label key={profile.id} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input type="checkbox" checked={profile.aiAccess === true} disabled={!!busy} onChange={(event) => void setAiAccess(profile, event.target.checked)} />
+        <span>{profile.name}</span>
+      </label>)}
     </section>}
 
     {form && <form className="playwright-form" onSubmit={(event) => void saveTestFile(event)}>

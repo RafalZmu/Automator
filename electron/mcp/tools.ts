@@ -89,6 +89,12 @@ async function aiScripts(context: ToolContext): Promise<Json[]> {
   return asArray(data.profiles).filter((profile) => profile.aiAccess === true);
 }
 
+/** Browser profiles the user has opted in with "AI can use". */
+async function aiBrowserProfiles(context: ToolContext): Promise<Json[]> {
+  const data = await listProfiles(context, 'browser-automation');
+  return asArray(data.profiles).filter((profile) => profile.aiAccess === true);
+}
+
 const text = (max: number) => z.string().trim().min(1).max(max);
 
 export function durationMinutes(hours: number | undefined, minutes: number | undefined): number {
@@ -225,12 +231,12 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'list_browser_automations', title: 'List browser automations', annotations: { readOnlyHint: true, openWorldHint: false },
-    description: 'Lists saved browser profiles (start URL and allowed hosts). With includeTests, also lists discoverable Playwright tests.',
+    description: 'Lists the saved browser profiles the user has allowed AI to use (start URL and allowed hosts). With includeTests, also lists discoverable Playwright tests.',
     inputSchema: z.object({ includeTests: z.boolean().optional() }),
     async handler(args: { includeTests?: boolean }, context) {
       const data = await listProfiles(context, 'browser-automation');
       const result: Json = {
-        profiles: asArray(data.profiles).map((profile) => ({
+        profiles: asArray(data.profiles).filter((profile) => profile.aiAccess === true).map((profile) => ({
           id: profile.id, name: profile.name, startUrl: profile.startUrl, allowedHosts: profile.allowedHosts,
         })),
         truncated: data.truncated === true,
@@ -258,6 +264,9 @@ export const MCP_TOOLS: McpTool[] = [
     inputSchema: runBrowserInput,
     async handler(args: z.infer<typeof runBrowserInput>, context) {
       if (args.target === 'profile') {
+        // Enforced here, not only in the list: a profile that is not shared with AI looks the same as a missing one.
+        if (!(await aiBrowserProfiles(context)).some((candidate) => candidate.id === args.id))
+          throw new McpToolError(`No browser profile with id '${args.id}'. Use list_browser_automations to see the available ids.`);
         const input = args.action ? { id: args.id, action: args.action } : { id: args.id };
         return startRun(context, {
           kind: 'browser-profile', moduleId: 'browser-automation', targetId: args.id!,

@@ -300,7 +300,7 @@ test('the run registry caps concurrent runs and keeps only the newest finished r
 
 test('browser tools validate their target and forward typed requests', async () => {
   const { tool, backend } = setup({
-    'browser-automation/listProfiles': () => ok({ profiles: [{ id: 'site', name: 'Site', startUrl: 'https://example.com', allowedHosts: ['example.com'], allowLocalNetwork: true }], truncated: false }),
+    'browser-automation/listProfiles': () => ok({ profiles: [{ id: 'site', name: 'Site', startUrl: 'https://example.com', allowedHosts: ['example.com'], allowLocalNetwork: true, aiAccess: true }, { id: 'hidden', name: 'Hidden', startUrl: 'https://example.com', allowedHosts: ['example.com'], allowLocalNetwork: false }], truncated: false }),
     'browser-automation/getExplorerState': () => ok({ projectRoot: 'C:\\p', runner: { available: true }, files: [{ path: 'a.spec.ts', tests: [{ id: 't1', titlePath: ['suite', 'case'], tags: ['smoke'] }] }] }),
     'browser-automation/runAction': () => ok({ currentUrl: 'https://example.com', title: 'Example', text: null, links: [] }),
     'browser-automation/runTests': () => ok({ timedOut: false, exitCode: 0, summary: { passed: 1, failed: 0 } }),
@@ -414,4 +414,19 @@ test('the controller starts with the app, honors the switch and reports a busy p
   await controller.stop();
   assert.equal(controller.status().state, 'off');
   assert.ok(logs.includes('Mcp.Listening') && logs.includes('Mcp.PortInUse') && logs.includes('Mcp.Stopped'));
+});
+
+test('browser profiles without the AI can use flag are hidden and refused', async () => {
+  const { tool, backend } = setup({
+    'browser-automation/listProfiles': () => ok({ profiles: [
+      { id: 'site', name: 'Site', startUrl: 'https://example.com', allowedHosts: ['example.com'], allowLocalNetwork: false, aiAccess: true },
+      { id: 'hidden', name: 'Hidden', startUrl: 'https://example.com', allowedHosts: ['example.com'], allowLocalNetwork: false },
+    ], truncated: false }),
+    'browser-automation/runAction': () => ok({ currentUrl: 'https://example.com', title: 'Example', text: null, links: [] }),
+  });
+  assert.deepEqual((await tool('list_browser_automations')).payload.profiles.map((profile) => profile.id), ['site']);
+  const refused = await tool('run_browser_automation', { target: 'profile', id: 'hidden' });
+  assert.equal(refused.isError, true);
+  assert.equal(backend.calls.some((call) => call.actionId === 'runAction'), false);
+  assert.equal((await tool('run_browser_automation', { target: 'profile', id: 'site' })).payload.state, 'success');
 });

@@ -48,7 +48,8 @@ test('browser result decoding accepts bounded known fields and ignores malformed
     links: [{ text: 'Guide', url: 'https://docs.example.test/guide' }],
   });
   assert.equal(readBrowserActionResult({ currentUrl: 'x'.repeat(9000) }), null);
-  assert.deepEqual(readBrowserProfiles({ profiles: [profile, { ...profile, id: 'INVALID' }, null] }), [profile]);
+  assert.deepEqual(readBrowserProfiles({ profiles: [profile, { ...profile, id: 'INVALID' }, null] }), [{ ...profile, aiAccess: false }]);
+  assert.equal(readBrowserProfiles({ profiles: [{ ...profile, aiAccess: true }] })[0].aiAccess, true);
 });
 
 test('Playwright list parsing groups exact project, file, location, and title identities', () => {
