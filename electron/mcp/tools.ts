@@ -83,6 +83,18 @@ async function listProfiles(context: ToolContext, moduleId: string): Promise<Jso
   return requireSuccess(await context.backend.call(moduleId, 'listProfiles', {}), 'Listing profiles');
 }
 
+/** Scripts the user has opted in with "AI can use". Anything else is invisible to agents and refused if called. */
+async function aiScripts(context: ToolContext): Promise<Json[]> {
+  const data = await listProfiles(context, 'script-runner');
+  return asArray(data.profiles).filter((profile) => profile.aiAccess === true);
+}
+
+/** Browser profiles the user has opted in with "AI can use". */
+async function aiBrowserProfiles(context: ToolContext): Promise<Json[]> {
+  const data = await listProfiles(context, 'browser-automation');
+  return asArray(data.profiles).filter((profile) => profile.aiAccess === true);
+}
+
 const text = (max: number) => z.string().trim().min(1).max(max);
 
 export function durationMinutes(hours: number | undefined, minutes: number | undefined): number {
@@ -137,11 +149,10 @@ const runBrowserInput = z.object({
 export const MCP_TOOLS: McpTool[] = [
   {
     name: 'list_scripts', title: 'List scripts', annotations: { readOnlyHint: true, openWorldHint: false },
-    description: 'Lists the saved Script Runner scripts with their ids, interpreters and typed inputs.',
+    description: 'Lists the saved Script Runner scripts the user has allowed AI to use, with their ids, interpreters and typed inputs.',
     inputSchema: z.object({}),
     async handler(_args, context) {
-      const data = await listProfiles(context, 'script-runner');
-      return { scripts: asArray(data.profiles).map(scriptSummary) };
+      return { scripts: (await aiScripts(context)).map(scriptSummary) };
     },
   },
   {
@@ -149,8 +160,7 @@ export const MCP_TOOLS: McpTool[] = [
     description: 'Returns one script with every typed input: type, whether it is required, a hint, an example, options and defaults.',
     inputSchema: z.object({ id: profileId }),
     async handler(args: { id: string }, context) {
-      const data = await listProfiles(context, 'script-runner');
-      const profile = asArray(data.profiles).find((candidate) => candidate.id === args.id);
+      const profile = (await aiScripts(context)).find((candidate) => candidate.id === args.id);
       if (!profile) throw new McpToolError(`No script with id '${args.id}'. Use list_scripts to see the available ids.`);
       let parameters = asArray(profile.parameters);
       let description: unknown;
@@ -175,6 +185,9 @@ export const MCP_TOOLS: McpTool[] = [
       waitSeconds,
     }),
     async handler(args: { id: string; values?: Record<string, string | boolean>; waitSeconds?: number }, context) {
+      // Enforced here, not only in the list: a script that is not shared with AI looks the same as a missing one.
+      if (!(await aiScripts(context)).some((candidate) => candidate.id === args.id))
+        throw new McpToolError(`No script with id '${args.id}'. Use list_scripts to see the available ids.`);
       const input = args.values ? { id: args.id, values: args.values } : { id: args.id };
       return startRun(context, {
         kind: 'script', moduleId: 'script-runner', targetId: args.id,
@@ -218,12 +231,12 @@ export const MCP_TOOLS: McpTool[] = [
   },
   {
     name: 'list_browser_automations', title: 'List browser automations', annotations: { readOnlyHint: true, openWorldHint: false },
-    description: 'Lists saved browser profiles (start URL and allowed hosts). With includeTests, also lists discoverable Playwright tests.',
+    description: 'Lists the saved browser profiles the user has allowed AI to use (start URL and allowed hosts). With includeTests, also lists discoverable Playwright tests.',
     inputSchema: z.object({ includeTests: z.boolean().optional() }),
     async handler(args: { includeTests?: boolean }, context) {
       const data = await listProfiles(context, 'browser-automation');
       const result: Json = {
-        profiles: asArray(data.profiles).map((profile) => ({
+        profiles: asArray(data.profiles).filter((profile) => profile.aiAccess === true).map((profile) => ({
           id: profile.id, name: profile.name, startUrl: profile.startUrl, allowedHosts: profile.allowedHosts,
         })),
         truncated: data.truncated === true,
@@ -251,6 +264,9 @@ export const MCP_TOOLS: McpTool[] = [
     inputSchema: runBrowserInput,
     async handler(args: z.infer<typeof runBrowserInput>, context) {
       if (args.target === 'profile') {
+        // Enforced here, not only in the list: a profile that is not shared with AI looks the same as a missing one.
+        if (!(await aiBrowserProfiles(context)).some((candidate) => candidate.id === args.id))
+          throw new McpToolError(`No browser profile with id '${args.id}'. Use list_browser_automations to see the available ids.`);
         const input = args.action ? { id: args.id, action: args.action } : { id: args.id };
         return startRun(context, {
           kind: 'browser-profile', moduleId: 'browser-automation', targetId: args.id!,

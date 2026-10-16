@@ -48,4 +48,4 @@ See [TESTS.md](TESTS.md) for the profile, explorer, preview, and managed-project
 
 ## Agent access
 
-MCP clients can list browser profiles and Playwright tests and run one profile action or a test selection through `list_browser_automations` and `run_browser_automation`, using the same `runAction` and `runTests` actions and allowed-host policy as this tab. See [Agent access](../../sections/agent-access/README.md).
+Only profiles with the **AI can use** checkbox ticked (`aiAccess`, off by default, toggled in the profile list on this tab) are visible to MCP clients. MCP clients can list those browser profiles and Playwright tests and run one profile action or a test selection through `list_browser_automations` and `run_browser_automation`, using the same `runAction` and `runTests` actions and allowed-host policy as this tab. See [Agent access](../../sections/agent-access/README.md).
