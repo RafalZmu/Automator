@@ -2,8 +2,6 @@
 
 This document links a semantic view of the application to a concrete method-level execution trace. The first graph summarizes the current product and runtime relationships. The second follows one Browser Automation test run through the renderer, Electron, the .NET backend, and process infrastructure.
 
-For an interactive Obsidian view organized around change impact, open the [Automator impact graph](impact-graph/README.md).
-
 The method graph is a verified representative path, not an exhaustive call graph of every method in the repository. Message edges across IPC and process boundaries are labeled separately from ordinary calls. Lines and callbacks are not treated as direct calls across those boundaries.
 
 ## Application and runtime layer
