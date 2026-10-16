@@ -581,7 +581,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
         <div className="script-editor-heading"><FileCode2 size={16} /><strong>Script Library</strong><button className="icon-button" type="button" aria-label="Close library" onClick={closeLibrary}><X size={15} /></button></div>
         <label className="script-field-wide"><span>Search templates</span><input type="search" value={templateQuery} placeholder="Name, description, or tag" onChange={(event) => setTemplateQuery(event.target.value)} /></label>
         <div className="script-profile-list">{filterScriptTemplates(templates, templateQuery).map((template) => {
-          const targetDatabaseParameter = (template.id === 'firebird-3-backup-zip' || template.id === 'firebird-3-backup')
+          const targetDatabaseParameter = (template.id === 'firebird-3-backup-zip' || template.id === 'firebird-3-backup' || template.id === 'firebird-3-restore')
             ? template.parameters.find((parameter) => parameter.key === 'database')
             : undefined;
           const installedProfile = profiles.find((profile) => profile.templateOrigin?.id === template.id

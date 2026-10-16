@@ -486,3 +486,12 @@ These cases cover behavior that has no Electron test yet.
 2. Rename the copy, set its own input values, and choose Remember these values.
 
 **Expected result:** The copy appears as a separate row named with `(2)`, shares the installed script, and runs with its own values. `ScriptRunnerTemplateInstallSpecs` covers the numbering and the shared script.
+
+### Firebird restore never overwrites unless replace is on
+
+**Steps**
+
+1. Run `tests/script-restore-template-asset.spec.ps1` on Windows (it uses a mock `gbak`), or run the Firebird restore template against a real `.fbk`.
+2. Restore to a new `.fdb`, restore again to the same path with Replace off, then with Replace on and a failing `gbak`.
+
+**Expected result:** The first restore creates the database; the second fails and leaves it unchanged; a failed replace leaves the existing database unchanged and no temporary file remains. The Application specification `ScriptRunnerTemplateSpecs` covers the argument mapping.
