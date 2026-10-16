@@ -56,6 +56,11 @@ input { user-select: text; }
   background: var(--surface);
   color: var(--ink);
 }
+/* The compact window is widened to the left by the host while a side panel shows, so the shell's content keeps its screen position. */
+.window-shell[data-surface="launcher"] { padding-left: calc(clamp(14px, 4.6 * min(100vw, 760px) / 100, 24px) + max(0px, 100vw - 760px)); }
+.side-panel-slot { position: absolute; z-index: 2; top: 0; bottom: 0; left: 0; width: max(0px, calc(100vw - 760px)); overflow: hidden; border-right: 1px solid var(--line); background: rgba(255, 255, 255, .18); pointer-events: auto; }
+.side-panel-slot:empty { display: none; }
+.window-shell[data-theme="dark"] .side-panel-slot { background: rgba(10, 19, 22, .2); }
 .dialog-portal-root { position: absolute; inset: 0; pointer-events: none; }
 
 .window-shell[data-material="acrylic"] { background: rgba(239, 248, 249, .36); }

@@ -844,6 +844,7 @@ export function App() {
       data-native-corners={host.nativeCornersSupported}
       onKeyDownCapture={handleEscape}
     >
+      {!isWorkspaceSurface && <div className="side-panel-slot" id="side-panel-slot" />}
       <header className="topbar">
         <div className="brand-lockup">
           <span className="brand-mark"><Sparkles size={17} strokeWidth={2.2} /></span>

@@ -39,3 +39,38 @@ export function computePanelBounds(
   const top = Math.max(workArea.y, Math.min(pointer.y + verticalGap, workArea.y + workArea.height - height));
   return { x: left, y: top, width, height };
 }
+
+export const SIDE_PANEL_ANIMATION_MS = 220;
+export const SIDE_PANEL_WIDTH = 300;
+
+/**
+ * Bounds for a window that grows to the left by `panelWidth` when `open`, or shrinks back from that width.
+ * `current` is the window as it stands now: the base-width window when opening, the widened one when closing.
+ * Growth keeps the content's screen position, and is shifted only as far as the work area requires.
+ */
+export function computeSidePanelBounds(
+  current: WindowBounds,
+  workArea: WindowBounds,
+  baseWidth: number,
+  panelWidth: number,
+  open: boolean,
+): WindowBounds {
+  const base = Math.max(1, Math.min(baseWidth, workArea.width));
+  const total = Math.max(base, Math.min(baseWidth + Math.max(0, panelWidth), workArea.width));
+  const width = open ? total : base;
+  const contentLeft = open ? current.x : current.x + Math.max(0, current.width - base);
+  const desiredX = open ? contentLeft - (width - base) : contentLeft;
+  const x = Math.max(workArea.x, Math.min(desiredX, workArea.x + workArea.width - width));
+  return { x, y: current.y, width, height: current.height };
+}
+
+export function easeOutCubic(progress: number): number {
+  const t = Math.max(0, Math.min(1, progress));
+  return 1 - (1 - t) ** 3;
+}
+
+export function interpolateBounds(from: WindowBounds, to: WindowBounds, progress: number): WindowBounds {
+  const t = easeOutCubic(progress);
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
+  return { x: mix(from.x, to.x), y: mix(from.y, to.y), width: mix(from.width, to.width), height: mix(from.height, to.height) };
+}

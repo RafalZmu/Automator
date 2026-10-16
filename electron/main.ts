@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { FileExplorerLaunchQueue, parseFileExplorerLaunch, stableExplorerExecutable } from './fileExplorerLaunch';
 import { BackendProcess } from './backendProcess';
-import { computePanelBounds, getWindowsDisplayCapabilities } from './platform';
+import { SIDE_PANEL_ANIMATION_MS, SIDE_PANEL_WIDTH, computePanelBounds, computeSidePanelBounds, getWindowsDisplayCapabilities, interpolateBounds } from './platform';
 import {
   automationHttpResultSchema,
   fileExplorerLaunchRequestSchema,
@@ -166,7 +166,31 @@ function placeNearPointer(window: BrowserWindow): void {
   if (window.isVisible()) return;
   const pointer = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(pointer);
-  window.setBounds(computePanelBounds(pointer, display.workArea, panelSize), false);
+  const width = panelSize.width + (sidePanelOpen ? SIDE_PANEL_WIDTH : 0);
+  window.setBounds(computePanelBounds(pointer, display.workArea, { width, height: panelSize.height }), false);
+}
+
+let sidePanelOpen = false;
+let sidePanelTimer: NodeJS.Timeout | undefined;
+
+/** Widens (to the left) or narrows the compact window for the side panel, easing the bounds. A hidden window just records the state and is sized when it is next shown. */
+function setSidePanel(window: BrowserWindow, open: boolean, animate: boolean): void {
+  sidePanelOpen = open;
+  if (sidePanelTimer) { clearInterval(sidePanelTimer); sidePanelTimer = undefined; }
+  if (!window.isVisible()) return;
+  const from = window.getBounds();
+  const workArea = screen.getDisplayMatching(from).workArea;
+  // A toggle during an animation starts from wherever the window is; opening is always computed from its closed equivalent.
+  const closed = computeSidePanelBounds(from, workArea, panelSize.width, SIDE_PANEL_WIDTH, false);
+  const to = open ? computeSidePanelBounds(closed, workArea, panelSize.width, SIDE_PANEL_WIDTH, true) : closed;
+  if (!animate || to.x === from.x && to.width === from.width) { window.setBounds(to, false); return; }
+  const started = Date.now();
+  sidePanelTimer = setInterval(() => {
+    if (window.isDestroyed()) { clearInterval(sidePanelTimer); sidePanelTimer = undefined; return; }
+    const progress = (Date.now() - started) / SIDE_PANEL_ANIMATION_MS;
+    window.setBounds(progress >= 1 ? to : interpolateBounds(from, to, progress), false);
+    if (progress >= 1) { clearInterval(sidePanelTimer); sidePanelTimer = undefined; }
+  }, 12);
 }
 
 function getHostInfo() {
@@ -659,6 +683,14 @@ function registerIpc(): void {
     });
     pendingFocusNonce = undefined;
     return focused;
+  });
+
+  ipcMain.handle('automator:set-side-panel', async (event, request: { open?: unknown; animate?: unknown }) => {
+    const context = assertMainFrame(event, ['launcher', 'workspace']);
+    // Only the compact launcher window is resized; the workspace window is already wide.
+    if (context.role !== 'launcher' || !mainWindow || mainWindow.isDestroyed()) return false;
+    setSidePanel(mainWindow, request?.open === true, request?.animate !== false);
+    return true;
   });
 
   ipcMain.handle('automator:set-text-entry-focused', async (event, request: { focused?: unknown }) => {

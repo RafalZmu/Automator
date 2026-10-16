@@ -21,6 +21,11 @@ Read the root AGENTS.md first. This tab contains both saved browser-action profi
 - Classify reasons from structured fields first (the failing step's category and Playwright's timeout markers such as `Timeout 5000ms` or `Test timeout of … exceeded`), never from the bare word "timed out", which can appear in a received value. Keep the stored reason values stable: older records must keep their labels.
 - Browser-action profiles must continue using the isolated host browser session and their saved host grant. Do not introduce unbounded navigation or bypass host network policy.
 
+## Run history side panel
+
+- In the compact window the history is a left panel and the host resizes the window; the renderer must never move content to fake it. Content keeps its screen position because the shell's left padding grows with `100vw - 760px` and the panel slot fills that strip, so `760` in `ui/styles.css` must match `panelSize.width` in `electron/main.ts`, and the panel's `300px` must match `SIDE_PANEL_WIDTH` in `electron/platform.ts`.
+- Keep the width/position math pure in `electron/platform.ts`. A hidden window only records the open state; `placeNearPointer` sizes it when it is shown. Only the launcher role is resized (`automator:set-side-panel`); the workspace window and the browser preview keep the inline section.
+
 ## Code and checks
 
 UI: ui/modules/BrowserAutomationView.tsx; contracts: contracts/browserAutomation.ts.
