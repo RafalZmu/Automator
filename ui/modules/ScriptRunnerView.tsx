@@ -45,6 +45,7 @@ const blankProfile = (interpreterDefaults: InterpreterDefaults): ScriptProfile =
   workingDirectory: '',
   outputMode: 'text',
   timeoutSeconds: 60,
+  aiAccess: false,
   parameters: [],
 });
 
@@ -514,6 +515,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
             <div className="script-field-wide"><PathField label="Working directory" kind="directory" required value={editing.workingDirectory} placeholder="C:\\Scripts" onChange={(value) => setEditing({ ...editing, workingDirectory: value })} onBrowse={browseForWorkingDirectory} /></div>
             <label><span>Output</span><select value={editing.outputMode} onChange={(event) => setEditing({ ...editing, outputMode: event.target.value as ScriptProfile['outputMode'] })}><option value="text">Plain text</option><option value="json">JSON</option></select></label>
             <label><span>Timeout <small>seconds</small></span><input required type="number" min={1} max={3600} value={editing.timeoutSeconds} onChange={(event) => setEditing({ ...editing, timeoutSeconds: Number(event.target.value) })} /></label>
+            <label className="script-field-wide"><span>AI agents</span><span><input type="checkbox" checked={editing.aiAccess === true} onChange={(event) => setEditing({ ...editing, aiAccess: event.target.checked })} /> AI can use this script <small>Lets agents connected through Agent access list and run it.</small></span></label>
           </div>
           {editParameters.length > 0 && <section className="script-parameter-section">
             <h2>Inputs</h2>
@@ -608,7 +610,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
             <div className="script-profile-item" key={profile.id} data-expanded={runTarget?.id === profile.id || editingRowId === profile.id}>
             <article className="script-profile-row">
               <span className="script-profile-icon">{profile.interpreter === 'python' ? <Braces size={16} /> : <Terminal size={16} />}</span>
-              <div className="script-profile-copy"><strong>{profile.name}</strong><span>{interpreterName(profile.interpreter)} · {profile.scriptPath || 'Script path missing'}{inputCount ? ` · ${inputCount} input${inputCount === 1 ? '' : 's'}` : ''}</span></div>
+              <div className="script-profile-copy"><strong>{profile.name}</strong><span>{interpreterName(profile.interpreter)} · {profile.scriptPath || 'Script path missing'}{inputCount ? ` · ${inputCount} input${inputCount === 1 ? '' : 's'}` : ''}{profile.aiAccess ? ' · AI can use' : ''}</span></div>
               <span className="script-profile-time"><Clock3 size={12} /> {profile.timeoutSeconds}s</span>
               <button className="icon-button script-row-action" type="button" aria-label={runningId === profile.id ? `Cancel ${profile.name}` : `Run ${profile.name}`} title={runningId === profile.id ? 'Cancel run' : inputCount ? 'Enter inputs and run' : 'Run script'} disabled={runningId !== null && runningId !== profile.id} aria-expanded={inputCount ? runTarget?.id === profile.id : undefined} onClick={() => void runProfile(profile)}>
                 {runningId === profile.id ? <Square size={14} /> : <Play size={15} />}

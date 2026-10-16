@@ -83,6 +83,12 @@ async function listProfiles(context: ToolContext, moduleId: string): Promise<Jso
   return requireSuccess(await context.backend.call(moduleId, 'listProfiles', {}), 'Listing profiles');
 }
 
+/** Scripts the user has opted in with "AI can use". Anything else is invisible to agents and refused if called. */
+async function aiScripts(context: ToolContext): Promise<Json[]> {
+  const data = await listProfiles(context, 'script-runner');
+  return asArray(data.profiles).filter((profile) => profile.aiAccess === true);
+}
+
 const text = (max: number) => z.string().trim().min(1).max(max);
 
 export function durationMinutes(hours: number | undefined, minutes: number | undefined): number {
@@ -137,11 +143,10 @@ const runBrowserInput = z.object({
 export const MCP_TOOLS: McpTool[] = [
   {
     name: 'list_scripts', title: 'List scripts', annotations: { readOnlyHint: true, openWorldHint: false },
-    description: 'Lists the saved Script Runner scripts with their ids, interpreters and typed inputs.',
+    description: 'Lists the saved Script Runner scripts the user has allowed AI to use, with their ids, interpreters and typed inputs.',
     inputSchema: z.object({}),
     async handler(_args, context) {
-      const data = await listProfiles(context, 'script-runner');
-      return { scripts: asArray(data.profiles).map(scriptSummary) };
+      return { scripts: (await aiScripts(context)).map(scriptSummary) };
     },
   },
   {
@@ -149,8 +154,7 @@ export const MCP_TOOLS: McpTool[] = [
     description: 'Returns one script with every typed input: type, whether it is required, a hint, an example, options and defaults.',
     inputSchema: z.object({ id: profileId }),
     async handler(args: { id: string }, context) {
-      const data = await listProfiles(context, 'script-runner');
-      const profile = asArray(data.profiles).find((candidate) => candidate.id === args.id);
+      const profile = (await aiScripts(context)).find((candidate) => candidate.id === args.id);
       if (!profile) throw new McpToolError(`No script with id '${args.id}'. Use list_scripts to see the available ids.`);
       let parameters = asArray(profile.parameters);
       let description: unknown;
@@ -175,6 +179,9 @@ export const MCP_TOOLS: McpTool[] = [
       waitSeconds,
     }),
     async handler(args: { id: string; values?: Record<string, string | boolean>; waitSeconds?: number }, context) {
+      // Enforced here, not only in the list: a script that is not shared with AI looks the same as a missing one.
+      if (!(await aiScripts(context)).some((candidate) => candidate.id === args.id))
+        throw new McpToolError(`No script with id '${args.id}'. Use list_scripts to see the available ids.`);
       const input = args.values ? { id: args.id, values: args.values } : { id: args.id };
       return startRun(context, {
         kind: 'script', moduleId: 'script-runner', targetId: args.id,

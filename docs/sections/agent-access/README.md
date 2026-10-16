@@ -23,7 +23,7 @@ The command is built and copied by the host. The token is never shown in or sent
 
 | Tool | Purpose |
 |---|---|
-| `list_scripts`, `get_script` | Saved Script Runner profiles and their typed inputs (type, required, hint, example, options, defaults). |
+| `list_scripts`, `get_script` | Saved Script Runner profiles marked **AI can use**, with their typed inputs (type, required, hint, example, options, defaults). |
 | `run_script` | Runs a script with typed `values`. Returns the result inline, or a `runId` if it takes longer than `waitSeconds` (default 20, max 60). |
 | `get_run`, `list_runs`, `cancel_run` | Poll, list and cancel runs started through MCP. |
 | `list_browser_automations` | Browser profiles (start URL, allowed hosts) and, with `includeTests`, discoverable Playwright tests. |
@@ -31,7 +31,7 @@ The command is built and copied by the host. The token is never shown in or sent
 | `get_running_timers` | The running Work Time timer (at most one), paused timers and the count of unsaved drafts. |
 | `register_time` | Adds a finished entry for `hours`/`minutes` ending now (or at `endedAt`), with description and tags. |
 
-Every saved script and browser profile is runnable; there is no per-item flag. The agent's own per-tool permission prompt is the confirmation step, so keep `run_script` and `run_browser_automation` on "ask" in Claude Code.
+Scripts are opt-in: each script has an **AI can use** checkbox in the Script Runner editor (saved as `aiAccess` on the profile, off for new and existing scripts). `list_scripts` omits unchecked scripts, and `get_script` and `run_script` answer with the same "No script with id" error as for a missing script, so the filter is enforced in the MCP layer (`electron/mcp/tools.ts`), not only in the UI. Every browser profile is still runnable; there is no per-item flag for them yet. The agent's own per-tool permission prompt is the confirmation step, so keep `run_script` and `run_browser_automation` on "ask" in Claude Code.
 
 ## How it works
 

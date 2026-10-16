@@ -37,7 +37,10 @@ public sealed record ScriptRunnerProfile(
     // Template profiles leave this null because their catalog declares the parameters.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ScriptRunnerTemplateParameter>? Parameters = null,
     // Non-sensitive values remembered for the Run form. Sensitive template inputs are never stored.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? Values = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? Values = null,
+    // Opt-in: AI agents connected through the MCP server only see and run profiles where this is true.
+    // Profiles saved before this field existed deserialize as false.
+    bool AiAccess = false);
 
 public sealed record ScriptRunnerTemplateOrigin(string Id, int Version);
 

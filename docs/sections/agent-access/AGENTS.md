@@ -7,6 +7,7 @@ Read the root AGENTS.md first. This surface lets an external agent run real acti
 - `hostWindowContext` is always built by `backendBridge.ts`. Never accept a context, slot or module id from the MCP client beyond the fixed tool-to-module mapping, and never add a tool that forwards an arbitrary module action.
 - Do not add tools for arbitrary shell, arbitrary JavaScript, or editing/deleting scripts, profiles or credentials without an explicit product decision. Browser actions must remain bounded by each profile's allowed hosts.
 - Log only tool names and status (`Mcp.ToolCall`). Never log arguments, script values, stdout/stderr or page text. Unexpected errors return a generic message; only `McpToolError` and backend RPC messages are shown to the agent.
+- Script tools must go through `aiScripts()` so only profiles with `aiAccess === true` are listed, described or run. Never add a script tool that reads profiles without that filter; missing and unshared scripts must be indistinguishable.
 - Script output and web text returned to the agent are untrusted. Keep the warning in the tool descriptions.
 - Keep run output in memory only (`RunRegistry`). Preserve the 50-run and 4-concurrent limits and cancel running runs on quit and when the server is switched off.
 - Keep a stable default port (`MCP_DEFAULT_PORT`); never fall back to another port silently. Test mode uses an ephemeral port and the isolated data directory, so tests must not use fixed ports or touch `%LOCALAPPDATA%\Automator`.

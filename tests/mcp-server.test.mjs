@@ -179,10 +179,10 @@ test('register_time surfaces a backend validation failure as a tool error', asyn
 
 test('list_scripts and get_script expose typed inputs and fall back to template parameters', async () => {
   const profiles = [
-    { id: 'plain', name: 'Plain', interpreter: 'powershell', outputMode: 'text', timeoutSeconds: 30, scriptPath: 'C:\\s.ps1',
+    { id: 'plain', name: 'Plain', aiAccess: true, interpreter: 'powershell', outputMode: 'text', timeoutSeconds: 30, scriptPath: 'C:\\s.ps1',
       parameters: [{ key: 'folder', label: 'Folder', type: 'directory', required: true, argumentIndex: 0, description: 'Where to look', example: 'C:\\data' }],
       values: { folder: 'secret-remembered' } },
-    { id: 'tpl', name: 'From template', interpreter: 'python', outputMode: 'json', timeoutSeconds: 60, scriptPath: 'C:\\t.py', templateOrigin: { id: 'tpl-1', version: 1 } },
+    { id: 'tpl', name: 'From template', aiAccess: true, interpreter: 'python', outputMode: 'json', timeoutSeconds: 60, scriptPath: 'C:\\t.py', templateOrigin: { id: 'tpl-1', version: 1 } },
   ];
   const { tool } = setup({
     'script-runner/listProfiles': () => ok({ profiles }),
@@ -203,20 +203,45 @@ test('list_scripts and get_script expose typed inputs and fall back to template 
   assert.equal((await tool('get_script', { id: 'missing' })).isError, true);
 });
 
+test('scripts without the AI can use flag are hidden from agents and refused when called', async () => {
+  const profiles = [
+    { id: 'shared', name: 'Shared', interpreter: 'python', outputMode: 'text', timeoutSeconds: 30, scriptPath: 'C:\\a.py', aiAccess: true },
+    { id: 'off', name: 'Off', interpreter: 'python', outputMode: 'text', timeoutSeconds: 30, scriptPath: 'C:\\b.py', aiAccess: false },
+    { id: 'legacy', name: 'Legacy', interpreter: 'python', outputMode: 'text', timeoutSeconds: 30, scriptPath: 'C:\\c.py' },
+    { id: 'truthy', name: 'Truthy', interpreter: 'python', outputMode: 'text', timeoutSeconds: 30, scriptPath: 'C:\\d.py', aiAccess: 'true' },
+  ];
+  const { tool, backend } = setup({
+    'script-runner/listProfiles': () => ok({ profiles }),
+    'script-runner/runProfile': () => ok({ profileId: 'shared', exitCode: 0, timedOut: false, stdout: 'ok', stderr: '', durationMilliseconds: 1 }),
+  });
+  assert.deepEqual((await tool('list_scripts')).payload.scripts.map((script) => script.id), ['shared']);
+  assert.equal((await tool('get_script', { id: 'shared' })).isError, false);
+  for (const id of ['off', 'legacy', 'truthy', 'missing']) {
+    assert.equal((await tool('get_script', { id })).isError, true, `get_script ${id}`);
+    const run = await tool('run_script', { id });
+    assert.equal(run.isError, true, `run_script ${id}`);
+    assert.match(run.payload.error, /No script with id/);
+  }
+  assert.equal(backend.calls.some((call) => call.actionId === 'runProfile'), false);
+  assert.equal((await tool('run_script', { id: 'shared' })).payload.state, 'success');
+});
+
 test('run_script returns the result inline when the script finishes in time', async () => {
   const { tool, backend } = setup({
+    'script-runner/listProfiles': () => ok({ profiles: [{ id: 'p', aiAccess: true }] }),
     'script-runner/runProfile': () => ok({ profileId: 'p', exitCode: 0, timedOut: false, stdout: 'hi', stderr: '', durationMilliseconds: 5 }),
   });
   const { payload } = await tool('run_script', { id: 'p', values: { a: 'b', flag: true } });
   assert.equal(payload.state, 'success');
   assert.equal(payload.result.stdout, 'hi');
-  assert.deepEqual(backend.calls[0].input, { id: 'p', values: { a: 'b', flag: true } });
-  assert.match(backend.calls[0].requestId, /^mcp-/);
+  assert.deepEqual(backend.calls.at(-1).input, { id: 'p', values: { a: 'b', flag: true } });
+  assert.match(backend.calls.at(-1).requestId, /^mcp-/);
 });
 
 test('a slow run returns a runId, can be polled, and can be canceled', async () => {
   let rejectRun;
   const { tool, runs } = setup({
+    'script-runner/listProfiles': () => ok({ profiles: [{ id: 'slow', aiAccess: true }] }),
     'script-runner/runProfile': () => new Promise((_resolve, reject) => { rejectRun = reject; }),
     cancel: () => { rejectRun(Object.assign(new Error('canceled'), { code: -32800, data: { category: 'canceled' } })); return true; },
   });
@@ -235,6 +260,7 @@ test('a slow run returns a runId, can be polled, and can be canceled', async () 
 
 test('run states map timeouts, failures and backend errors', async () => {
   const { tool } = setup({
+    'script-runner/listProfiles': () => ok({ profiles: ['timeout', 'fail', 'boom'].map((id) => ({ id, aiAccess: true })) }),
     'script-runner/runProfile': (input) => {
       if (input.id === 'timeout') return ok({ timedOut: true, exitCode: null, stdout: '', stderr: '' });
       if (input.id === 'fail') return { ...failed('Script exited with code 2.'), data: { exitCode: 2, timedOut: false } };
