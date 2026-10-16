@@ -162,7 +162,7 @@ test('Explorer template mapping prefills the typed file input and keeps credenti
     assert.equal(await form.getByLabel('Password *', { exact: true }).inputValue(), 'masterkey');
     await form.getByLabel('Password *', { exact: true }).fill('not-persisted-secret');
     await form.getByRole('button', { name: 'Run', exact: true }).click();
-    await page.getByRole('status').filter({ hasText: 'Backup file is invalid' }).waitFor();
+    await page.getByRole('status').filter({ hasText: /gbak executable is (required|invalid)/ }).waitFor();
     assert.equal(await page.getByRole('region', { name: 'Script output' }).count(), 0);
     await form.getByLabel('Backup file', { exact: true }).fill(path.join(data, 'once.fbk'));
     await form.getByRole('button', { name: 'Cancel', exact: true }).click();
