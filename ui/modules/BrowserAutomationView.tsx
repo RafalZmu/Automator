@@ -1,6 +1,5 @@
-import { Check, ChevronDown, ChevronRight, CircleAlert, FilePlus2, FolderOpen, Loader2, LoaderCircle, PanelLeftClose, PanelLeftOpen, Play, Plus, RefreshCw, Square, Tag, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, CircleAlert, FilePlus2, FolderOpen, Loader2, LoaderCircle, Play, Plus, RefreshCw, Square, Tag, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { createPortal } from 'react-dom';
 import type { BackendUiState } from '../../contracts/rpc';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import type { AutomationServices } from '../automationServices';
@@ -9,6 +8,7 @@ import {
   validatePlaywrightSectionPath, type PlaywrightActiveRun, type PlaywrightExplorerState, type PlaywrightRunKind, type PlaywrightRunRecord,
   type BrowserAutomationProfile, type PlaywrightRunState, type PlaywrightTestIdentity, type PlaywrightTestOutcome,
 } from '../contracts/browser';
+import { SideHistoryContent, SideHistoryToggle, useHistorySidePanel } from '../components/SideHistoryPanel';
 import { cancelBrowserRun, startBrowserRun, useBrowserRun } from './browserRunStore';
 
 type ViewProps = {
@@ -20,7 +20,7 @@ type ViewProps = {
 
 const styles = `
 .playwright-view{gap:8px}.playwright-heading{display:flex;align-items:center;gap:9px;flex:none}.playwright-heading-copy{flex:1;min-width:0}.playwright-heading h1{margin:0;color:var(--ink);font-size:12px;font-weight:680}.playwright-heading p{margin:3px 0 0;color:var(--muted);font-size:9px}.playwright-project{flex:none;display:flex;align-items:center;gap:6px;padding:7px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28)}.window-shell[data-theme="dark"] .playwright-project{background:rgba(16,25,29,.28)}.playwright-project input{flex:1;min-width:0;height:28px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;outline:0;color:var(--ink);background:var(--control);font:9px inherit}.playwright-project input:focus,.playwright-inline-editor input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(25,139,162,.1)}.playwright-project .secondary-button{flex:none}.playwright-info{display:flex;align-items:center;gap:6px;margin:0;padding:7px 9px;border:1px solid var(--line);border-radius:8px;color:var(--muted-strong);background:rgba(255,255,255,.27);font-size:9px;line-height:1.4}.playwright-info[data-error="true"]{color:var(--danger);background:rgba(255,240,238,.48)}.playwright-toolbar{display:flex;align-items:center;gap:6px;flex:none}.playwright-toolbar .spacer{flex:1}.playwright-toolbar select{height:29px;min-width:105px;padding:4px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--control);font:9px inherit}.playwright-runner{font-size:8px;color:var(--muted);white-space:nowrap}.playwright-list{flex:1;min-height:0;display:flex;flex-direction:column;gap:7px;overflow:auto;padding:1px 2px 3px 0;scrollbar-width:thin}.playwright-file{flex:none;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.26)}.window-shell[data-theme="dark"] .playwright-file{background:rgba(16,25,29,.22)}.playwright-file summary{display:flex;align-items:center;gap:6px;min-height:38px;padding:6px 8px;cursor:pointer;list-style:none}.playwright-file summary::-webkit-details-marker{display:none}.playwright-file-name{flex:1;min-width:0;overflow:hidden;color:var(--ink);font:9px "Cascadia Code",Consolas,monospace;text-overflow:ellipsis;white-space:nowrap}.playwright-file-count{color:var(--muted);font-size:8px;white-space:nowrap}.playwright-file-tools{display:flex;gap:3px}.playwright-test{display:flex;flex-direction:column;gap:4px;padding:7px 8px;border-top:1px solid var(--line)}.playwright-test-main{display:flex;align-items:center;gap:6px;min-width:0}.playwright-test-copy{flex:1;min-width:0}.playwright-test-title{overflow:hidden;color:var(--ink);font-size:9px;text-overflow:ellipsis;white-space:nowrap}.playwright-test-meta{margin-top:2px;color:var(--muted);font-size:7px}.playwright-test-actions{display:flex;align-items:center;gap:2px}.playwright-test-actions .icon-button{width:26px;height:26px}.playwright-tag-list{display:flex;flex-wrap:wrap;gap:4px}.playwright-tag{padding:2px 6px;border:1px solid rgba(26,131,151,.18);border-radius:99px;color:var(--accent-strong);background:var(--accent-soft);font-size:7px}.playwright-inline-editor{display:flex;align-items:center;gap:5px}.playwright-inline-editor input{flex:1;min-width:80px;height:25px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;color:var(--ink);background:var(--control);font:8px inherit}.playwright-inline-editor small{color:var(--muted);font-size:7px}.playwright-form{flex:none;display:flex;flex-direction:column;gap:7px;padding:8px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.32)}.playwright-form header{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:9px}.playwright-form header strong{flex:1}.playwright-form-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}.playwright-form label{display:flex;flex-direction:column;gap:3px;color:var(--muted);font-size:8px}.playwright-form label:first-child{grid-column:1/-1}.playwright-form input{min-width:0;height:28px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:var(--control);font:9px inherit}.playwright-form-actions{display:flex;justify-content:flex-end;gap:5px}.playwright-empty{flex:1;min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--muted);text-align:center}.playwright-empty strong{color:var(--ink);font-size:10px}.playwright-empty p{max-width:320px;margin:0;font-size:8px;line-height:1.5}.playwright-stale{flex:none;display:flex;align-items:center;gap:7px;padding:7px;border:1px solid var(--line);border-radius:8px;color:var(--muted-strong);font-size:8px}.playwright-stale span{flex:1}.playwright-run-result{flex:0 1 auto;min-height:0;max-height:46%;display:flex;flex-direction:column;gap:7px;padding:9px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28);overflow:auto}.playwright-run-result header{display:flex;align-items:center;gap:8px;color:var(--ink)}.playwright-run-title{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.playwright-run-title strong{overflow:hidden;color:var(--ink);font-size:12px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}.playwright-run-title small{color:var(--muted);font-size:10px}.playwright-run-counts{display:flex;flex-wrap:wrap;gap:4px}.playwright-count{padding:2px 8px;border-radius:9px;color:var(--muted-strong);background:rgba(90,126,135,.14);font-size:10px;font-weight:650;white-space:nowrap}.playwright-count.is-passed{color:#1f7a5a;background:rgba(47,166,123,.16)}.playwright-count.is-failed{color:var(--danger,#b42318);background:rgba(180,35,24,.12)}.playwright-count.is-timedOut{color:#8a5300;background:rgba(214,139,20,.18)}.playwright-count.is-flaky{color:#5b3fb8;background:rgba(111,86,214,.14)}.playwright-outcome-list{display:flex;flex-direction:column;gap:6px}.playwright-outcome-row{display:flex;flex-direction:column;gap:4px;padding:8px 9px;border:1px solid var(--line);border-left:3px solid var(--danger,#b42318);border-radius:8px;background:rgba(255,255,255,.3)}.playwright-outcome-row[data-status="timedOut"]{border-left-color:#d68b14}.playwright-outcome-row[data-status="flaky"]{border-left-color:#6f56d6}.playwright-outcome-row[data-status="passed"],.playwright-outcome-row[data-status="skipped"]{border-left-color:var(--line)}.playwright-outcome-head{display:flex;align-items:center;gap:7px;min-width:0}.playwright-outcome-head strong{flex:1;min-width:0;overflow:hidden;color:var(--ink);font-size:11px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}.playwright-outcome-status{flex:none;padding:1px 7px;border-radius:9px;color:var(--muted-strong);background:rgba(90,126,135,.14);font-size:10px;font-weight:650;white-space:nowrap}.playwright-outcome-status.is-failed,.playwright-outcome-status.is-timedOut{color:var(--danger,#b42318);background:rgba(180,35,24,.12)}.playwright-outcome-status.is-timedOut{color:#8a5300;background:rgba(214,139,20,.18)}.playwright-outcome-status.is-passed{color:#1f7a5a;background:rgba(47,166,123,.16)}.playwright-outcome-status.is-flaky{color:#5b3fb8;background:rgba(111,86,214,.14)}.playwright-outcome-where{margin:0;color:var(--muted-strong);font:10px/1.45 "Cascadia Code",Consolas,monospace;overflow-wrap:anywhere}.playwright-outcome-where code{font:inherit;color:var(--ink)}.playwright-outcome-hint{margin:0;color:var(--muted);font-size:10px;line-height:1.45}.playwright-snippet{color:var(--muted-strong);font-size:10px}.playwright-snippet summary,.playwright-quiet summary{cursor:pointer;padding:3px 0}.playwright-snippet pre{max-height:150px;margin:4px 0 0;padding:6px 8px;overflow:auto;border:1px solid var(--line);border-radius:7px;color:var(--muted-strong);background:rgba(255,255,255,.3);font:10px/1.45 "Cascadia Code",Consolas,monospace;white-space:pre}.playwright-quiet{color:var(--muted-strong);font-size:11px}.playwright-view .script-run-state{min-width:64px;padding:2px 8px;font-size:10px}.playwright-view .icon-button{flex:none}.playwright-view .icon-button:disabled{opacity:.45}.playwright-reason{flex:none;padding:2px 8px;border-radius:9px;color:var(--danger,#b42318);background:rgba(180,35,24,.1);font-size:10px;font-style:normal;font-weight:650;white-space:nowrap}.playwright-error{max-height:150px;margin:0;padding:6px 8px;overflow:auto;border:1px solid var(--line);border-radius:7px;color:var(--muted-strong);background:rgba(255,255,255,.3);font:10px/1.45 "Cascadia Code",Consolas,monospace;white-space:pre-wrap;word-break:break-word}.playwright-history{flex:none;min-height:0;display:flex;flex-direction:column;gap:6px;padding:8px 9px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28)}.playwright-history[data-open="true"]{flex:0 1 55%;max-height:55%}.playwright-history-body{flex:1;min-height:0;overflow:auto}.playwright-history header{display:flex;align-items:center;gap:8px;color:var(--ink)}.playwright-history-toggle{flex:1;min-width:0;display:flex;align-items:center;gap:7px;padding:4px 2px;border:0;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}.playwright-history-toggle strong{font-size:12px;font-weight:650;white-space:nowrap}.playwright-history-toggle small{flex:1;min-width:0;overflow:hidden;color:var(--muted);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.playwright-history ul{display:flex;flex-direction:column;gap:3px;margin:0;padding:0;list-style:none}.playwright-history-item{width:100%;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:7px 9px;border:1px solid transparent;border-radius:7px;color:var(--ink);background:transparent;font:11px inherit;text-align:left;cursor:pointer}.playwright-history-item:hover,.playwright-history-item[aria-pressed="true"]{border-color:var(--line);background:rgba(25,139,162,.08)}.playwright-history-item .playwright-history-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.playwright-history-item strong{min-width:0;overflow:hidden;font-size:11px;font-weight:620;text-overflow:ellipsis;white-space:nowrap}.playwright-history-item small{color:var(--muted);font-size:10px;white-space:nowrap}.playwright-history-item .playwright-run-counts{flex-basis:100%}
-@media(max-width:430px){.playwright-project{flex-wrap:wrap}.playwright-project input{flex-basis:100%}.playwright-toolbar{flex-wrap:wrap}.playwright-form-fields{grid-template-columns:1fr}.playwright-form label:first-child{grid-column:auto}}.playwright-history-bar{flex:none;padding:4px 9px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.28)}.playwright-history-bar .playwright-history-toggle[aria-pressed="true"]{color:var(--accent-strong)}.side-panel-inner{position:absolute;top:0;right:0;bottom:0;width:300px;display:flex;flex-direction:column;gap:8px;padding:clamp(14px,4.6vh,23px) 12px 12px 14px;box-sizing:border-box}.side-panel-inner header{flex:none;display:flex;align-items:center;gap:8px;color:var(--ink)}.side-panel-inner header strong{flex:1;font-size:12px;font-weight:650}.side-panel-inner .playwright-history-body{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}.side-panel-inner ul{display:flex;flex-direction:column;gap:3px;margin:0;padding:0;list-style:none}.side-panel-inner .playwright-history-item{width:100%;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:7px 9px;border:1px solid transparent;border-radius:7px;color:var(--ink);background:transparent;font:11px inherit;text-align:left;cursor:pointer}.side-panel-inner .playwright-history-item:hover,.side-panel-inner .playwright-history-item[aria-pressed="true"]{border-color:var(--line);background:rgba(25,139,162,.08)}.side-panel-inner .playwright-history-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.side-panel-inner .playwright-history-item strong{min-width:0;overflow:hidden;font-size:11px;font-weight:620;text-overflow:ellipsis;white-space:nowrap}.side-panel-inner .playwright-history-item small{color:var(--muted);font-size:10px;white-space:nowrap}.side-panel-inner .playwright-run-counts{flex-basis:100%}
+@media(max-width:430px){.playwright-project{flex-wrap:wrap}.playwright-project input{flex-basis:100%}.playwright-toolbar{flex-wrap:wrap}.playwright-form-fields{grid-template-columns:1fr}.playwright-form label:first-child{grid-column:auto}}.side-panel-inner .playwright-history-item{width:100%;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:7px 9px;border:1px solid transparent;border-radius:7px;color:var(--ink);background:transparent;font:11px inherit;text-align:left;cursor:pointer}.side-panel-inner .playwright-history-item:hover,.side-panel-inner .playwright-history-item[aria-pressed="true"]{border-color:var(--line);background:rgba(25,139,162,.08)}.side-panel-inner .playwright-history-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.side-panel-inner .playwright-history-item strong{min-width:0;overflow:hidden;font-size:11px;font-weight:620;text-overflow:ellipsis;white-space:nowrap}.side-panel-inner .playwright-history-item small{color:var(--muted);font-size:10px;white-space:nowrap}.side-panel-inner .playwright-run-counts{flex-basis:100%}
 `;
 
 const stateLabels: Record<PlaywrightRunState, string> = {
@@ -37,14 +37,6 @@ function formatRunTime(value: string | number): string {
 
 const historyOpenKey = 'automator.playwrightRunHistoryOpen';
 
-/** Remembers whether the run history is expanded for this viewer. Storage can be unavailable, so every access is guarded. */
-function readHistoryOpen(): boolean {
-  try { return window.localStorage.getItem(historyOpenKey) === '1'; } catch { return false; }
-}
-
-function writeHistoryOpen(open: boolean): void {
-  try { window.localStorage.setItem(historyOpenKey, open ? '1' : '0'); } catch { /* The toggle still works without storage. */ }
-}
 
 /** Failing outcomes first, the most urgent at the top. */
 const outcomeOrder: Record<string, number> = { timedOut: 0, failed: 1, interrupted: 2, flaky: 3, passed: 4, skipped: 5 };
@@ -113,25 +105,10 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
   const [history, setHistory] = useState<PlaywrightRunRecord[]>([]);
   const [backendActive, setBackendActive] = useState<PlaywrightActiveRun[]>([]);
   const [shownRunId, setShownRunId] = useState<string | null>(null);
-  const [historyOpen, setHistoryOpen] = useState<boolean>(readHistoryOpen);
   const [profiles, setProfiles] = useState<BrowserAutomationProfile[]>([]);
   const { active: activeRun, last: lastRun } = useBrowserRun();
-  // In the compact window the history is a panel to the left of it: the host widens the window while it shows.
-  const [sidePanelSlot, setSidePanelSlot] = useState<HTMLElement | null>(null);
-  const [windowResizes, setWindowResizes] = useState(surface === 'launcher');
-  const sidePanelMode = surface === 'launcher' && windowResizes && !!sidePanelSlot;
-  const sidePanelFirst = useRef(true);
-  useEffect(() => { setSidePanelSlot(document.getElementById('side-panel-slot')); }, []);
-  useEffect(() => {
-    if (surface !== 'launcher') return;
-    const bridge = window.automator;
-    if (!bridge?.setSidePanel) { setWindowResizes(false); return; }
-    const first = sidePanelFirst.current;
-    sidePanelFirst.current = false;
-    void bridge.setSidePanel(historyOpen, !first).then((resized) => { if (!resized) setWindowResizes(false); }).catch(() => setWindowResizes(false));
-  }, [surface, historyOpen]);
-  // The panel belongs to this tab, so the window narrows again when the tab goes away.
-  useEffect(() => () => { if (surface === 'launcher') void window.automator?.setSidePanel?.(false)?.catch(() => undefined); }, [surface]);
+  const sidePanel = useHistorySidePanel(surface, historyOpenKey);
+  const { open: historyOpen, setOpen: setHistoryOpen, panelMode: sidePanelMode } = sidePanel;
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
@@ -228,7 +205,6 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
 
   useEffect(() => { void loadState(); }, [loadState]);
   useEffect(() => { void loadHistory(); }, [loadHistory, lastRun?.id]);
-  useEffect(() => { writeHistoryOpen(historyOpen); }, [historyOpen]);
   // A run started by another window or an agent is only visible through the backend, so follow it until it ends.
   const foreignRunning = !activeRun && backendActive.length > 0;
   useEffect(() => {
@@ -514,13 +490,7 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
     </section>}
 
     {sidePanelMode
-      ? <section className="playwright-history-bar">
-        <button type="button" className="playwright-history-toggle" aria-pressed={historyOpen} aria-expanded={historyOpen} aria-controls="playwright-history-panel" onClick={() => setHistoryOpen((open) => !open)}>
-          {historyOpen ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
-          <strong>Run history</strong>
-          <small>{historySummary}</small>
-        </button>
-      </section>
+      ? <SideHistoryToggle panel={sidePanel} title="Run history" summary={historySummary} />
       : <section className="playwright-history" data-open={historyOpen} aria-label="Playwright run history">
         <header>
           <button type="button" className="playwright-history-toggle" aria-expanded={historyOpen} aria-controls="playwright-history-body" onClick={() => setHistoryOpen((open) => !open)}>
@@ -532,14 +502,6 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
         </header>
         {historyOpen && <div className="playwright-history-body" id="playwright-history-body">{historyList}</div>}
       </section>}
-    {sidePanelMode && sidePanelSlot && createPortal(
-      <aside className="side-panel-inner" id="playwright-history-panel" role="region" aria-label="Playwright run history" aria-hidden={!historyOpen} inert={!historyOpen}>
-        <header>
-          <strong>Run history</strong>
-          {clearButton}
-          <button className="icon-button" type="button" aria-label="Hide run history" title="Hide run history" onClick={() => setHistoryOpen(false)}><PanelLeftClose size={14} /></button>
-        </header>
-        <div className="playwright-history-body">{historyList}</div>
-      </aside>, sidePanelSlot)}
+    {sidePanelMode && <SideHistoryContent panel={sidePanel} title="Playwright run history" actions={clearButton}>{historyList}</SideHistoryContent>}
   </section>;
 }

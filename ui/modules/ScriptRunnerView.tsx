@@ -14,6 +14,7 @@ import {
 } from './scriptTemplateViewModel';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import { InlineConfirmButton } from '../components/InlineConfirmButton';
+import { SideHistoryContent, SideHistoryToggle, useHistorySidePanel } from '../components/SideHistoryPanel';
 import { PathField } from '../components/PathField';
 import { ExplorerActionsPanel } from './ExplorerActionsPanel';
 import { FileExplorerLaunchContext } from '../FileExplorerLaunchContext';
@@ -27,6 +28,7 @@ type ViewProps = {
   tab: BackendUiState['tabs'][number];
   moduleState: BackendUiState['moduleStates'][number] | undefined;
   services: AutomationServices;
+  surface?: 'launcher' | 'workspace';
 };
 
 type InterpreterDefaults = Record<ScriptRunnerInterpreter, string>;
@@ -96,7 +98,7 @@ function ElapsedTime({ since }: { since: number }) {
 
 const trustNote = 'Scripts run as your Windows user with the same access as Automator. They are not sandboxed. Review and trust this code before running it.';
 
-export function ScriptRunnerView({ tab, services }: ViewProps) {
+export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
   const fileExplorerLaunch = useContext(FileExplorerLaunchContext);
   const [profiles, setProfiles] = useState<ScriptProfile[]>([]);
   const [interpreterDefaults, setInterpreterDefaults] = useState<InterpreterDefaults>(emptyInterpreterDefaults);
@@ -109,6 +111,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   const [editingOriginalId, setEditingOriginalId] = useState<string | null>(null);
   // Runs live in a window-level store, so they keep going and stay visible when this view is closed and reopened.
   const runs = useScriptRuns();
+  const sidePanel = useHistorySidePanel(surface, 'automator.scriptRunnerHistoryOpen', runs.length > 0);
   const activeRun = runs.find((run) => run.finishedAt === null);
   const runningId = activeRun?.profileId ?? null;
   // null shows the newest finished run, 'none' hides the result panel, anything else is a chosen history entry.
@@ -551,6 +554,8 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     </>
   );
 
+  const historyClear = runs.some((run) => run.finishedAt !== null)
+    ? <button className="secondary-button" type="button" onClick={() => { clearFinishedScriptRuns(); setShownRunId(null); }}>Clear history</button> : null;
   return (
     <section className="module-view script-runner-view" aria-label="Script Runner">
       <div className="script-heading">
@@ -665,7 +670,9 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
         {output && !output.stdout && !output.stderr && output.structuredOutput == null && <p className="script-no-output">The script did not produce output.</p>}
       </section>}
 
-      {runs.length > 0 && <section className="script-history" aria-label="Run history">
+      {runs.length > 0 && (sidePanel.panelMode
+        ? <SideHistoryToggle panel={sidePanel} title="Run history" summary={`${runs.length} in this window`} />
+        : <section className="script-history" aria-label="Run history">
         <header><strong>Run history</strong><small>Kept in this window until Automator restarts. Run activity keeps a permanent record of when each run happened, without its output.</small>
           {runs.some((run) => run.finishedAt !== null) && <button className="secondary-button" type="button" onClick={() => { clearFinishedScriptRuns(); setShownRunId(null); }}>Clear history</button>}</header>
         <ul>{runs.map((run) => <li key={run.id}>
@@ -676,7 +683,18 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
             {describeRunError(run) && <span className="script-history-error">{describeRunError(run)}</span>}
           </button>
         </li>)}</ul>
-      </section>}
+      </section>)}
+      {sidePanel.panelMode && runs.length > 0 && <SideHistoryContent panel={sidePanel} title="Run history" actions={historyClear}>
+        <p className="side-panel-note">Kept in this window until Automator restarts. Run activity keeps a permanent record of when each run happened, without its output.</p>
+                <ul>{runs.map((run) => <li key={run.id}>
+          <button type="button" className="script-history-item" aria-pressed={shownRun?.id === run.id} disabled={run.finishedAt === null} onClick={() => setShownRunId(run.id)}>
+            <span className={`script-run-state is-${run.state}`}>{describeRunState(run.state)}</span>
+            <strong>{run.profileName}</strong>
+            <span>{formatRunTime(run.startedAt)}{run.finishedAt !== null ? ` · ${formatDuration(run.finishedAt - run.startedAt)}` : ''}</span>
+            {describeRunError(run) && <span className="script-history-error">{describeRunError(run)}</span>}
+          </button>
+        </li>)}</ul>
+      </SideHistoryContent>}
     </section>
   );
 }

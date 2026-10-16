@@ -4,10 +4,11 @@ import type { AutomationServices } from '../automationServices';
 import type { AutomationModuleActionRequest, BackendUiState } from '../../contracts/rpc';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import { InlineConfirmButton } from '../components/InlineConfirmButton';
+import { SideHistoryContent, SideHistoryToggle, useHistorySidePanel } from '../components/SideHistoryPanel';
 import { describeRecurrence, readSchedulerSnapshot, scheduleWeekdays, validateSchedule, type ScheduleDefinition, type ScheduleRecurrence, type ScheduleTargetKind, type SchedulerSnapshot } from '../contracts/scheduler';
 import { buildCalendarMonth, buildUpcomingScheduleEntries } from './schedulerAgendaViewModel';
 
-type ViewProps = { tab: BackendUiState['tabs'][number]; moduleState: BackendUiState['moduleStates'][number] | undefined; services: AutomationServices };
+type ViewProps = { surface?: 'launcher' | 'workspace'; tab: BackendUiState['tabs'][number]; moduleState: BackendUiState['moduleStates'][number] | undefined; services: AutomationServices };
 const emptySnapshot: SchedulerSnapshot = { schedules: [], history: [], states: [], workflows: [], scripts: [], running: false };
 function blankSchedule(targetKind: ScheduleTargetKind = 'workflow', profileId = ''): ScheduleDefinition {
   return { id: `schedule-${Date.now().toString(36)}`, name: '', targetKind, profileId, enabled: true, runOnceAfterRestart: false,
@@ -30,8 +31,9 @@ const styles = `
 .scheduler-calendar-events{max-height:48px;overflow:auto}.scheduler-calendar-run{font-size:7px}
 `;
 
-export function SchedulerView({ services }: ViewProps) {
+export function SchedulerView({ services, surface }: ViewProps) {
   const [snapshot, setSnapshot] = useState<SchedulerSnapshot>(emptySnapshot);
+  const sidePanel = useHistorySidePanel(surface, 'automator.schedulerHistoryOpen', snapshot.history.length > 0);
   const [snapshotLoaded, setSnapshotLoaded] = useState(false);
   const [draft, setDraft] = useState<ScheduleDefinition | null>(null);
   const [notice, setNotice] = useState('');
@@ -207,6 +209,9 @@ export function SchedulerView({ services }: ViewProps) {
         </article>;
       })}
     </div>
-    {snapshot.history.length > 0 && <section className="scheduler-history" aria-label="Run history"><strong>Recent runs</strong>{[...snapshot.history].reverse().slice(0, 20).map((entry) => <div className="scheduler-history-row" key={entry.id}><span>{snapshot.schedules.find((item) => item.id === entry.scheduleId)?.name ?? entry.scheduleId} · {new Date(entry.startedUtc).toLocaleString()}</span><span>{entry.category} · {entry.durationMilliseconds} ms</span></div>)}</section>}
+    {snapshot.history.length > 0 && (sidePanel.panelMode
+      ? <SideHistoryToggle panel={sidePanel} title="Run history" summary={`${snapshot.history.length} recent`} />
+      : <section className="scheduler-history" aria-label="Run history"><strong>Recent runs</strong>{[...snapshot.history].reverse().slice(0, 20).map((entry) => <div className="scheduler-history-row" key={entry.id}><span>{snapshot.schedules.find((item) => item.id === entry.scheduleId)?.name ?? entry.scheduleId} · {new Date(entry.startedUtc).toLocaleString()}</span><span>{entry.category} · {entry.durationMilliseconds} ms</span></div>)}</section>)}
+    {sidePanel.panelMode && snapshot.history.length > 0 && <SideHistoryContent panel={sidePanel} title="Run history">{[...snapshot.history].reverse().slice(0, 20).map((entry) => <div className="scheduler-history-row" key={entry.id}><span>{snapshot.schedules.find((item) => item.id === entry.scheduleId)?.name ?? entry.scheduleId} · {new Date(entry.startedUtc).toLocaleString()}</span><span>{entry.category} · {entry.durationMilliseconds} ms</span></div>)}</SideHistoryContent>}
   </section>;
 }

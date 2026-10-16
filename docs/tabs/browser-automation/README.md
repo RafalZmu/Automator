@@ -29,7 +29,7 @@ A test that passed only after a failed attempt is **Flaky**, and its error is fr
 
 ## Code map
 
-- Side panel: `ui/modules/BrowserAutomationView.tsx` portals the history into `#side-panel-slot` (rendered by `ui/App.tsx`, sized from the window width in `ui/styles.css`) and calls `bridge.setSidePanel`; `electron/main.ts` animates the window bounds using `computeSidePanelBounds` and `interpolateBounds` in `electron/platform.ts` (tests: tests/host-platform.test.mjs).
+- Side panel: `ui/modules/BrowserAutomationView.tsx` uses the shared `ui/components/SideHistoryPanel.tsx` (also used by Script Runner and Scheduler) to portal the history into `#side-panel-slot` (rendered by `ui/App.tsx`, sized from the window width in `ui/styles.css`) and calls `bridge.setSidePanel`; `electron/main.ts` animates the window bounds using `computeSidePanelBounds` and `interpolateBounds` in `electron/platform.ts` (tests: tests/host-platform.test.mjs).
 - ui/modules/BrowserAutomationView.tsx renders project selection, discovered files/tests, tag editing, grouped runs, the running banner and the saved run history.
 - src/Automator.Infrastructure/Automation/playwright-run-reporter.cjs is the Playwright reporter that writes each run's per-test events; tests/playwright-run-reporter.test.cjs covers it.
 - ui/modules/browserRunStore.ts owns the active run for the window (memory only); tests/browser-run-store.test.mjs covers it. `listRunHistory` and `deleteRunHistory` are the backend actions behind the history; tests/Automator.Application.Specs/BrowserRunHistorySpecs.cs covers them, and tests/electron/browser-run-history.test.cjs checks the running banner across tabs, saving, restart persistence and clearing against the real host.
