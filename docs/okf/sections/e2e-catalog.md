@@ -1,7 +1,7 @@
 ---
 type: "Section Guide"
 title: "E2E test catalog"
-description: "`docs/e2e/index.html` is a single self-contained page that lists every automated test in the repository by category, and holds the team's ideas for tests that do not exist yet."
+description: "`docs/e2e/index.html` is a single self-contained page that lists the repository's end-to-end tests and API tests by category, and holds the team's ideas for tests that do not exist yet."
 resource: "docs/sections/e2e-catalog/"
 tags: [section, e2e-catalog]
 generated: { by: automator-build-okf/1 }
@@ -12,11 +12,11 @@ Source of truth: `docs/sections/e2e-catalog/` in the repository. This concept is
 
 ## Behavior and code map
 
-`docs/e2e/index.html` is a single self-contained page that lists every automated test in the repository by category, and holds the team's ideas for tests that do not exist yet. Open it directly in a browser (double-click the file); it needs no server and no network.
+`docs/e2e/index.html` is a single self-contained page that lists the repository's end-to-end tests and API tests by category, and holds the team's ideas for tests that do not exist yet. Open it directly in a browser (double-click the file); it needs no server and no network.
 
 ### What it shows
 
-- **Implemented tests** (generated): title, category, layer (Electron UI, Contract / model, .NET spec, PowerShell spec, Packaged app), source file and line, steps and expected result.
+- **Implemented tests** (generated): title, category, layer (Electron E2E, Packaged E2E, API), source file and line, steps and expected result.
 - **Ideas** (hand-added, tagged `idea`): title, category, layer, priority, steps, expected result, author, date and a status (new, accepted, rejected).
 - Search across all text, filter by category, layer and kind (all, implemented, ideas), and **Copy ideas as Markdown** for handing ideas to someone who will implement them.
 
@@ -28,9 +28,8 @@ Ideas live inside the page's `e2e-data` JSON block, one record per line, so they
 
 `node scripts/e2e-catalog.mjs` (`npm.cmd run e2e:catalog`) scans `tests/` and rewrites only the `tests` part of the data block:
 
-- JavaScript tests: `test(` and `it(` titles in `tests/**/*.{cjs,mjs}`.
-- .NET specs: the `("title", Method)` entries in each `tests/Automator.*.Specs/Program.cs`.
-- PowerShell specs: one entry per `tests/*.spec.ps1`.
+- Scope: a test is listed when it is **end-to-end** (its file in `tests/electron/` launches the real Electron host via `electron.launch`/`launchHost`, or it is the packaged-app lifecycle test) or when it belongs to the **API** category. Unit-style contract, model, .NET and PowerShell spec tests outside the API category are not listed.
+- Sources scanned: `test(`/`it(` titles in `tests/**/*.{cjs,mjs}`, the `("title", Method)` entries in each `tests/Automator.*.Specs/Program.cs`, and `tests/*.spec.ps1`.
 - Steps and expected results: taken from `docs/tabs/<tab>/TESTS.md` when a `###` heading matches the test title; otherwise kept from the previous version of the page, matched by test id (a hash of file and title). `node scripts/e2e-catalog.mjs --missing out.json` lists tests that still lack either.
 - Category: the tab whose `TESTS.md` documents the test (tests documented in several tabs go to Platform and shell), otherwise the path and title rules at the top of `scripts/e2e-catalog.mjs`.
 
@@ -46,6 +45,7 @@ Read the root AGENTS.md first. The catalog is one HTML file with its data inline
 - Write steps and an expected result for every new test, either in the tab's `TESTS.md` (preferred) or by adding them to the test's entry in the page's data block.
 - Never let the generator touch `ideas`, and never reformat the data block by hand: one record per line keeps merges clean. The browser and the generator share the same serialization.
 - When an idea is implemented, remove it from the page in the same change (or leave it with status accepted until the test merges) and make sure the new test appears in the list.
+- Keep the scope to end-to-end and API tests; change `layerOf` and `e2eLayers` in the generator (and the page's layer list) if that definition changes.
 - Categories are listed in both `scripts/e2e-catalog.mjs` and the page; add a new tab or section to both, plus a path rule.
 - The page must work with no network and no build step: no external scripts, fonts or styles.
 
