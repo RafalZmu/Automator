@@ -442,3 +442,38 @@ The coordinator and API cases below are executed by `npm.cmd run test:dotnet`. R
 2. Open Workspace and verify slots 2–8 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
 
 **Expected result:** The numbered tabs retain their accessible names and show one visible icon in both windows.
+
+## Add time to a running timer — tests/Automator.Focus.Specs, tests/Automator.Application.Specs, tests/electron/work-time-model.test.cjs
+
+### adding time to a running timer extends its start and elapsed time
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Start a timer, advance one minute, and add 10 minutes, then 1 and 5 minutes.
+2. Inspect elapsed time, start, and first segment; try 0, negative and over-24-hour amounts, an unknown ID, and a paused timer.
+
+**Expected result:** Elapsed time is 17 minutes and the start is 16 minutes before the original start; invalid requests are rejected.
+
+### added time stacks, is saved in the entry and survives restart
+
+**Source:** tests/Automator.Focus.Specs/Program.cs
+
+**Steps**
+
+1. Add 10 minutes to a running timer, restart the backend, then pause, resume, add 5 minutes to the timer with a closed first segment, end, and save.
+
+**Expected result:** Elapsed time and the saved entry's duration include all added time (21 minutes), and the entry starts 15 minutes before the original start.
+
+### work-time quick-add buttons offer +1 and +5 minutes and convert to milliseconds
+
+**Source:** tests/electron/work-time-model.test.cjs
+
+**Steps**
+
+1. Read the quick-add amounts and labels; compute elapsed time for a running timer whose backend elapsed value already includes added time.
+
+**Expected result:** The amounts are 1 and 5 minutes (60,000 and 300,000 ms) and elapsed time keeps counting from the sample time.
+
+The `addTime` action's input validation is also covered in tests/Automator.Application.Specs.

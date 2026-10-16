@@ -303,3 +303,16 @@ test('work-time manual duration ends now and starts the duration earlier', async
     assert.ok('error' in resolveWorkTimeDuration(hours, minutes, now));
   }
 });
+
+test('work-time quick-add buttons offer +1 and +5 minutes and convert to milliseconds', async () => {
+  const { WORK_TIME_QUICK_ADD_MINUTES, workTimeQuickAddMilliseconds, workTimeQuickAddLabel, elapsedWorkTimeMilliseconds, formatWorkTimeDuration } = await import(modelUrl);
+  assert.deepEqual([...WORK_TIME_QUICK_ADD_MINUTES], [1, 5]);
+  assert.deepEqual(WORK_TIME_QUICK_ADD_MINUTES.map(workTimeQuickAddMilliseconds), [60_000, 300_000]);
+  assert.deepEqual(WORK_TIME_QUICK_ADD_MINUTES.map(workTimeQuickAddLabel), ['+1 min', '+5 min']);
+  // Backend-added time arrives in elapsedMilliseconds (stacked presses accumulate) and keeps counting from the sample time.
+  const timer = { id: 't', description: 'A', startedUtc: '2026-10-03T07:45:00Z', status: 'running', elapsedMilliseconds: 16 * 60_000,
+    sampledUtc: '2026-10-03T08:01:00Z', segments: [{ startedUtc: '2026-10-03T07:45:00Z', stoppedUtc: null }] };
+  const now = Date.parse('2026-10-03T08:01:30Z');
+  assert.equal(elapsedWorkTimeMilliseconds(timer, now), 16 * 60_000 + 30_000);
+  assert.equal(formatWorkTimeDuration(elapsedWorkTimeMilliseconds(timer, now)), formatWorkTimeDuration(16.5 * 60_000));
+});

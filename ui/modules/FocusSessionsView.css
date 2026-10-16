@@ -143,3 +143,7 @@
   .work-time-manual-times { grid-template-columns: 1fr; }
   .work-time-edit-form .work-time-report-actions { grid-column: 1; }
 }
+
+.work-time-quick-add { display: flex; gap: 5px; }
+.work-time-quick-add .secondary-button { min-height: 24px; padding: 0 8px; font-size: 8px; font-variant-numeric: tabular-nums; }
+.work-time-quick-add .secondary-button:disabled { opacity: .52; cursor: not-allowed; }

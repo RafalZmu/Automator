@@ -11,6 +11,8 @@ public sealed class AutomationWorkTimeCoordinator : IAutomationWorkTimeCoordinat
     public const int MaximumHistoryEntries = 5000;
     private const string CurrentId = "current";
     private const int RecordSchemaVersion = 2;
+    /// <summary>Largest amount one add-time request may add (24 hours).</summary>
+    public const long MaximumAddedMilliseconds = 24L * 60 * 60 * 1000;
     private const string UntitledTimer = "Untitled timer";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IAutomationLibraryStore _libraryStore;
@@ -128,6 +130,29 @@ public sealed class AutomationWorkTimeCoordinator : IAutomationWorkTimeCoordinat
             var start = timer.Segments.Last().StoppedUtc is { } previous && now < previous ? previous : now;
             await ReplaceTimerAsync(timer with { Status = "running", SampledUtc = now,
                 Segments = [.. timer.Segments, new AutomationWorkTimeSegment(start, null)] }, token).ConfigureAwait(false);
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Adds time worked before the timer was started. The timer's start and first segment move earlier by the amount,
+    /// so elapsed time, working-period overlap and the saved entry all include it and it survives restarts.
+    /// </summary>
+    public Task<AutomationWorkTimeSnapshot> AddTimeAsync(string id, long milliseconds, CancellationToken cancellationToken)
+    {
+        var timerId = CleanId(id);
+        if (milliseconds < 1 || milliseconds > MaximumAddedMilliseconds)
+            throw new InvalidDataException("The time to add must be between one millisecond and 24 hours.");
+        return OperateAsync(async (now, token) =>
+        {
+            var timer = FindTimer(timerId);
+            if (timer.Status != "running") throw new InvalidOperationException("Time can only be added to a running work timer.");
+            var shift = TimeSpan.FromMilliseconds(milliseconds);
+            var first = timer.Segments[0];
+            var segments = timer.Segments.ToArray();
+            segments[0] = first with { StartedUtc = first.StartedUtc - shift };
+            // An open first segment grows through the running-time calculation; a closed one needs the stored elapsed time raised.
+            var elapsed = first.StoppedUtc is null ? timer.ElapsedMilliseconds : checked(timer.ElapsedMilliseconds + milliseconds);
+            await ReplaceTimerAsync(timer with { StartedUtc = timer.StartedUtc - shift, ElapsedMilliseconds = elapsed, Segments = segments }, token).ConfigureAwait(false);
         }, cancellationToken);
     }
 

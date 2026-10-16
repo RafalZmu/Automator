@@ -396,6 +396,12 @@ public sealed class AutomationServicesContext : IAsyncDisposable
             return await inner.ResumeAsync(id, linked.Token).ConfigureAwait(false);
         }
 
+        public async Task<AutomationWorkTimeSnapshot> AddTimeAsync(string id, long milliseconds, CancellationToken cancellationToken)
+        {
+            using var linked = Link(context, cancellationToken);
+            return await inner.AddTimeAsync(id, milliseconds, linked.Token).ConfigureAwait(false);
+        }
+
         public async Task<AutomationWorkTimeSnapshot> EndAsync(string id, CancellationToken cancellationToken)
         {
             using var linked = Link(context, cancellationToken);

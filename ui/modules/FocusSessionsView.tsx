@@ -22,6 +22,9 @@ import {
   readWorkTimeHistoryPage,
   readWorkTimeSnapshot,
   resolveWorkTimeDuration,
+  WORK_TIME_QUICK_ADD_MINUTES,
+  workTimeQuickAddLabel,
+  workTimeQuickAddMilliseconds,
   resolveWorkTimeInterval,
   WORK_TIME_HISTORY_PAGE_SIZE,
   workTimeEntryDurationMilliseconds,
@@ -365,6 +368,11 @@ export function FocusSessionsView({ tab, services, surface }: ViewProps) {
             <div className={`work-time-clock-block ${isRunning ? '' : 'is-pending'}`}>
               <span className="work-time-eyebrow">{isRunning ? <><span className="work-time-live-dot" /> RUNNING</> : 'PAUSED'}</span>
               <strong className="work-time-clock" aria-label={`${formatWorkTimeDuration(elapsed)} elapsed`}>{formatWorkTimeDuration(elapsed)}</strong>
+              {isRunning && <div className="work-time-quick-add" role="group" aria-label="Add time to the running timer">
+                {WORK_TIME_QUICK_ADD_MINUTES.map((minutes) => <button className="secondary-button" type="button" key={minutes} disabled={!!busy}
+                  aria-label={`Add ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} to ${timer.description}`}
+                  onClick={() => void dispatch('addTime', { id: timer.id, milliseconds: workTimeQuickAddMilliseconds(minutes) })}>{workTimeQuickAddLabel(minutes)}</button>)}
+              </div>}
               <span className="work-time-started">Started {new Date(timer.startedUtc).toLocaleString()}</span>
             </div>
             <div className="work-time-current-copy">

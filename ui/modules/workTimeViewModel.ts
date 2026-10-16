@@ -128,6 +128,18 @@ export function mergeWorkTimeHistory(preferred: readonly WorkTimeEntry[], older:
   return [...byId.values()].sort((a, b) => Date.parse(a.stoppedUtc) - Date.parse(b.stoppedUtc));
 }
 
+/** Quick-add amounts, in minutes, offered next to a running timer's clock. */
+export const WORK_TIME_QUICK_ADD_MINUTES = [1, 5] as const;
+
+/** Milliseconds sent to the addTime action for one quick-add press. */
+export function workTimeQuickAddMilliseconds(minutes: number): number {
+  return Math.round(minutes * 60_000);
+}
+
+export function workTimeQuickAddLabel(minutes: number): string {
+  return `+${minutes} min`;
+}
+
 export function elapsedWorkTimeMilliseconds(timer: WorkTimeTimer, now = Date.now()): number {
   const sampled = Date.parse(timer.sampledUtc);
   return Math.max(0, timer.elapsedMilliseconds + (timer.status === 'running' && Number.isFinite(sampled) ? now - sampled : 0));
