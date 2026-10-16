@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Automator.Core.Automation;
 
 namespace Automator.Application.Automation;
@@ -16,7 +17,10 @@ public sealed record ScriptRunnerTemplateParameter(
     bool Sensitive = false,
     object? DefaultValue = null,
     IReadOnlyList<string>? Options = null,
-    string? Example = null);
+    string? Example = null,
+    // Catalog-only: an empty value becomes the path of another input with this extension (for example the .fdb path with .fbk).
+    [property: JsonIgnore] string? DefaultFromKey = null,
+    [property: JsonIgnore] string? DefaultFromExtension = null);
 
 public sealed record ScriptRunnerTemplateDescriptor(
     string Id,
@@ -42,7 +46,7 @@ public static partial class ScriptRunnerTemplateCatalog
             ScriptRunnerInterpreter.Powershell, "firebird-3-backup", ScriptRunnerOutputMode.Text, 3600,
             [
                 new("database", "Target database", ScriptRunnerTemplateParameterType.File, true, 0, "The .fdb file to back up.", Example: @"C:\Data\company.fdb"),
-                new("backup", "Backup file", ScriptRunnerTemplateParameterType.File, true, 1, "Where to write the .fbk backup. It may not exist yet.", Example: @"D:\Backups\company.fbk"),
+                new("backup", "Backup file", ScriptRunnerTemplateParameterType.File, false, 1, "Where to write the .fbk backup. Leave empty to save it beside the .fdb file with the same name. It may not exist yet.", Example: @"D:\Backups\company.fbk", DefaultFromKey: "database", DefaultFromExtension: ".fbk"),
                 new("gbak", "gbak executable", ScriptRunnerTemplateParameterType.File, true, 2, "Firebird's backup tool.", Example: @"C:\Program Files\Firebird\Firebird_3_0\gbak.exe"),
                 new("username", "Username", ScriptRunnerTemplateParameterType.Text, true, 3, Example: "SYSDBA"),
                 new("password", "Password", ScriptRunnerTemplateParameterType.Text, true, 4, Sensitive: true),
@@ -52,8 +56,8 @@ public static partial class ScriptRunnerTemplateCatalog
             ScriptRunnerInterpreter.Powershell, "firebird-3-backup-zip", ScriptRunnerOutputMode.Text, 3600,
             [
                 new("database", "Target database", ScriptRunnerTemplateParameterType.File, true, 0, "The .fdb file to back up.", Example: @"C:\Data\company.fdb"),
-                new("backup", "Backup file", ScriptRunnerTemplateParameterType.File, true, 1, "Where to write the .fbk backup. It may not exist yet.", Example: @"D:\Backups\company.fbk"),
-                new("archive", "ZIP file", ScriptRunnerTemplateParameterType.File, true, 2, "Where to write the ZIP of the backup.", Example: @"D:\Backups\company.zip"),
+                new("backup", "Backup file", ScriptRunnerTemplateParameterType.File, false, 1, "Where to write the .fbk backup. Leave empty to save it beside the .fdb file with the same name. It may not exist yet.", Example: @"D:\Backups\company.fbk", DefaultFromKey: "database", DefaultFromExtension: ".fbk"),
+                new("archive", "ZIP file", ScriptRunnerTemplateParameterType.File, false, 2, "Where to write the ZIP of the backup. Leave empty to save it beside the .fdb file, named after the database.", Example: @"D:\Backups\company.zip", DefaultFromKey: "database", DefaultFromExtension: ".zip"),
                 new("gbak", "gbak executable", ScriptRunnerTemplateParameterType.File, true, 3, "Firebird's backup tool.", Example: @"C:\Program Files\Firebird\Firebird_3_0\gbak.exe"),
                 new("username", "Username", ScriptRunnerTemplateParameterType.Text, true, 4, Example: "SYSDBA"),
                 new("password", "Password", ScriptRunnerTemplateParameterType.Text, true, 5, Sensitive: true),

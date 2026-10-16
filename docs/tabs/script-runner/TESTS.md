@@ -430,3 +430,33 @@ Codex-generated Python uses the same runner. Its Application specifications are 
 **Expected result:** Valid extensions normalize and unsafe mapping shapes are rejected.
 
 Backend mapping validation, token/template requirements, file/extension revalidation, transient execution, deletion cleanup, and registry reconciliation are covered by Application and Windows specification projects. Registry reconciliation uses isolated test keys and checks unrelated-key/default-association preservation. Real File Explorer menus on Windows 10 and Windows 11 require manual packaged smoke checks; automated test-mode hosts never register production menu keys.
+
+## Inline forms, tracked Explorer runs, and derived paths (manual cases)
+
+These cases cover behavior that has no Electron test yet.
+
+### Run and Edit expand inside the script's row
+
+**Steps**
+
+1. Press Run on a script that has inputs, then press Edit on the same row.
+2. Press Edit again, then press New script.
+
+**Expected result:** Each form opens under its own row with a shared outline, opening one closes the other, and pressing the same button closes it. New script opens at the top.
+
+### Explorer runs show the running banner and history
+
+**Steps**
+
+1. Right-click a mapped file and run the action, then close the compact window.
+2. Reopen it and open Script Runner.
+
+**Expected result:** The run is still going, the banner and header pill show it, and after it finishes it appears in Run history. A failed run shows a one-line reason under its row.
+
+### Firebird backup paths default beside the database
+
+**Steps**
+
+1. Run the Firebird backup template with only the target database, `gbak`, username and password.
+
+**Expected result:** The backup is written next to the `.fdb` with the same name and an `.fbk` extension (and `.zip` for the ZIP template). The Application specification `ScriptRunnerTemplateSpecs` covers the argument mapping.

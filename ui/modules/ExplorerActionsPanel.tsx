@@ -3,16 +3,17 @@ import type { AutomationServices } from '../automationServices';
 import { FileExplorerLaunchContext } from '../FileExplorerLaunchContext';
 import { FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID } from '../../contracts/fileExplorer';
 import { parseExplorerActions, parseScriptTemplateCatalog, validateScriptTemplateValues, type ExplorerActionDefinition, type ScriptTemplateDescriptor } from '../../contracts/scriptRunner';
-import { PathField } from '../components/PathField';
+import { ScriptParameterFields } from './ScriptParameterFields';
+import { activeScriptRun, cancelScriptRun } from './scriptRunStore';
 import { clearSensitiveTemplateValues } from './scriptTemplateViewModel';
 import { normalizeExplorerExtensions, prepareExplorerForm, registrationNotice, type ExplorerProfile, type ExplorerRunForm } from './explorerActionViewModel';
 
-type Props = { services: AutomationServices; profiles: ExplorerProfile[]; templates: ScriptTemplateDescriptor[]; open: boolean; onOpen: () => void; busy: boolean; onRunning: (id: string | null) => void; onResult: (data: unknown) => void };
+type Props = { services: AutomationServices; profiles: ExplorerProfile[]; templates: ScriptTemplateDescriptor[]; open: boolean; onOpen: () => void; busy: boolean; onStartRun: (profile: { id: string; name: string }, input: Record<string, unknown>) => Promise<{ state: string; message: string }> };
 type MappingDraft = { id: string; profileId: string; label: string; extensions: string; fileParameterKey: string };
 function responseData(value: unknown): Record<string, unknown> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function message(error: unknown): string { return error instanceof Error ? error.message : 'The Explorer action could not be updated.'; }
 
-export function ExplorerActionsPanel({ services, profiles, templates, open, onOpen, busy, onRunning, onResult }: Props) {
+export function ExplorerActionsPanel({ services, profiles, templates, open, onOpen, busy, onStartRun }: Props) {
   const launch = useContext(FileExplorerLaunchContext);
   const [actions, setActions] = useState<ExplorerActionDefinition[]>([]);
   const [registration, setRegistration] = useState('');
@@ -105,20 +106,22 @@ export function ExplorerActionsPanel({ services, profiles, templates, open, onOp
       const templateValues = form.template ? validateScriptTemplateValues(form.template, form.values) : undefined;
       controller.current = abort;
       setRunning(true);
-      onRunning(`explorer:${form.profile.id}`);
       setNotice('');
-      const result = await services.modules.dispatch('runExplorerAction', { id: form.action.id, filePath: form.request.filePath, ...(templateValues ? { values: templateValues } : { arguments: form.arguments }) }, { signal: abort.signal });
-      onResult(result.data);
-      setNotice(result.message);
-      if (result.status === 'success') setForm(null);
+      const record = await onStartRun(form.profile, { id: form.action.id, filePath: form.request.filePath, ...(templateValues ? { values: templateValues } : { arguments: form.arguments }) });
+      setNotice(record.message);
+      if (record.state === 'success') setForm(null);
     } catch (error) { setNotice(message(error)); }
     finally {
       if (controller.current === abort) setForm(current => current?.template
         ? { ...current, values: clearSensitiveTemplateValues(current.template, current.values) } : current);
       controller.current = null;
       setRunning(false);
-      onRunning(null);
     }
+  };
+  const defaultFileParameterKey = (profileId: string) => {
+    const chosen = profiles.find(item => item.id === profileId);
+    const chosenTemplate = templates.find(item => item.id === chosen?.templateOrigin?.id && item.version === chosen.templateOrigin.version);
+    return chosenTemplate?.parameters.find(item => item.type === 'file' || item.type === 'directory')?.key ?? '';
   };
   const profile = profiles.find(item => item.id === draft?.profileId);
   const mappingTemplate = templates.find(item => item.id === profile?.templateOrigin?.id && item.version === profile.templateOrigin.version);
@@ -133,10 +136,10 @@ export function ExplorerActionsPanel({ services, profiles, templates, open, onOp
     {opening && <p role="status">Opening selected file…</p>}
     {draft && <form aria-label="Explorer action mapping" onSubmit={event => void save(event)}>
       <div className="script-fields">
-        <label><span>Saved profile</span><select aria-label="Saved profile" required value={draft.profileId} disabled={locked} onChange={event => setDraft({ ...draft, profileId: event.target.value, fileParameterKey: '' })}><option value="">Choose a profile…</option>{profiles.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label><span>Saved profile</span><select aria-label="Saved profile" required value={draft.profileId} disabled={locked} onChange={event => setDraft({ ...draft, profileId: event.target.value, fileParameterKey: defaultFileParameterKey(event.target.value) })}><option value="">Choose a profile…</option>{profiles.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label><span>Menu label</span><input required maxLength={128} value={draft.label} disabled={locked} onChange={event => setDraft({ ...draft, label: event.target.value })} /></label>
         <label className="script-field-wide"><span>File extensions</span><input required placeholder=".fdb, .txt" value={draft.extensions} disabled={locked} onChange={event => setDraft({ ...draft, extensions: event.target.value })} /></label>
-        {profile?.templateOrigin ? <label className="script-field-wide"><span>Selected file parameter</span><select aria-label="Selected file parameter" required value={draft.fileParameterKey} disabled={locked} onChange={event => setDraft({ ...draft, fileParameterKey: event.target.value })}><option value="">Choose a file or directory input…</option>{mappingParameters.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label> : <p className="script-field-wide">The saved profile must include {'{{file.path}}'} in its arguments. Each line stays one process argument.</p>}
+        {profile?.templateOrigin ? <label className="script-field-wide"><span>Put the selected file into <small>the file you right-click is passed to this input, so pick the one that takes the file itself (for example the database, not the backup output)</small></span><select aria-label="Selected file parameter" required value={draft.fileParameterKey} disabled={locked} onChange={event => setDraft({ ...draft, fileParameterKey: event.target.value })}><option value="">Choose a file or directory input…</option>{mappingParameters.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label> : <p className="script-field-wide">The saved profile must include {'{{file.path}}'} in its arguments. Each line stays one process argument.</p>}
       </div>
       <div className="script-editor-actions"><button className="secondary-button" type="button" disabled={locked} onClick={() => setDraft(null)}>Cancel mapping</button><button className="primary-button" type="submit" disabled={locked}>Save action</button></div>
     </form>}
@@ -149,16 +152,14 @@ export function ExplorerActionsPanel({ services, profiles, templates, open, onOp
     <div className="script-editor-actions"><button className="secondary-button" type="button" disabled={locked || !actions.length} onClick={() => void remove(actions)}>Remove all Explorer actions</button></div>
     {form && <section className="script-editor" aria-label="Run Explorer action">
       <div className="script-editor-heading"><strong>{form.action.label} · {form.profile.name}</strong></div>
-      <label className="script-field-wide"><span>Selected file</span><input readOnly value={form.request.filePath} /></label>
+      {!form.template && <label className="script-field-wide"><span>Selected file</span><input readOnly value={form.request.filePath} /></label>}
       <p>Review the inputs before running. These values are used for this run and are never saved to the profile.</p>
-      {form.template ? <div className="script-fields">{form.template.parameters.filter(parameter => parameter.key !== form.action.fileParameterKey).map(parameter => parameter.type === 'file' || parameter.type === 'directory'
-        ? <PathField key={parameter.key} label={`${parameter.label}${parameter.required ? ' *' : ''}`} kind={parameter.type} required={parameter.required} value={String(form.values[parameter.key] ?? '')} onChange={value => setForm(current => current ? { ...current, values: { ...current.values, [parameter.key]: value } } : current)} onBrowse={() => services.files.pickPath(parameter.type)} />
-        : <label key={parameter.key}><span>{parameter.label}{parameter.required ? ' *' : ''}</span>{parameter.type === 'boolean'
-          ? <input type="checkbox" disabled={running} checked={Boolean(form.values[parameter.key])} onChange={event => setForm({ ...form, values: { ...form.values, [parameter.key]: event.target.checked } })} />
-          : parameter.type === 'choice' ? <select required={parameter.required} disabled={running} value={String(form.values[parameter.key] ?? '')} onChange={event => setForm({ ...form, values: { ...form.values, [parameter.key]: event.target.value } })}><option value="">Choose…</option>{parameter.options.map(option => <option key={option}>{option}</option>)}</select>
-          : <input required={parameter.required} disabled={running} type={parameter.sensitive ? 'password' : 'text'} value={String(form.values[parameter.key] ?? '')} onChange={event => setForm({ ...form, values: { ...form.values, [parameter.key]: event.target.value } })} />}</label>)}</div>
+      {form.template ? <div className="script-fields">{form.template.parameters.map(parameter => parameter.key === form.action.fileParameterKey
+        ? <label key={parameter.key} className="script-field-wide"><span>{parameter.label} <small>the file you right-clicked</small></span><input readOnly value={form.request.filePath} /></label>
+        : <ScriptParameterFields key={parameter.key} parameters={[parameter]} values={form.values} services={services}
+          onChange={(key, value) => setForm(current => current ? { ...current, values: { ...current.values, [key]: value } } : current)} />)}</div>
         : <label className="script-field-wide"><span>Run arguments <small>one argument per line</small></span><textarea aria-label="Run arguments" rows={4} disabled={running} value={form.arguments.join('\n')} onChange={event => setForm({ ...form, arguments: event.target.value.split(/\r?\n/) })} /></label>}
-      <div className="script-editor-actions"><button className="secondary-button" type="button" onClick={() => { if (running) controller.current?.abort(); else { setForm(null); setNotice(''); } }}>{running ? 'Stop run' : 'Cancel'}</button><button className="primary-button" type="button" disabled={busy || opening} onClick={() => void run()}>{running ? 'Running…' : 'Run'}</button></div>
+      <div className="script-editor-actions"><button className="secondary-button" type="button" onClick={() => { if (running) { const active = activeScriptRun(); if (active) void cancelScriptRun(active.id); } else { setForm(null); setNotice(''); } }}>{running ? 'Stop run' : 'Cancel'}</button><button className="primary-button" type="button" disabled={busy || opening} onClick={() => void run()}>{running ? 'Running…' : 'Run'}</button></div>
     </section>}
   </section>;
 }

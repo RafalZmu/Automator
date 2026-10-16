@@ -44,3 +44,12 @@ test('history is bounded, keeps newest first and external runs are recorded', ()
   clearFinishedScriptRuns();
   assert.equal(getScriptRuns().length, 0);
 });
+
+test('describeRunError explains failures with the script error output first', async () => {
+  const { describeRunError } = await import('../ui/modules/scriptRunStore.ts');
+  const run = (state, message, output) => ({ id: '1', profileId: 'p', profileName: 'P', startedAt: 0, finishedAt: 1, state, message, output });
+  assert.equal(describeRunError(run('success', '', null)), '');
+  assert.equal(describeRunError(run('failed', 'Script failed', { stderr: '\nDatabase file does not exist.\nmore', exitCode: 1 })), 'Database file does not exist.');
+  assert.equal(describeRunError(run('error', 'Backend is unavailable', null)), 'Backend is unavailable');
+  assert.equal(describeRunError(run('timedOut', '', { stderr: '', exitCode: null })), 'The script timed out.');
+});

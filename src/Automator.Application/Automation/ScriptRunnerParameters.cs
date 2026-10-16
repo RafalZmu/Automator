@@ -51,6 +51,13 @@ public static class ScriptRunnerParameters
             }
             arguments[parameter.ArgumentIndex] = ConvertValue(parameter, value, enforceRequired);
         }
+        foreach (var parameter in parameters)
+        {
+            if (parameter.DefaultFromKey is null || !string.IsNullOrWhiteSpace(arguments[parameter.ArgumentIndex])) continue;
+            var source = parameters.FirstOrDefault(item => item.Key == parameter.DefaultFromKey);
+            if (source is not null && !string.IsNullOrWhiteSpace(arguments[source.ArgumentIndex]))
+                arguments[parameter.ArgumentIndex] = Path.ChangeExtension(arguments[source.ArgumentIndex], parameter.DefaultFromExtension);
+        }
         return arguments;
     }
 

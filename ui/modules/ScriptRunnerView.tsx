@@ -20,7 +20,7 @@ import { FileExplorerLaunchContext } from '../FileExplorerLaunchContext';
 import { ScriptParameterBuilder } from './ScriptParameterBuilder';
 import { ScriptParameterFields } from './ScriptParameterFields';
 import {
-  activeScriptRun, cancelScriptRun, clearFinishedScriptRuns, describeRunState, recordExternalScriptRun, startScriptRun, useScriptRuns,
+  activeScriptRun, cancelScriptRun, clearFinishedScriptRuns, describeRunError, describeRunState, startScriptRun, useScriptRuns,
 } from './scriptRunStore';
 
 type ViewProps = {
@@ -109,8 +109,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
   // Runs live in a window-level store, so they keep going and stay visible when this view is closed and reopened.
   const runs = useScriptRuns();
   const activeRun = runs.find((run) => run.finishedAt === null);
-  const [explorerRunningId, setRunningId] = useState<string | null>(null);
-  const runningId = activeRun?.profileId ?? explorerRunningId;
+  const runningId = activeRun?.profileId ?? null;
   // null shows the newest finished run, 'none' hides the result panel, anything else is a chosen history entry.
   const [shownRunId, setShownRunId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
@@ -148,13 +147,14 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     closeLibrary();
     closeRunForm();
   }, [closeLibrary, closeRunForm]);
-  const explorerResult = useCallback((data: unknown) => {
-    if (data && typeof data === 'object' && 'profileId' in data) {
-      const profileId = String((data as { profileId: unknown }).profileId);
-      recordExternalScriptRun({ id: profileId, name: profilesRef.current.find((profile) => profile.id === profileId)?.name ?? profileId }, { status: 'success', message: '', data });
-      setShownRunId(null);
-    }
-  }, []);
+  // Explorer runs use the same window-level store as the Run form, so they show the running banner and history.
+  const startExplorerRun = useCallback(async (profile: { id: string; name: string }, input: Record<string, unknown>) => {
+    const bridge = window.automator;
+    const action = tab.actions.find((candidate) => candidate.id === 'runExplorerAction');
+    if (!bridge || !action) throw new Error('Running scripts is not available in this window.');
+    setShownRunId(null);
+    return startScriptRun({ bridge, moduleId: tab.id, contractVersion: tab.contractVersion, action }, profile, undefined, input);
+  }, [tab]);
 
   const loadModuleSettings = useCallback(async (savedProfiles: ScriptProfile[]) => {
     const bridge = window.automator;
@@ -563,7 +563,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
         <button className="secondary-button" type="button" disabled={activeRun.state === 'canceled'} onClick={cancelActiveRun}><Square size={13} /> Cancel run</button>
       </section>}
 
-      <ExplorerActionsPanel services={services} profiles={profiles} templates={templates} open={explorerOpen} onOpen={openExplorer} busy={runningId !== null} onRunning={setRunningId} onResult={explorerResult} />
+      <ExplorerActionsPanel services={services} profiles={profiles} templates={templates} open={explorerOpen} onOpen={openExplorer} busy={runningId !== null} onStartRun={startExplorerRun} />
 
       {libraryOpen && <section className="script-editor" aria-label="Script template library">
         <div className="script-editor-heading"><FileCode2 size={16} /><strong>Script Library</strong><button className="icon-button" type="button" aria-label="Close library" onClick={closeLibrary}><X size={15} /></button></div>
@@ -659,6 +659,7 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
             <span className={`script-run-state is-${run.state}`}>{describeRunState(run.state)}</span>
             <strong>{run.profileName}</strong>
             <span>{formatRunTime(run.startedAt)}{run.finishedAt !== null ? ` · ${formatDuration(run.finishedAt - run.startedAt)}` : ''}</span>
+            {describeRunError(run) && <span className="script-history-error">{describeRunError(run)}</span>}
           </button>
         </li>)}</ul>
       </section>}
