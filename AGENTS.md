@@ -38,6 +38,10 @@ The docs tree is organized by user-visible surface, while source code remains in
 
 When adding or moving a tab or shared surface, add or update its documentation pair and update the index in the root README. When behavior or code boundaries change, update both files for the affected surface in the same change. Do not describe planned behavior as current behavior.
 
+## Agent knowledge bundle (OKF)
+
+`docs/okf` is an [Open Knowledge Format](https://github.com/GoogleCloudPlatform/open-knowledge-format) v0.2 bundle of these instructions and the `docs` guides, one concept per tab, shared section and architecture note, starting at `docs/okf/index.md`. It is generated, so edit `AGENTS.md` and the `docs` files, then run `npm.cmd run okf:build`. `npm.cmd run okf:check` (also part of `test:contracts`) fails when the bundle is stale.
+
 ## Subagent model selection
 
 Never spawn a subagent using a model with a higher capability tier than the original chat's model. Prefer inheriting the original chat's model; if selecting a model explicitly, use the same or a lower tier.

@@ -62,6 +62,8 @@ The app keeps its compact numbered launcher tabs and also provides a larger Work
 
 Slot 9 is the Codex task builder.
 
+Agents can also read the same guides as an [Open Knowledge Format bundle](docs/okf/index.md). It is generated from the files above with `npm run okf:build`.
+
 ## Controls and tab behavior
 
 - Tap **Right Ctrl** to open or close the panel. Opening selects slot 1.

@@ -20,6 +20,7 @@ test-results/
 
 # Machine-local agent state and diagnostics
 .superpowers/
+docs/superpowers/
 docs/gui-migration/
 *.log
 
