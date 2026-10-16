@@ -44,5 +44,8 @@ jobs:
           dotnet-version: 10.0.x
           dotnet-quality: ga
       - run: npm ci
-      - run: dotnet restore Automator.sln
+      # Some spec projects are not part of Automator.sln, and the npm scripts build with --no-restore.
+      - name: Restore .NET projects
+        shell: pwsh
+        run: Get-ChildItem -Path src, tests -Filter *.csproj -Recurse | ForEach-Object { dotnet restore $_.FullName; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
       - run: npm run verify
