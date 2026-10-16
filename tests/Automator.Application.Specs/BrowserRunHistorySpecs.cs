@@ -124,6 +124,13 @@ public static class BrowserRunHistorySpecs
             Check.Equal(3, cleared.Data.GetProperty("removed").GetInt32());
             Check.Equal(0, (await Dispatch("listRunHistory", "{}")).Data.GetProperty("runs").GetArrayLength());
 
+            // A failed listing shows Playwright's own first error line, not only the general hint.
+            process.Handler = request => request.Arguments.Contains("--list")
+                ? new(1, false, "", "Listing tests:\nError: Cannot find module 'dotenv'\n", false, false, 10) : new(0, false, "", "", false, false, 1);
+            var listFailed = await Dispatch("discoverTests", "{}");
+            Check.Equal(AutomationStatus.Error, listFailed.Status);
+            Check.True(listFailed.Message.Contains("First error: Error: Cannot find module 'dotenv'", StringComparison.Ordinal));
+
             // With the reporter, the run's events name each test, its failing step and line, flaky retries, and a runner-limit stop.
             var file = Path.Combine(project, "tests", "example.spec.ts");
             string Begin(string id, string title, int line, int retry = 0) => JsonSerializer.Serialize(new { @event = "begin", testId = id, file, line, column = 3, title, project = "", retry });

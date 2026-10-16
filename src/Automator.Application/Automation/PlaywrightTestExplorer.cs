@@ -156,7 +156,7 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
             return Result(AutomationStatus.Warning, "Playwright test discovery exceeded its 90-second limit. Check the project's test configuration and refresh again.",
                 new { state = MakeState(root, [], await ReadTagRecordsAsync(root, cancellationToken).ConfigureAwait(false), [], runner) });
         if (processResult.ExitCode != 0)
-            return Result(AutomationStatus.Error, "Playwright could not list tests. Check the selected project's configuration and dependencies.",
+            return Result(AutomationStatus.Error, ListFailureMessage(processResult),
                 new { state = MakeState(root, [], await ReadTagRecordsAsync(root, cancellationToken).ConfigureAwait(false), [], runner),
                     output = BoundMessage(processResult.StandardError, processResult.StandardOutput) });
 
@@ -471,9 +471,20 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         var process = await processes.ExecuteAsync(new AutomationProcessRequest(runner.NodePath!,
             [runner.CliPath!, "test", "--list"], root, DiscoveryTimeout), cancellationToken).ConfigureAwait(false);
         if (process.TimedOut) throw new InvalidDataException("Playwright test discovery exceeded its 90-second limit.");
-        if (process.ExitCode != 0) throw new InvalidDataException("Playwright could not list tests. Check the selected project's configuration and dependencies.");
+        if (process.ExitCode != 0) throw new InvalidDataException(ListFailureMessage(process));
         var tests = ParseTestList(process.StandardOutput, root).Take(MaximumDiscoveredTests + 1).ToArray();
         return tests.Length > MaximumDiscoveredTests ? (tests[..MaximumDiscoveredTests], true) : (tests, process.StandardOutputTruncated);
+    }
+
+    /// <summary>Adds Playwright's own first error line, so the reason is visible instead of only a general hint.</summary>
+    private static string ListFailureMessage(AutomationProcessResult process)
+    {
+        const string summary = "Playwright could not list tests. Check the selected project's configuration and dependencies.";
+        var lines = BoundMessage(process.StandardError, process.StandardOutput).Split('\n')
+            .Select(line => line.Trim()).Where(line => line.Length > 0).ToArray();
+        var detail = lines.FirstOrDefault(line => line.Contains("error", StringComparison.OrdinalIgnoreCase)) ?? lines.FirstOrDefault();
+        if (detail is null) return summary;
+        return $"{summary} First error: {(detail.Length <= 240 ? detail : detail[..240] + "…")}";
     }
 
     private static IReadOnlyList<PlaywrightTestIdentity> ParseTestList(string output, string root)
