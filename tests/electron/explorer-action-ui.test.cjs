@@ -101,7 +101,7 @@ test('Register in Automator opens a prefilled PowerShell profile draft without s
   await fs.writeFile(registeredScript, 'Write-Output "not run"');
   try {
     await launch('register-powershell-script', registeredScript);
-    await page.getByRole('button', { name: 'Save profile', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Save script', exact: true }).waitFor();
     assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'Registered Żółć script');
     assert.equal(await page.locator('label').filter({ has: page.locator('span:text-is("Interpreter")') }).locator('select').inputValue(), 'powershell');
     assert.equal(await page.getByLabel('Script file').inputValue(), registeredScript);
@@ -128,9 +128,9 @@ test('Explorer registration waits for an active run so the Stop run control stay
     await form.getByRole('button', { name: 'Stop run', exact: true }).waitFor();
     await launch('register-powershell-script', registeredScript);
     await form.getByRole('button', { name: 'Stop run', exact: true }).waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Save profile', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Save script', exact: true }).count(), 0);
     await form.getByRole('button', { name: 'Stop run', exact: true }).click();
-    await page.getByRole('button', { name: 'Save profile', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Save script', exact: true }).waitFor();
     assert.equal(await page.getByLabel('Script file', { exact: true }).inputValue(), registeredScript);
   } finally { await app.close(); }
 });
@@ -157,19 +157,19 @@ test('Explorer template mapping prefills the typed file input and keeps credenti
     await launch(action.id);
     const form = page.getByRole('region', { name: 'Run Explorer action', exact: true });
     await form.waitFor();
-    assert.equal(await form.getByLabel('Selected file', { exact: true }).inputValue(), source);
+    assert.equal(await form.locator('label').filter({ hasText: 'the file you right-clicked' }).locator('input').inputValue(), source);
     assert.equal(await form.getByLabel('Username *', { exact: true }).inputValue(), 'SYSDBA');
     assert.equal(await form.getByLabel('Password *', { exact: true }).inputValue(), 'masterkey');
     await form.getByLabel('Password *', { exact: true }).fill('not-persisted-secret');
     await form.getByRole('button', { name: 'Run', exact: true }).click();
-    await page.getByRole('status').filter({ hasText: 'Backup file is invalid' }).waitFor();
+    await page.getByRole('status').filter({ hasText: /gbak executable is (required|invalid)/ }).waitFor();
     assert.equal(await page.getByRole('region', { name: 'Script output' }).count(), 0);
-    await form.getByLabel('Backup file *', { exact: true }).fill(path.join(data, 'once.fbk'));
+    await form.getByLabel('Backup file', { exact: true }).fill(path.join(data, 'once.fbk'));
     await form.getByRole('button', { name: 'Cancel', exact: true }).click();
     await launch(action.id);
     await form.waitFor();
     assert.equal(await form.getByLabel('Password *', { exact: true }).inputValue(), 'masterkey');
-    assert.equal(await form.getByLabel('Backup file *', { exact: true }).inputValue(), '');
+    assert.equal(await form.getByLabel('Backup file', { exact: true }).inputValue(), '');
     assert.deepEqual((await dispatch('listProfiles', {})).data.profiles.find(item => item.id === profile.id).arguments, []);
     await form.getByRole('button', { name: 'Cancel', exact: true }).click();
     await dispatch('deleteProfile', { id: profile.id });
@@ -244,7 +244,7 @@ test('stopping an Explorer template run clears sensitive inputs and preserves ed
     await form.waitFor();
     const backup = path.join(data, 'retained backup.fbk');
     const gbak = path.join(data, 'fixture gbak.exe');
-    await form.getByLabel('Backup file *', { exact: true }).fill(backup);
+    await form.getByLabel('Backup file', { exact: true }).fill(backup);
     await form.getByLabel('gbak executable *', { exact: true }).fill(gbak);
     await form.getByLabel('Username *', { exact: true }).fill('retained-user');
     await form.getByLabel('Password *', { exact: true }).fill('transient-test-secret');
@@ -265,8 +265,8 @@ test('stopping an Explorer template run clears sensitive inputs and preserves ed
     await form.getByRole('button', { name: 'Stop run', exact: true }).click();
     await form.getByRole('button', { name: 'Run', exact: true }).waitFor();
     assert.equal(await form.getByLabel('Password *', { exact: true }).inputValue(), '');
-    assert.equal(await form.getByLabel('Selected file', { exact: true }).inputValue(), source);
-    assert.equal(await form.getByLabel('Backup file *', { exact: true }).inputValue(), backup);
+    assert.equal(await form.locator('label').filter({ hasText: 'the file you right-clicked' }).locator('input').inputValue(), source);
+    assert.equal(await form.getByLabel('Backup file', { exact: true }).inputValue(), backup);
     assert.equal(await form.getByLabel('gbak executable *', { exact: true }).inputValue(), gbak);
     assert.equal(await form.getByLabel('Username *', { exact: true }).inputValue(), 'retained-user');
     assert.equal(await form.getByLabel('Password *', { exact: true }).isEditable(), true);

@@ -50,14 +50,14 @@ test('Script Runner remembers saved interpreter defaults and leaves saved profil
   let app = await launchHost('script-runner-defaults', dataDirectory, backendDataDirectory);
   try {
     let page = await openScriptRunner(app);
-    await page.getByRole('button', { name: 'New profile' }).click();
+    await page.getByRole('button', { name: 'New script' }).click();
     await fillProfileFields(page, {
       name: 'Per-profile override',
       id: 'per-profile-override',
       interpreterPath: 'C:\\Python\\override.exe',
       scriptPath: 'C:\\Scripts\\override.py',
     });
-    await page.getByRole('button', { name: 'Save profile' }).click();
+    await page.getByRole('button', { name: 'Save script' }).click();
     await page.getByRole('button', { name: 'Edit Per-profile override' }).waitFor({ state: 'visible' });
 
     let settings = await page.evaluate(() => window.automator.getModuleSettings({
@@ -65,14 +65,14 @@ test('Script Runner remembers saved interpreter defaults and leaves saved profil
     }));
     assert.equal(settings.value.interpreterDefaults.python, 'C:\\Python\\override.exe');
 
-    await page.getByRole('button', { name: 'New profile' }).click();
+    await page.getByRole('button', { name: 'New script' }).click();
     await page.getByLabel('Name', { exact: true }).fill('Rejected PowerShell');
     await page.getByLabel('Profile key', { exact: true }).fill('rejected-powershell');
     await page.getByRole('combobox').nth(0).selectOption('powershell');
     await page.getByLabel('Interpreter executable', { exact: true }).fill('C:\\PowerShell\\unsaved.exe');
     await page.getByLabel('Script file').fill('C:\\Scripts\\wrong-extension.txt');
     await page.getByLabel('Working directory').fill('C:\\Scripts');
-    await page.getByRole('button', { name: 'Save profile' }).click();
+    await page.getByRole('button', { name: 'Save script' }).click();
     await page.getByRole('status').filter({ hasText: '.ps1' }).waitFor({ state: 'visible' });
     settings = await page.evaluate(() => window.automator.getModuleSettings({
       contractVersion: 1, moduleId: 'script-runner', settingsVersion: 1,
@@ -80,10 +80,10 @@ test('Script Runner remembers saved interpreter defaults and leaves saved profil
     assert.equal(settings.value.interpreterDefaults.powershell, '', 'a rejected profile must not write its interpreter path as the default');
 
     await page.getByLabel('Script file').fill('C:\\Scripts\\accepted.ps1');
-    await page.getByRole('button', { name: 'Save profile' }).click();
+    await page.getByRole('button', { name: 'Save script' }).click();
     await page.getByRole('button', { name: 'Edit Rejected PowerShell' }).waitFor({ state: 'visible' });
 
-    await page.getByRole('button', { name: 'New profile' }).click();
+    await page.getByRole('button', { name: 'New script' }).click();
     await page.getByRole('combobox').nth(0).selectOption('bash');
     await fillProfileFields(page, {
       name: 'Bash profile',
@@ -91,7 +91,7 @@ test('Script Runner remembers saved interpreter defaults and leaves saved profil
       interpreterPath: 'C:\\Git\\bin\\bash.exe',
       scriptPath: 'C:\\Scripts\\batch.sh',
     });
-    await page.getByRole('button', { name: 'Save profile' }).click();
+    await page.getByRole('button', { name: 'Save script' }).click();
     await page.getByRole('button', { name: 'Edit Bash profile' }).waitFor({ state: 'visible' });
     settings = await page.evaluate(() => window.automator.getModuleSettings({
       contractVersion: 1, moduleId: 'script-runner', settingsVersion: 1,
@@ -102,7 +102,7 @@ test('Script Runner remembers saved interpreter defaults and leaves saved profil
 
     app = await launchHost('script-runner-defaults-reload', dataDirectory, backendDataDirectory);
     page = await openScriptRunner(app);
-    await page.getByRole('button', { name: 'New profile' }).click();
+    await page.getByRole('button', { name: 'New script' }).click();
     assert.equal(await page.getByLabel('Interpreter executable', { exact: true }).inputValue(), 'C:\\Python\\override.exe');
     await page.getByRole('combobox').nth(0).selectOption('bash');
     assert.equal(await page.getByLabel('Interpreter executable', { exact: true }).inputValue(), 'C:\\Git\\bin\\bash.exe');
@@ -110,14 +110,14 @@ test('Script Runner remembers saved interpreter defaults and leaves saved profil
     assert.equal(await page.getByLabel('Interpreter executable', { exact: true }).inputValue(), 'C:\\PowerShell\\unsaved.exe');
     await page.getByRole('button', { name: 'Close editor' }).click();
 
-    await page.getByRole('button', { name: 'New profile' }).click();
+    await page.getByRole('button', { name: 'New script' }).click();
     await fillProfileFields(page, {
       name: 'Later default',
       id: 'later-default',
       interpreterPath: 'C:\\Python\\later.exe',
       scriptPath: 'C:\\Scripts\\later.py',
     });
-    await page.getByRole('button', { name: 'Save profile' }).click();
+    await page.getByRole('button', { name: 'Save script' }).click();
     await page.getByRole('button', { name: 'Edit Later default' }).waitFor({ state: 'visible' });
 
     await page.getByRole('button', { name: 'Edit Per-profile override' }).click();

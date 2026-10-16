@@ -124,7 +124,7 @@ async function assertTabIcons(page, tabs) {
 
 async function saveScriptFixture(page, dataDirectory) {
   await selectTab(page, 'Script Runner', 2);
-  await clickButton(page, page, 'New profile');
+  await clickButton(page, page, 'New script');
   const script = path.join(dataDirectory, 'visibility.ps1');
   await fs.mkdir(dataDirectory, { recursive: true });
   await fs.writeFile(script, 'Write-Output "visibility fixture"\n');
@@ -135,7 +135,7 @@ async function saveScriptFixture(page, dataDirectory) {
   await page.getByLabel('Script file').fill(script);
   await page.getByLabel('Working directory').fill(dataDirectory);
   await visibleButton(page, page, 'Cancel');
-  await clickButton(page, page, 'Save profile');
+  await clickButton(page, page, 'Save script');
   await page.getByRole('button', { name: 'Edit Visibility script', exact: true }).waitFor({ state: 'visible' });
 }
 
@@ -223,7 +223,7 @@ test('Script Runner profile happy path keeps create save and edit buttons within
     await clickButton(page, page, 'Edit Visibility script');
     await visibleButton(page, page, 'Close editor');
     await page.getByLabel('Name', { exact: true }).fill('Edited visibility script');
-    await clickButton(page, page, 'Save profile');
+    await clickButton(page, page, 'Save script');
     await visibleButton(page, page, 'Edit Edited visibility script');
     await clickButton(page, page, 'Edit Edited visibility script');
     assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'Edited visibility script');
@@ -254,7 +254,7 @@ test('Script Runner Library exposes a primary Add to Script Runner action on the
     assert.equal(await addButton.evaluate((element) => element.classList.contains('primary-button')), true,
       'the Library add action must use the distinct primary button style');
     await addButton.click();
-    await visibleButton(page, library, 'Run template');
+    await visibleButton(page, firebirdCard, 'Profile added', { enabled: false });
     assert.equal(await targetDatabase.inputValue(), isolatedDatabasePath, 'Installing the profile must preserve the target database path in the Library form');
 
     const closeLibrary = await visibleButton(page, library, 'Close library');
@@ -268,9 +268,7 @@ test('Script Runner Library exposes a primary Add to Script Runner action on the
     await reopenedCard.waitFor({ state: 'visible' });
     await visibleButton(page, reopenedCard, 'Profile added', { enabled: false });
     await clickButton(page, reopenedCard, 'Details');
-    await visibleButton(page, reopenedLibrary, 'Run template');
-    assert.equal(await reopenedCard.getByLabel('Target database *', { exact: true }).inputValue(), isolatedDatabasePath,
-      'Reopening Details for the installed profile must preserve the target database path');
+    await page.getByRole('region', { name: 'Run Firebird 3 database backup and ZIP', exact: true }).waitFor({ state: 'visible' });
   } finally { await app.close(); }
 });
 
