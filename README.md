@@ -58,6 +58,7 @@ The app keeps its compact numbered launcher tabs and also provides a larger Work
 | Activity and notifications | [Agent guide](docs/sections/activity-center/AGENTS.md) · [Functionality and code](docs/sections/activity-center/README.md) | — |
 | Workspace window | [Agent guide](docs/sections/workspace/AGENTS.md) · [Functionality and code](docs/sections/workspace/README.md) | — |
 | Agent access (MCP) | [Agent guide](docs/sections/agent-access/AGENTS.md) · [Functionality and code](docs/sections/agent-access/README.md) | — |
+| E2E test catalog | [Agent guide](docs/sections/e2e-catalog/AGENTS.md) · [Functionality and code](docs/sections/e2e-catalog/README.md) | [Open the catalog](docs/e2e/index.html) |
 
 Slot 9 is the Codex task builder.
 
