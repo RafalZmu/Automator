@@ -19,7 +19,7 @@ export type ScriptProfile = {
   values?: Record<string, ScriptTemplateValue> | null;
 };
 
-const firebirdTemplateIds = new Set(['firebird-3-backup-zip', 'firebird-3-backup']);
+const firebirdTemplateIds = new Set(['firebird-3-backup-zip', 'firebird-3-backup', 'firebird-3-restore']);
 
 export function createPowerShellProfileDraft(filePath: string, interpreterPath: string, existingProfileIds: Iterable<string>): ScriptProfile {
   if (filePath.length > 4096 || /[\x00-\x1f]/.test(filePath)
