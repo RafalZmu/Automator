@@ -147,6 +147,16 @@ function writeLog(event: string, message: string, properties: Record<string, unk
   }
 }
 
+/** The first match on PATH, in the order Windows searches it. Used only by development hosts, where no launcher sets the Node path. */
+function findExecutableOnPath(name: string): string | undefined {
+  for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
+    if (!directory) continue;
+    const candidate = path.join(directory, name);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 function getDisplayCapabilities() {
   return getWindowsDisplayCapabilities(
     process.platform,
@@ -376,6 +386,16 @@ async function startBackend(): Promise<void> {
     backendEnvironment.AUTOMATOR_BROWSER_NODE_PATH = path.join(browserRuntimeFolder, 'node.exe');
     backendEnvironment.AUTOMATOR_BROWSER_WORKER_PATH = path.join(browserRuntimeFolder, 'browser-worker.cjs');
     backendEnvironment.AUTOMATOR_PLAYWRIGHT_RUN_REPORTER_PATH = path.join(browserRuntimeFolder, 'playwright-run-reporter.cjs');
+  } else {
+    // A development host started outside scripts/dev.mjs (for example by the restart helper) has no runtime paths
+    // from the launcher, so give it the same ones. Values the launcher already set are kept.
+    const sourceFolder = path.join(workspaceRoot, 'src', 'Automator.Infrastructure', 'Automation');
+    if (!backendEnvironment.AUTOMATOR_BROWSER_NODE_PATH) {
+      const node = findExecutableOnPath('node.exe');
+      if (node) backendEnvironment.AUTOMATOR_BROWSER_NODE_PATH = node;
+    }
+    if (!backendEnvironment.AUTOMATOR_BROWSER_WORKER_PATH) backendEnvironment.AUTOMATOR_BROWSER_WORKER_PATH = path.join(sourceFolder, 'browser-worker.cjs');
+    if (!backendEnvironment.AUTOMATOR_PLAYWRIGHT_RUN_REPORTER_PATH) backendEnvironment.AUTOMATOR_PLAYWRIGHT_RUN_REPORTER_PATH = path.join(sourceFolder, 'playwright-run-reporter.cjs');
   }
   const child = new BackendProcess(backendExe, [], backendFolder, backendEnvironment, writeLog);
   backend = child;
