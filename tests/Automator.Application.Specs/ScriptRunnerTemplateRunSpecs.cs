@@ -21,7 +21,7 @@ internal static class ScriptRunnerTemplateRunSpecs
         await using var context = registry.CreateContext(new(module.Id, module.Definition.Capabilities));
         var settings = module.CreateDefaultSettings();
         var catalog = await module.ExecuteAsync("listTemplates", JsonSerializer.SerializeToElement(new { }), settings, context, default);
-        Ensure(catalog.Status == AutomationStatus.Success && catalog.Data.GetProperty("templates").GetArrayLength() == 3, "catalog action");
+        Ensure(catalog.Status == AutomationStatus.Success && catalog.Data.GetProperty("templates").GetArrayLength() == ScriptRunnerTemplateCatalog.All.Count, "catalog action");
         Ensure(!catalog.Data.GetRawText().Contains("masterkey"), "catalog excludes credential defaults");
         var profile = new ScriptRunnerProfile("template-run", "Backup", ScriptRunnerInterpreter.Powershell,
             Environment.ProcessPath!, installedScript, [], root, ScriptRunnerOutputMode.Text, 60,

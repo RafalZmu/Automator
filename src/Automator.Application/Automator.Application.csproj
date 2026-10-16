@@ -9,6 +9,7 @@
     <EmbeddedResource Include="Automation/Templates/firebird-3-backup.v1.ps1" LogicalName="Automator.Templates.firebird-3-backup.v1.ps1" />
     <EmbeddedResource Include="Automation/Templates/firebird-3-backup-zip.v1.ps1" LogicalName="Automator.Templates.firebird-3-backup-zip.v1.ps1" />
     <EmbeddedResource Include="Automation/Templates/fdb-stale-archive.v1.ps1" LogicalName="Automator.Templates.fdb-stale-archive.v1.ps1" />
+    <EmbeddedResource Include="Automation/Templates/update-and-restart.v1.ps1" LogicalName="Automator.Templates.update-and-restart.v1.ps1" />
     <ProjectReference Include="..\Automator.Core\Automator.Core.csproj" />
   </ItemGroup>
 </Project>

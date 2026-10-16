@@ -71,6 +71,14 @@ public static partial class ScriptRunnerTemplateCatalog
                 new("days", "Days not accessed", ScriptRunnerTemplateParameterType.Text, true, 1, "Files not accessed for this many days are archived.", DefaultValue: "90", Example: "90"),
                 new("subfolders", "Include subfolders", ScriptRunnerTemplateParameterType.Boolean, true, 2, DefaultValue: true),
                 new("preview", "Preview only (change nothing)", ScriptRunnerTemplateParameterType.Boolean, true, 3, DefaultValue: true),
+            ]),
+        new("update-and-restart", 1, "Update Automator and restart",
+            "Pull the latest changes from the remote into an Automator checkout, rebuild the packaged app, and restart it. The pull happens first and a failed pull leaves the running app alone.",
+            ["automator", "update", "git", "build"],
+            ScriptRunnerInterpreter.Powershell, "update-and-restart", ScriptRunnerOutputMode.Text, 600,
+            [
+                new("repository", "Automator checkout", ScriptRunnerTemplateParameterType.Directory, true, 0, "The git checkout that Automator was built from.", Example: @"C:\Automator"),
+                new("rebuild", "Rebuild even if nothing new was pulled", ScriptRunnerTemplateParameterType.Boolean, true, 1, "Off: an up-to-date checkout is left alone and Automator keeps running.", DefaultValue: false),
             ])
     ];
 

@@ -74,6 +74,25 @@ internal static class ScriptRunnerTemplateSpecs
         Throws(() => ScriptRunnerTemplateCatalog.MapArguments(stale, staleTextPreview.RootElement), "stale archive preview must be boolean");
         using var staleAsset = typeof(ScriptRunnerTemplateInstaller).Assembly.GetManifestResourceStream("Automator.Templates.fdb-stale-archive.v1.ps1");
         Ensure(staleAsset is not null, "stale archive asset is embedded");
+        var update = ScriptRunnerTemplateCatalog.Get("update-and-restart")
+            ?? throw new Exception("Update and restart template is registered");
+        Ensure(update.Version == 1 && update.Interpreter == ScriptRunnerInterpreter.Powershell && update.TimeoutSeconds == 600, "update and restart metadata");
+        Ensure(update.Parameters.Select(parameter => parameter.Type).SequenceEqual(new[]
+        {
+            ScriptRunnerTemplateParameterType.Directory, ScriptRunnerTemplateParameterType.Boolean,
+        }) && update.Parameters.All(parameter => !parameter.Sensitive), "update and restart parameter types");
+        using var updateDefaults = JsonDocument.Parse("""{"repository":"C:\\Automator"}""");
+        Ensure(ScriptRunnerTemplateCatalog.MapArguments(update, updateDefaults.RootElement).SequenceEqual(new[] { "C:\\Automator", "false" }),
+            "update and restart rebuilds only when changes were pulled by default");
+        using var updateForced = JsonDocument.Parse("""{"repository":"C:\\Automator","rebuild":true}""");
+        Ensure(ScriptRunnerTemplateCatalog.MapArguments(update, updateForced.RootElement).SequenceEqual(new[] { "C:\\Automator", "true" }),
+            "update and restart forced rebuild maps to the second argument");
+        using var updateRelative = JsonDocument.Parse("""{"repository":"Automator"}""");
+        Throws(() => ScriptRunnerTemplateCatalog.MapArguments(update, updateRelative.RootElement), "update and restart relative checkout rejected");
+        using var updateMissing = JsonDocument.Parse("{}");
+        Throws(() => ScriptRunnerTemplateCatalog.MapArguments(update, updateMissing.RootElement), "update and restart checkout required");
+        using var updateAsset = typeof(ScriptRunnerTemplateInstaller).Assembly.GetManifestResourceStream("Automator.Templates.update-and-restart.v1.ps1");
+        Ensure(updateAsset is not null, "update and restart asset is embedded");
         await ScriptRunnerTemplateInstallSpecs.RunAsync();
         await ScriptRunnerTemplateRunSpecs.RunAsync();
     }
