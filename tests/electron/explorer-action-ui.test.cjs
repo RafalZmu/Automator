@@ -101,7 +101,7 @@ test('Register in Automator opens a prefilled PowerShell profile draft without s
   await fs.writeFile(registeredScript, 'Write-Output "not run"');
   try {
     await launch('register-powershell-script', registeredScript);
-    await page.getByRole('button', { name: 'Save profile', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Save script', exact: true }).waitFor();
     assert.equal(await page.getByLabel('Name', { exact: true }).inputValue(), 'Registered Żółć script');
     assert.equal(await page.locator('label').filter({ has: page.locator('span:text-is("Interpreter")') }).locator('select').inputValue(), 'powershell');
     assert.equal(await page.getByLabel('Script file').inputValue(), registeredScript);
@@ -128,9 +128,9 @@ test('Explorer registration waits for an active run so the Stop run control stay
     await form.getByRole('button', { name: 'Stop run', exact: true }).waitFor();
     await launch('register-powershell-script', registeredScript);
     await form.getByRole('button', { name: 'Stop run', exact: true }).waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Save profile', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Save script', exact: true }).count(), 0);
     await form.getByRole('button', { name: 'Stop run', exact: true }).click();
-    await page.getByRole('button', { name: 'Save profile', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Save script', exact: true }).waitFor();
     assert.equal(await page.getByLabel('Script file', { exact: true }).inputValue(), registeredScript);
   } finally { await app.close(); }
 });

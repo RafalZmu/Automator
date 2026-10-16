@@ -66,7 +66,7 @@ test('a Playwright run keeps its running state across tabs and is saved to the r
     await page.getByRole('button', { name: 'Refresh tests' }).click();
     await page.getByText('slow check', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
     await openRunHistory(page);
-    await page.getByRole('region', { name: 'Playwright run history' }).getByText('No runs yet').waitFor({ state: 'visible' });
+    await page.getByRole('region', { name: 'Playwright run history' }).getByText('No runs yet', { exact: true }).waitFor({ state: 'visible' });
 
     await page.getByRole('button', { name: 'Run section tests/slow.spec.ts' }).click();
     const banner = page.getByRole('status', { name: 'Playwright run in progress' });
@@ -98,7 +98,7 @@ test('a Playwright run keeps its running state across tabs and is saved to the r
     assert.match(await restored.first().innerText(), /Passed/);
 
     await page.getByRole('button', { name: 'Clear history' }).click();
-    await page.getByRole('region', { name: 'Playwright run history' }).getByText('No runs yet').waitFor({ state: 'visible', timeout: 15_000 });
+    await page.getByRole('region', { name: 'Playwright run history' }).getByText('No runs yet', { exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
   } finally {
     await app.close();
   }
