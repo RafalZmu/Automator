@@ -1,4 +1,4 @@
-// Builds the automated-test list for docs/e2e/index.html.
+// Builds the end-to-end and API test list for docs/e2e/index.html.
 //
 //   node scripts/e2e-catalog.mjs          rewrite the "tests" part of the data block in the page
 //   node scripts/e2e-catalog.mjs --check  exit 1 when the page lists different tests than the source
@@ -73,12 +73,15 @@ function titlesIn(file, text) {
   return found;
 }
 
-function layerOf(file) {
-  if (file.endsWith('.spec.ps1')) return 'PowerShell spec';
-  if (file.endsWith('.package.cjs')) return 'Packaged app';
-  if (file.startsWith('tests/electron/')) return 'Electron UI';
-  if (file.endsWith('.cs')) return '.NET spec';
-  return 'Contract / model';
+// The catalog covers end-to-end tests (the real Electron or packaged app is launched) and API tests only.
+// Unit-style tests (model, contract, .NET and PowerShell specs) are listed only when they belong to the API category.
+const launchesApp = /_electron|electron\.launch|launchHost|launchApp/;
+export const e2eLayers = ['Electron E2E', 'Packaged E2E', 'API'];
+
+function layerOf(file, text, category) {
+  if (file.endsWith('.package.cjs')) return 'Packaged E2E';
+  if (file.startsWith('tests/electron/') && launchesApp.test(text)) return 'Electron E2E';
+  return category === 'API' ? 'API' : null;
 }
 
 function readTestDocs() {
@@ -113,8 +116,10 @@ export function buildTests(previous = []) {
       category ??= doc ? 'Platform and shell' : null;
       category ??= pathRules.find(([pattern]) => pattern.test(file))?.[1] ?? null;
       category ??= titleRules.find(([pattern]) => pattern.test(title))?.[1] ?? 'Platform and shell';
+      const layer = layerOf(file, text, category);
+      if (!layer) continue;
       const id = createHash('sha1').update(`${file}\n${title}`).digest('hex').slice(0, 10);
-      const test = { id, title, category, layer: layerOf(file), file, line: sourceLine };
+      const test = { id, title, category, layer, file, line: sourceLine };
       const earlier = kept.get(id);
       const steps = doc?.steps.length ? doc.steps : earlier?.steps;
       const expected = doc?.expected || earlier?.expected;

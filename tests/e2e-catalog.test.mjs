@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildTests, categories, readPage, serialize } from '../scripts/e2e-catalog.mjs';
+import { buildTests, categories, e2eLayers, readPage, serialize } from '../scripts/e2e-catalog.mjs';
 
-test('e2e catalog lists every automated test once with a known category', () => {
+test('e2e catalog lists every end-to-end and API test once with a known category', () => {
   const tests = buildTests();
-  assert.ok(tests.length > 100);
+  assert.ok(tests.length > 30);
+  assert.ok(tests.every((item) => e2eLayers.includes(item.layer)), "only end-to-end and API tests are listed");
   assert.equal(new Set(tests.map((item) => item.id)).size, tests.length);
   for (const item of tests) assert.ok(categories.includes(item.category), `${item.title} has unknown category ${item.category}`);
 });
