@@ -101,7 +101,7 @@ Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\fdb-stale-arc
 
 ## Update and restart template — tests/update-and-restart-asset.spec.ps1
 
-Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\update-and-restart-asset.spec.ps1` on Windows PowerShell 5.1 or PowerShell 7. It needs git and dotnet on PATH, takes about 30 seconds, and uses a fixture checkout with a fake `npm.cmd` and `Restart-Automator.ps1`, so it never stops or rebuilds the real app. The catalog and argument mapping checks are in `tests/Automator.Application.Specs/ScriptRunnerTemplateSpecs.cs` and run with `npm.cmd run test:dotnet`.
+Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\update-and-restart-asset.spec.ps1` on Windows PowerShell 5.1 or PowerShell 7. It needs git, node, and dotnet on PATH, takes about 30 seconds, and uses a fixture checkout with a fake `npm.cmd` (which, like npm with install scripts blocked, installs no Electron runtime) and `Restart-Automator.ps1`, so it never stops or rebuilds the real app. The whole run sets `pull.rebase=true` through `GIT_CONFIG_*` and leaves an uncommitted edit in the checkout. The catalog and argument mapping checks are in `tests/Automator.Application.Specs/ScriptRunnerTemplateSpecs.cs` and run with `npm.cmd run test:dotnet`.
 
 ### update and restart pulls, rebuilds in a detached worker, and leaves the app alone when it cannot
 
@@ -111,10 +111,10 @@ Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\update-and-re
 2. Run it against an up-to-date fixture checkout.
 3. Push a commit to the fixture remote and run it under a fake backend process; as soon as it reports the background rebuild, end the fake backend's whole process tree.
 4. Run it again with **Rebuild even if nothing new was pulled** on.
-5. Run the worker directly with a fake build that fails.
+5. Run the worker directly with a fake build that fails, then again with the fake restart also failing.
 6. Add a local commit and a different remote commit, then run it.
 
-**Expected result:** Invalid folders exit nonzero. An up-to-date checkout is not rebuilt and the app is not stopped. The new commit is pulled and listed, and the worker still finishes after its launcher's process tree was killed, stopping the app, running `npm ci` then `npm run package:win`, and starting the app. The forced rebuild skips `npm ci`. A failed build is logged, exits nonzero, and still starts the app. A diverged checkout fails the pull without stopping the app.
+**Expected result:** Invalid folders exit nonzero. An up-to-date checkout is not rebuilt and the app is not stopped, even with an uncommitted edit and `pull.rebase=true`. The new commit is pulled and listed, the edit is untouched, and the worker still finishes after its launcher's process tree was killed, stopping the app, running `npm ci`, installing the missing Electron runtime, running `npm run package:win`, and starting the app. The forced rebuild skips `npm ci` and the Electron install. A failed build is logged, exits nonzero, starts the app again, and says it was restarted; when the restart also fails the log says Automator is closed. A diverged checkout fails the pull without stopping the app or rewriting the local commit.
 
 ## Filesystem path field tests — tests/electron/path-field.test.cjs
 

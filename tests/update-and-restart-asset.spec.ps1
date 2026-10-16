@@ -59,7 +59,9 @@ try {
     Set-Content -LiteralPath (Join-Path $bin 'npm.cmd') -Encoding ASCII -Value @'
 @echo off
 echo %*>>"%~dp0npm-calls.txt"
-if "%1"=="ci" mkdir node_modules 2>nul
+rem Like npm with install scripts blocked: dependencies arrive, Electron's runtime does not.
+if "%1"=="ci" mkdir node_modules\electron 2>nul
+if "%1"=="ci" copy /y "%~dp0fake-electron-install.js" node_modules\electron\install.js >nul
 if not "%1 %2"=="run package:win" exit /b 0
 if exist "%~dp0fail-package.flag" goto fail
 mkdir artifacts\electron-dist\win-unpacked 2>nul
@@ -69,11 +71,19 @@ exit /b 0
 echo packaging blew up 1>&2
 exit /b 3
 '@
+    Set-Content -LiteralPath (Join-Path $bin 'fake-electron-install.js') -Encoding ASCII -Value @'
+const fs = require('fs');
+const path = require('path');
+fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });
+fs.writeFileSync(path.join(__dirname, 'dist', 'electron.exe'), 'x');
+'@
+    Set-Content -LiteralPath (Join-Path $seed 'notes.txt') -Value 'notes' -Encoding ASCII
     Set-Content -LiteralPath (Join-Path $seed 'package.json') -Value '{"name":"fixture"}' -Encoding ASCII
     Set-Content -LiteralPath (Join-Path $seed 'package-lock.json') -Value '{"lockfileVersion":3}' -Encoding ASCII
     New-Item -ItemType Directory -Path (Join-Path $seed 'scripts') -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $seed 'scripts\Restart-Automator.ps1') -Encoding ASCII -Value @'
 param([switch]$Show, [switch]$StopOnly)
+if ($Show -and (Test-Path -LiteralPath (Join-Path $PSScriptRoot '..\fail-restart.flag'))) { throw 'Could not find a complete Automator build.' }
 $mode = 'plain'
 if ($StopOnly) { $mode = 'stop' } elseif ($Show) { $mode = 'show' }
 Add-Content -LiteralPath (Join-Path $PSScriptRoot '..\restart-calls.txt') -Value $mode
@@ -86,6 +96,12 @@ Add-Content -LiteralPath (Join-Path $PSScriptRoot '..\restart-calls.txt') -Value
     Invoke-Git $seed @('push', 'origin', 'main')
     Invoke-Git $fixtureRoot @('clone', $origin, $work)
     $env:PATH = "$bin;$originalPath"
+    # Like a system gitconfig with pull.rebase=true: a plain 'git pull --ff-only' would rebase and refuse a dirty tree.
+    $env:GIT_CONFIG_COUNT = '1'
+    $env:GIT_CONFIG_KEY_0 = 'pull.rebase'
+    $env:GIT_CONFIG_VALUE_0 = 'true'
+    # An uncommitted edit that the pull must leave alone.
+    Set-Content -LiteralPath (Join-Path $work 'notes.txt') -Value 'my edit' -Encoding ASCII
 
     # Invalid input stops before anything is touched.
     $result = Invoke-Asset 'relative\folder'
@@ -126,6 +142,9 @@ Start-Sleep -Seconds 120
     if ((Get-Lines $restartCalls) -join ',' -ne 'stop,show') { throw "Expected stop then show, got: $((Get-Lines $restartCalls) -join ',')" }
     if ((Get-Lines $npmCalls) -join '|' -ne 'ci|run package:win') { throw "Expected ci then package, got: $((Get-Lines $npmCalls) -join '|')" }
     if (-not (Test-Path -LiteralPath (Join-Path $work 'node_modules\.automator-dependency-stamp'))) { throw 'The dependency stamp was not written' }
+    if ((Get-Content -LiteralPath $log -Raw) -notlike '*==> Install the Electron Windows runtime*' -or
+        -not (Test-Path -LiteralPath (Join-Path $work 'node_modules\electron\dist\electron.exe'))) { throw 'The missing Electron runtime was not installed' }
+    if ((Get-Content -LiteralPath (Join-Path $work 'notes.txt') -Raw).Trim() -ne 'my edit') { throw 'The pull changed an uncommitted edit' }
 
     # Rebuild anyway: dependencies are unchanged, so only the package step repeats.
     $result = Invoke-Asset $work 'true'
@@ -133,24 +152,36 @@ Start-Sleep -Seconds 120
     $log = Get-LogPath $result.Output
     if (-not (Wait-ForText $log 'Finished:|FAILED:')) { throw 'The forced rebuild never finished' }
     if ((Get-Content -LiteralPath $log -Raw) -notmatch 'Finished:') { throw "Forced rebuild failed: $(Get-Content -LiteralPath $log -Raw)" }
+    if ((Get-Content -LiteralPath $log -Raw) -like '*Electron Windows runtime*') { throw 'An installed Electron runtime was installed again' }
     if ((Get-Lines $npmCalls) -join '|' -ne 'ci|run package:win|run package:win') { throw "Dependencies were reinstalled: $((Get-Lines $npmCalls) -join '|')" }
 
-    # A failed build still brings the app back and reports the failure.
+    # A failed build is logged. The app is started again when a build is left, and the outcome says whether it was.
+    function Invoke-FailingWorker([string]$logFile) {
+        $previous = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $text = & powershell.exe -NoProfile -NonInteractive -File $assetPath -Worker -RepositoryFolder $work -RebuildAnyway true -LogPath $logFile -ToolDirectories $bin -NoDialog 2>&1 | Out-String
+            [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $text }
+        }
+        finally { $ErrorActionPreference = $previous }
+    }
     Set-Content -LiteralPath (Join-Path $bin 'fail-package.flag') -Value 'x' -Encoding ASCII
     Remove-Item -LiteralPath $restartCalls -Force
     $failedLog = Join-Path $fixtureRoot 'failed-worker.log'
-    $previous = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    try {
-        $workerOutput = & powershell.exe -NoProfile -NonInteractive -File $assetPath -Worker -RepositoryFolder $work -RebuildAnyway true -LogPath $failedLog -ToolDirectories $bin -NoDialog 2>&1 | Out-String
-        $workerExit = $LASTEXITCODE
-    }
-    finally { $ErrorActionPreference = $previous }
-    if ($workerExit -eq 0) { throw "A failed build exited successfully: $workerOutput $(Get-Content -LiteralPath $failedLog -Raw)" }
+    $failed = Invoke-FailingWorker $failedLog
+    if ($failed.ExitCode -eq 0) { throw "A failed build exited successfully: $($failed.Output) $(Get-Content -LiteralPath $failedLog -Raw)" }
     $failedText = Get-Content -LiteralPath $failedLog -Raw
     if ($failedText -notlike '*packaging blew up*' -or $failedText -notmatch 'FAILED: Build the packaged Windows app failed') { throw "Failure was not logged: $failedText" }
     if ((Get-Lines $restartCalls) -join ',' -ne 'stop,show') { throw "Expected the app to be restarted after the failure, got: $((Get-Lines $restartCalls) -join ',')" }
-    Remove-Item -LiteralPath (Join-Path $bin 'fail-package.flag') -Force
+    if ($failedText -notlike '*Automator was restarted with the previous build.*') { throw "Restart outcome was not logged: $failedText" }
+
+    # When no build is left (packaging clears the old one first), the outcome says Automator stays closed.
+    Set-Content -LiteralPath (Join-Path $work 'fail-restart.flag') -Value 'x' -Encoding ASCII
+    $closedLog = Join-Path $fixtureRoot 'closed-worker.log'
+    $closed = Invoke-FailingWorker $closedLog
+    $closedText = Get-Content -LiteralPath $closedLog -Raw
+    if ($closed.ExitCode -eq 0 -or $closedText -notlike '*Automator is closed: no intact build is left to start*' -or $closedText -like '*was restarted with the previous build*') { throw "Closed outcome was not reported: $closedText" }
+    Remove-Item -LiteralPath (Join-Path $work 'fail-restart.flag'), (Join-Path $bin 'fail-package.flag') -Force
 
     # Local commits that diverge from the remote make the pull fail before the app is touched.
     Set-Content -LiteralPath (Join-Path $work 'local.txt') -Value 'local' -Encoding ASCII
@@ -161,13 +192,17 @@ Start-Sleep -Seconds 120
     Invoke-Git $seed @('commit', '-m', 'Remote only')
     Invoke-Git $seed @('push', 'origin', 'main')
     Remove-Item -LiteralPath $restartCalls -Force -ErrorAction SilentlyContinue
+    $headBefore = (& git -C $work rev-parse HEAD)
     $result = Invoke-Asset $work
     if ($result.ExitCode -eq 0 -or $result.Output -notlike '*git pull failed*') { throw "A diverged checkout was not rejected: $($result.Output)" }
     if ((Get-Lines $restartCalls).Count -ne 0) { throw 'Automator was stopped although the pull failed' }
+    # With pull.rebase=true an unguarded pull would have rewritten the local commit instead of refusing.
+    if ((& git -C $work rev-parse HEAD) -ne $headBefore) { throw 'The pull rewrote a local commit' }
 
-    Write-Output 'Update and restart asset: input checks, up-to-date skip, pull, detached rebuild, forced rebuild, failure recovery, and failed pull passed.'
+    Write-Output 'Update and restart asset: input checks, up-to-date skip, pull with pull.rebase set and an uncommitted edit, detached rebuild, Electron runtime install, forced rebuild, failure outcomes, and failed pull passed.'
 }
 finally {
+    Remove-Item Env:GIT_CONFIG_COUNT, Env:GIT_CONFIG_KEY_0, Env:GIT_CONFIG_VALUE_0 -ErrorAction SilentlyContinue
     $env:PATH = $originalPath
     if (Test-Path -LiteralPath $fixtureRoot) { Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue }
 }

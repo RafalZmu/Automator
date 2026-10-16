@@ -56,6 +56,7 @@ function Invoke-Update {
     $root = Get-RepositoryRoot $RepositoryFolder
     $git = Find-Tool 'git.exe' 'pull the changes'
     $npm = Find-Tool 'npm.cmd' 'install dependencies and package the app'
+    $node = Find-Tool 'node.exe' 'install the Electron runtime and package the app'
     $dotnet = Find-Tool 'dotnet.exe' 'publish the backend'
 
     # Never wait for credentials: fail with a message instead.
@@ -63,7 +64,8 @@ function Invoke-Update {
     $branch = (Invoke-Native $git @('-C', $root, 'rev-parse', '--abbrev-ref', 'HEAD')).Lines | Select-Object -First 1
     $before = (Invoke-Native $git @('-C', $root, 'rev-parse', 'HEAD')).Lines | Select-Object -First 1
     Write-Output "Pulling the latest changes into $root (branch $branch)..."
-    $pull = Invoke-Native $git @('-C', $root, 'pull', '--ff-only')
+    # --no-rebase: a pull.rebase setting would otherwise rebase local commits and refuse any uncommitted file.
+    $pull = Invoke-Native $git @('-C', $root, 'pull', '--ff-only', '--no-rebase')
     foreach ($line in $pull.Lines) { Write-Output "  $line" }
     if ($pull.ExitCode -ne 0) {
         throw 'git pull failed, so nothing was rebuilt and Automator was left running. Resolve the problem above (for example local commits that diverge from the remote), then run this again.'
@@ -89,7 +91,7 @@ function Invoke-Update {
         Sort-Object LastWriteTime -Descending | Select-Object -Skip 9 |
         Remove-Item -Force -ErrorAction SilentlyContinue
     $logPath = Join-Path $logDirectory ('update-{0:yyyyMMdd-HHmmss}.log' -f (Get-Date))
-    $toolDirectories = (@($npm, $dotnet) | ForEach-Object { Split-Path -Parent $_ } | Select-Object -Unique) -join ';'
+    $toolDirectories = (@($npm, $node, $dotnet) | ForEach-Object { Split-Path -Parent $_ } | Select-Object -Unique) -join ';'
 
     # Automator stops its own child processes, which include this script and anything it starts normally.
     # Win32_Process.Create starts the worker under WMI instead, outside that process tree and without
@@ -146,8 +148,19 @@ function Invoke-UpdateWorker {
         if (Test-Path -LiteralPath $stampPath -PathType Leaf) { $installedStamp = (Get-Content -LiteralPath $stampPath -Raw).TrimEnd() }
         if (-not (Test-Path -LiteralPath $modules -PathType Container) -or $installedStamp -ne $stamp) {
             Invoke-Step 'Install locked npm dependencies' 'npm.cmd' @('ci')
-            Set-Content -LiteralPath $stampPath -Value $stamp -NoNewline -Encoding ASCII
         }
+
+        # npm can skip Electron's postinstall (newer npm blocks install scripts), which downloads the runtime
+        # that packaging needs. Same check as scripts\Build-And-Run-Automator.ps1.
+        $electronExecutable = Join-Path $modules 'electron\dist\electron.exe'
+        if (-not (Test-Path -LiteralPath $electronExecutable -PathType Leaf)) {
+            $electronInstaller = Join-Path $modules 'electron\install.js'
+            if (-not (Test-Path -LiteralPath $electronInstaller -PathType Leaf)) { throw "Electron's installer is missing: $electronInstaller. Check the npm dependency installation." }
+            Invoke-Step 'Install the Electron Windows runtime' 'node.exe' @($electronInstaller)
+            if (-not (Test-Path -LiteralPath $electronExecutable -PathType Leaf)) { throw "Electron's Windows runtime is still missing: $electronExecutable" }
+        }
+        # Written last, so a failed Electron install makes the next run install dependencies again.
+        if ($installedStamp -ne $stamp) { Set-Content -LiteralPath $stampPath -Value $stamp -NoNewline -Encoding ASCII }
 
         Invoke-Step 'Build the packaged Windows app' 'npm.cmd' @('run', 'package:win')
         $executable = Join-Path $root 'artifacts\electron-dist\win-unpacked\Automator.exe'
@@ -159,13 +172,20 @@ function Invoke-UpdateWorker {
     catch {
         $message = $_.Exception.Message
         Write-Log "FAILED: $message"
-        # Do not leave the app closed: bring back whatever build is still intact.
+        # Try to bring the app back. package:win clears the previous package only when packaging itself starts,
+        # so a failure before that (dependencies, type check, compile, backend publish) leaves a build to start.
+        # A failure while packaging does not, and Automator stays closed.
+        $outcome = 'Automator was restarted with the previous build.'
         try { Invoke-Step 'Restart Automator after the failure' $powershell @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $restart, '-Show') }
-        catch { Write-Log "FAILED: $($_.Exception.Message)" }
+        catch {
+            Write-Log "FAILED: $($_.Exception.Message)"
+            $outcome = 'Automator is closed: no intact build is left to start. Fix the problem above, then run this again or run npm.cmd run package:win in the checkout.'
+        }
+        Write-Log $outcome
         if (-not $NoDialog) {
             try {
                 Add-Type -AssemblyName System.Windows.Forms
-                [void][System.Windows.Forms.MessageBox]::Show("Updating Automator failed: $message`n`nLog: $LogPath", 'Automator update', 'OK', 'Error')
+                [void][System.Windows.Forms.MessageBox]::Show("Updating Automator failed: $message`n`n$outcome`n`nLog: $LogPath", 'Automator update', 'OK', 'Error')
             }
             catch { }
         }
