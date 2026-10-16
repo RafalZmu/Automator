@@ -58,9 +58,9 @@ input { user-select: text; }
 }
 /* The compact window is widened to the left by the host while a side panel shows, so the shell's content keeps its screen position. */
 .window-shell[data-surface="launcher"] { padding-left: calc(clamp(14px, 4.6 * min(100vw, 760px) / 100, 24px) + max(0px, 100vw - 760px)); }
-.side-panel-slot { position: absolute; z-index: 2; top: 0; bottom: 0; left: 0; width: max(0px, calc(100vw - 760px)); overflow: hidden; border-right: 1px solid var(--line); background: rgba(255, 255, 255, .18); pointer-events: auto; }
+.side-panel-slot { position: absolute; z-index: 2; top: 0; bottom: 0; left: 0; width: max(0px, calc(100vw - 760px)); overflow: hidden; background: rgba(255, 255, 255, .18); pointer-events: auto; }
 .side-panel-slot:empty { display: none; }
-.side-panel-inner { position: absolute; top: 0; right: 0; bottom: 0; width: 300px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: clamp(14px, 4.6vh, 23px) 12px 12px 14px; }
+.side-panel-inner { border-right: 1px solid var(--line); position: absolute; top: 0; right: 0; bottom: 0; width: 300px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: clamp(14px, 4.6vh, 23px) 12px 12px 14px; }
 .side-panel-inner header { flex: none; display: flex; align-items: center; gap: 8px; color: var(--ink); }
 .side-panel-inner header strong { flex: 1; font-size: 12px; font-weight: 650; }
 .side-panel-body { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; }
