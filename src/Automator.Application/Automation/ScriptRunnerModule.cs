@@ -150,7 +150,8 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
         AutomationServicesContext services, CancellationToken cancellationToken)
     {
         JsonElement? values = input.TryGetProperty("values", out var raw) && raw.ValueKind == JsonValueKind.Object ? raw : null;
-        var (profile, installed) = await _templateInstaller.InstallAsync(ReadId(input), settings, services.Library!, cancellationToken, values).ConfigureAwait(false);
+        var additionalCopy = input.TryGetProperty("copy", out var copy) && copy.ValueKind == JsonValueKind.True;
+        var (profile, installed) = await _templateInstaller.InstallAsync(ReadId(input), settings, services.Library!, cancellationToken, values, additionalCopy).ConfigureAwait(false);
         return Result(installed ? AutomationStatus.Success : AutomationStatus.Information,
             installed ? $"Installed {profile.Name}." : "This template is already installed.", new { profile, installed });
     }

@@ -359,14 +359,24 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
     }
   };
 
-  const installTemplate = async (template: ScriptTemplateDescriptor, values?: Record<string, ScriptTemplateValue>) => {
+  const installTemplate = async (template: ScriptTemplateDescriptor, values?: Record<string, ScriptTemplateValue>, additionalCopy = false) => {
     try {
-      const payload = values ? { id: template.id, values: rememberableValues(template.parameters, values, template.id) } : { id: template.id };
+      const payload = {
+        id: template.id,
+        ...(values ? { values: rememberableValues(template.parameters, values, template.id) } : {}),
+        ...(additionalCopy ? { copy: true } : {}),
+      };
       const result = await services.modules.dispatch('installTemplate', moduleInput(payload));
       if (result.status === 'error') throw new Error(result.message);
       setNotice(result.message);
       setLibraryDetail(null);
       await refresh();
+      // A new copy is only useful once it has its own name and values, so open its editor right away.
+      const added = additionalCopy && result.data && typeof result.data === 'object' && 'profile' in result.data ? result.data.profile as ScriptProfile : null;
+      if (added) {
+        closeLibrary();
+        openEditor(added);
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not install this template.');
     }
@@ -581,6 +591,8 @@ export function ScriptRunnerView({ tab, services }: ViewProps) {
             <button className={installedProfile ? 'secondary-button' : 'primary-button'} type="button" disabled={!settingsReady || Boolean(installedProfile) || runningId !== null} onClick={() => void installTemplate(template)}>
               {installedProfile ? 'Profile added' : <><Plus size={13} />Add to Script Runner</>}
             </button>
+            {installedProfile && <button className="secondary-button" type="button" disabled={!settingsReady || runningId !== null} title="Add this script again as a separate entry, for example to run it with different folders"
+              onClick={() => void installTemplate(template, undefined, true)}><Plus size={13} />Add another copy</button>}
             {targetDatabaseParameter?.type === 'file' && <div className="script-template-target">
               <PathField label={`${targetDatabaseParameter.label}${targetDatabaseParameter.required ? ' *' : ''}`} kind="file" required={targetDatabaseParameter.required} value={String(libraryValues[targetDatabaseParameter.key] ?? '')} onChange={(value) => setLibraryValues((current) => ({ ...current, [targetDatabaseParameter.key]: value }))} onBrowse={() => services.files.pickPath('file')} />
             </div>}

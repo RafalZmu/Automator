@@ -460,3 +460,12 @@ These cases cover behavior that has no Electron test yet.
 1. Run the Firebird backup template with only the target database, `gbak`, username and password.
 
 **Expected result:** The backup is written next to the `.fdb` with the same name and an `.fbk` extension (and `.zip` for the ZIP template). The Application specification `ScriptRunnerTemplateSpecs` covers the argument mapping.
+
+### Add another copy of a library script
+
+**Steps**
+
+1. Install a template, then press Add another copy on its Library card.
+2. Rename the copy, set its own input values, and choose Remember these values.
+
+**Expected result:** The copy appears as a separate row named with `(2)`, shares the installed script, and runs with its own values. `ScriptRunnerTemplateInstallSpecs` covers the numbering and the shared script.
