@@ -34,6 +34,7 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
             new("start", 2, [WorkTimeCapability]),
             new("pause", 2, [WorkTimeCapability]),
             new("resume", 2, [WorkTimeCapability]),
+            new("addTime", 2, [WorkTimeCapability]),
             new("end", 2, [WorkTimeCapability]),
             new("saveEntry", 2, [WorkTimeCapability]),
             new("createEntry", 2, [WorkTimeCapability]),
@@ -86,6 +87,7 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
                 "start" => SnapshotResult(await coordinator.StartAsync(ReadDescription(input), cancellationToken).ConfigureAwait(false), "Work interval started."),
                 "pause" => SnapshotResult(await coordinator.PauseAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Work timer paused."),
                 "resume" => SnapshotResult(await coordinator.ResumeAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Work timer resumed."),
+                "addTime" => SnapshotResult(await coordinator.AddTimeAsync(ReadEntryId(input), ReadAddedMilliseconds(input), cancellationToken).ConfigureAwait(false), "Time added to the work timer."),
                 "end" => SnapshotResult(await coordinator.EndAsync(ReadEntryId(input), cancellationToken).ConfigureAwait(false), "Work timer ended. Review and save the entry."),
                 "saveEntry" => await SaveEntryAsync(coordinator, input, cancellationToken).ConfigureAwait(false),
                 "createEntry" => await CreateEntryAsync(coordinator, input, cancellationToken).ConfigureAwait(false),
@@ -177,6 +179,15 @@ public sealed class FocusSessionsModule : ILauncherTabModuleProvider
         var id = idValue.GetString()?.Trim() ?? string.Empty;
         if (id.Length is 0 or > 128) throw new InvalidDataException("The work entry id is invalid.");
         return id;
+    }
+
+    private static long ReadAddedMilliseconds(JsonElement input)
+    {
+        if (input.ValueKind != JsonValueKind.Object
+            || !input.TryGetProperty("milliseconds", out var value) || value.ValueKind != JsonValueKind.Number
+            || !value.TryGetInt64(out var milliseconds) || milliseconds < 1 || milliseconds > AutomationWorkTimeCoordinator.MaximumAddedMilliseconds)
+            throw new InvalidDataException("The time to add must be a whole number of milliseconds between one millisecond and 24 hours.");
+        return milliseconds;
     }
 
     private static string ReadDescription(JsonElement input)

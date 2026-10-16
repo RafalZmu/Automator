@@ -37,6 +37,8 @@ public interface IAutomationWorkTimeCoordinator
     Task<AutomationWorkTimeSnapshot> StartAsync(string description, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> PauseAsync(string id, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> ResumeAsync(string id, CancellationToken cancellationToken);
+    /// <summary>Adds already-worked time to a running timer by moving its start earlier.</summary>
+    Task<AutomationWorkTimeSnapshot> AddTimeAsync(string id, long milliseconds, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> EndAsync(string id, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> SaveEntryAsync(string id, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken);
     Task<AutomationWorkTimeSnapshot> CreateEntryAsync(DateTimeOffset startedUtc, DateTimeOffset stoppedUtc, string description, IReadOnlyList<string> tags, CancellationToken cancellationToken);

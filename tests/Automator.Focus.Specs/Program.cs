@@ -18,6 +18,8 @@ var checks = new (string Name, Func<Task> Run)[]
     ("manual work entries register an explicit single-segment interval, allow overlaps, and validate bounds", ManualWorkTimeEntriesUseExplicitIntervals),
     ("changing a saved entry's times collapses its pauses while unchanged times keep them", WorkTimeEntryTimesCollapseSegments),
     ("multiple named timers exclude pauses and retain independent drafts", WorkTimeMultipleTimers),
+    ("adding time to a running timer extends its start and elapsed time", WorkTimeAddTimeToRunningTimer),
+    ("added time stacks, is saved in the entry and survives restart", WorkTimeAddedTimeSurvivesPauseEndAndRestart),
     ("only one timer runs and ending a paused timer preserves another runner", WorkTimeOnlyOneRunner),
     ("timers and independent drafts survive restart and targeted discard", WorkTimeDraftsSurviveRestart),
     ("legacy active pending and history records migrate without losing elapsed time", WorkTimeLegacyMigration),
@@ -424,6 +426,67 @@ static async Task ActiveWorkTimeSurvivesRestart()
     Check.Equal(120_000L, (await restarted.Coordinator.GetSnapshotAsync(CancellationToken.None)).Timers.Single().ElapsedMilliseconds);
     time.Advance(TimeSpan.FromMinutes(3));
     Check.Equal(300_000L, (await restarted.Coordinator.EndAsync(id, CancellationToken.None)).PendingEntries.Single().DurationMilliseconds);
+}
+
+static async Task WorkTimeAddTimeToRunningTimer()
+{
+    var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero));
+    await using var lease = await WorkTimeCoordinatorHarness.CreateAsync(new FocusLibraryStore(), time);
+    var c = lease.Coordinator;
+    var started = time.GetUtcNow();
+    var id = (await c.StartAsync("Task", CancellationToken.None)).Timers.Single().Id;
+    time.Advance(TimeSpan.FromMinutes(1));
+    var timer = (await c.AddTimeAsync(id, 600_000, CancellationToken.None)).Timers.Single();
+    Check.Equal(660_000L, timer.ElapsedMilliseconds);
+    Check.Equal("running", timer.Status);
+    Check.Equal(started.AddMinutes(-10), timer.StartedUtc);
+    Check.Equal(started.AddMinutes(-10), timer.Segments.Single().StartedUtc);
+    Check.True(timer.Segments.Single().StoppedUtc is null);
+    // Repeated presses stack.
+    timer = (await c.AddTimeAsync(id, 60_000, CancellationToken.None)).Timers.Single();
+    timer = (await c.AddTimeAsync(id, 300_000, CancellationToken.None)).Timers.Single();
+    Check.Equal(1_020_000L, timer.ElapsedMilliseconds);
+    Check.Equal(started.AddMinutes(-16), timer.StartedUtc);
+    foreach (var invalid in new long[] { 0, -1, AutomationWorkTimeCoordinator.MaximumAddedMilliseconds + 1 })
+        await Check.ThrowsAsync<InvalidDataException>(() => c.AddTimeAsync(id, invalid, CancellationToken.None));
+    await Check.ThrowsAsync<InvalidOperationException>(() => c.AddTimeAsync("missing", 60_000, CancellationToken.None));
+    await c.PauseAsync(id, CancellationToken.None);
+    await Check.ThrowsAsync<InvalidOperationException>(() => c.AddTimeAsync(id, 60_000, CancellationToken.None));
+}
+
+static async Task WorkTimeAddedTimeSurvivesPauseEndAndRestart()
+{
+    var time = new ManualTimeProvider(new DateTimeOffset(2026, 10, 3, 8, 0, 0, TimeSpan.Zero));
+    var store = new FocusLibraryStore();
+    var started = time.GetUtcNow();
+    string id;
+    await using (var first = await WorkTimeCoordinatorHarness.CreateAsync(store, time))
+    {
+        id = (await first.Coordinator.StartAsync("Task", CancellationToken.None)).Timers.Single().Id;
+        time.Advance(TimeSpan.FromMinutes(2));
+        await first.Coordinator.AddTimeAsync(id, 600_000, CancellationToken.None);
+    }
+    await using var restarted = await WorkTimeCoordinatorHarness.CreateAsync(store, time);
+    Check.Equal(720_000L, (await restarted.Coordinator.GetSnapshotAsync(CancellationToken.None)).Timers.Single().ElapsedMilliseconds);
+    time.Advance(TimeSpan.FromMinutes(3));
+    // Pausing keeps the added time; adding to the resumed timer extends the closed first segment's total.
+    var paused = (await restarted.Coordinator.PauseAsync(id, CancellationToken.None)).Timers.Single();
+    Check.Equal(900_000L, paused.ElapsedMilliseconds);
+    time.Advance(TimeSpan.FromMinutes(10));
+    var resumed = (await restarted.Coordinator.ResumeAsync(id, CancellationToken.None)).Timers.Single();
+    Check.Equal(900_000L, resumed.ElapsedMilliseconds);
+    time.Advance(TimeSpan.FromMinutes(1));
+    var added = (await restarted.Coordinator.AddTimeAsync(id, 300_000, CancellationToken.None)).Timers.Single();
+    Check.Equal(1_260_000L, added.ElapsedMilliseconds);
+    Check.Equal(started.AddMinutes(-15), added.StartedUtc);
+    Check.Equal(started.AddMinutes(-15), added.Segments[0].StartedUtc);
+    Check.Equal(started.AddMinutes(5), added.Segments[0].StoppedUtc!.Value);
+    var draft = (await restarted.Coordinator.EndAsync(id, CancellationToken.None)).PendingEntries.Single();
+    Check.Equal(1_260_000L, draft.DurationMilliseconds);
+    Check.Equal(started.AddMinutes(-15), draft.StartedUtc);
+    var saved = (await restarted.Coordinator.SaveEntryAsync(id, "Task", [], CancellationToken.None)).History.Single();
+    Check.Equal(1_260_000L, saved.DurationMilliseconds);
+    Check.Equal(2, saved.Segments.Count);
 }
 
 static async Task WorkTimeOnlyOneRunner()

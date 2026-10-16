@@ -650,7 +650,7 @@ static async Task FocusSessionModuleDispatchesCoordinatorActions()
     Check.Equal(2, module.Definition.ContractVersion);
     Check.Equal("focus-sessions", module.Definition.ViewKind);
     Check.True(module.Definition.Actions.Select(action => action.Id)
-        .SequenceEqual(["getSnapshot", "start", "pause", "resume", "end", "saveEntry", "createEntry", "updateEntry", "deleteEntry", "discardTimer", "discardPending", "getHistory"]));
+        .SequenceEqual(["getSnapshot", "start", "pause", "resume", "addTime", "end", "saveEntry", "createEntry", "updateEntry", "deleteEntry", "discardTimer", "discardPending", "getHistory"]));
     Check.True(module.Definition.Actions.All(action => action.RequiredCapabilities.Contains(
         new AutomationCapabilityRequirement(AutomationCapabilityIds.WorkTimeManagement, 1))));
 
@@ -740,7 +740,16 @@ static async Task FocusSessionModuleDispatchesCoordinatorActions()
         var invalid = await registry.DispatchAsync(module.Id, "saveEntry", 2, 2, JsonSerializer.SerializeToElement(input), module.Id, services, settings, CancellationToken.None);
         Check.Equal(AutomationStatus.Error, invalid.Status);
     }
+    foreach (var input in new object[] { new { id = "timer-2" }, new { id = "timer-2", milliseconds = 0 }, new { id = "timer-2", milliseconds = -60000 },
+        new { id = "timer-2", milliseconds = 86_400_001L }, new { id = "timer-2", milliseconds = "60000" }, new { milliseconds = 60000 } })
+    {
+        var invalid = await registry.DispatchAsync(module.Id, "addTime", 2, 2, JsonSerializer.SerializeToElement(input), module.Id, services, settings, CancellationToken.None);
+        Check.Equal(AutomationStatus.Error, invalid.Status);
+    }
     Check.Equal(priorCalls, coordinator.Calls.Count);
+    var added = await registry.DispatchAsync(module.Id, "addTime", 2, 2, JsonSerializer.SerializeToElement(new { id = "timer-2", milliseconds = 300_000 }), module.Id, services, settings, CancellationToken.None);
+    Check.Equal(AutomationStatus.Success, added.Status);
+    Check.Equal("timer-2", coordinator.LastTargetId);
     await Check.ThrowsAsync<InvalidOperationException>(async () => await registry.DispatchAsync(module.Id, "getSnapshot", 1, 2, JsonSerializer.SerializeToElement(new { }), module.Id, services, settings, CancellationToken.None));
     await Check.ThrowsAsync<InvalidOperationException>(async () => await registry.DispatchAsync(module.Id, "getSnapshot", 2, 1, JsonSerializer.SerializeToElement(new { }), module.Id, services, settings, CancellationToken.None));
 
@@ -1573,6 +1582,7 @@ sealed class RecordingWorkTimeCoordinator : IAutomationWorkTimeCoordinator
     }
     public Task<AutomationWorkTimeSnapshot> PauseAsync(string id, CancellationToken cancellationToken) => TargetAsync("pause", id, cancellationToken);
     public Task<AutomationWorkTimeSnapshot> ResumeAsync(string id, CancellationToken cancellationToken) => TargetAsync("resume", id, cancellationToken);
+    public Task<AutomationWorkTimeSnapshot> AddTimeAsync(string id, long milliseconds, CancellationToken cancellationToken) => TargetAsync("addTime", id, cancellationToken);
     public Task<AutomationWorkTimeSnapshot> EndAsync(string id, CancellationToken cancellationToken) => TargetAsync("end", id, cancellationToken);
     public Task<AutomationWorkTimeSnapshot> DiscardTimerAsync(string id, CancellationToken cancellationToken) => TargetAsync("discardTimer", id, cancellationToken);
     public Task<AutomationWorkTimeSnapshot> DiscardPendingAsync(string id, CancellationToken cancellationToken) => TargetAsync("discardPending", id, cancellationToken);
