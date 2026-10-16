@@ -20,3 +20,7 @@ Use named API secrets for credentials. Global variables are ordinary reusable da
 ## Agent access
 
 Settings also hosts the **Agent access (MCP)** card (`ui/AgentAccessSettings.tsx`) for the built-in MCP server. It applies immediately and is independent of the Save button. See [Agent access](../agent-access/README.md).
+
+## Notifications
+
+The **Task finished popups** switch shows or hides the bottom-right popup that appears when a task ends. It applies immediately and is stored by the host, independent of the Save button. See [Activity and notifications](../activity-center/README.md).

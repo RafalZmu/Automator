@@ -10,3 +10,4 @@ Read the root AGENTS.md first. Run Activity stores bounded metadata across modul
 - Add application and renderer tests when changing persisted metadata, result rendering, action dispatch, or notification routing.
 
 Code: ui/activity, contracts/activity.ts, AutomationRunActivityService.cs, and the activity RPC boundary.
+- Task finished popups use only the metadata fields in taskToasts.ts, are escaped, and run in a script-free sandboxed window; never add result data or messages to them. Keep them non-focusable and auto-dismissing.

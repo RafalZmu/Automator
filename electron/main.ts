@@ -23,7 +23,9 @@ import {
   type RpcMethod,
 } from '../contracts/rpc';
 import { AutomationServiceError, createAutomationHttpIpcFailure } from '../contracts/automationHttpIpc.ts';
-import { runActivitySnapshotSchema } from '../contracts/activity';
+import { runActivitySnapshotSchema, type RunActivityEntry } from '../contracts/activity';
+import { loadNotificationPrefs, saveNotificationPrefs, type NotificationPrefs } from './notificationPrefs';
+import { computeToastBounds, createToastTracker, toastContent, toastHtml, TOAST_DURATION_MS, TOAST_HEIGHT, TOAST_MAX_VISIBLE, TOAST_WIDTH } from './taskToasts';
 import { isScriptRunnerInterpreter, scriptFileFilter } from '../contracts/scriptRunner';
 import { authorizeAutomationServiceCall, type AutomationWindowContext } from './automationServiceAuthorization';
 import { injectHostWindowContext } from './hostWindowContext';
@@ -368,7 +370,10 @@ async function startBackend(): Promise<void> {
         writeLog('Backend.NotificationFailed', 'Windows could not display an automation notification.');
       }
     }
-    else sendToAllWindows('automator:backend-notification', notification);
+    else {
+      if (notification.method === 'activity/changed') void showTaskToasts();
+      sendToAllWindows('automator:backend-notification', notification);
+    }
   });
   child.on('failure', (error: Error) => { if (backend === child && generation === backendGeneration) failBackend(error.message); });
   child.on('exit', ({ expected, code }: { expected: boolean; code: number | null }) => {
@@ -488,6 +493,65 @@ async function stopMcp(): Promise<void> {
 function requireMcp(): McpController {
   if (!mcp) throw new Error('Agent access is unavailable.');
   return mcp;
+}
+
+
+const notificationPrefsPath = path.join(localData, 'notifications.json');
+let notificationPrefs: NotificationPrefs = { taskToasts: true };
+const toastTracker = createToastTracker();
+const toastWindows: BrowserWindow[] = [];
+
+function layoutToasts(): void {
+  const workArea = screen.getPrimaryDisplay().workArea;
+  toastWindows.forEach((toast, index) => {
+    if (!toast.isDestroyed()) toast.setBounds(computeToastBounds(workArea, index), false);
+  });
+}
+
+function showToast(entry: RunActivityEntry): void {
+  const content = toastContent(entry);
+  while (toastWindows.length >= TOAST_MAX_VISIBLE) toastWindows.shift()?.destroy();
+  const toast = new BrowserWindow({
+    width: TOAST_WIDTH, height: TOAST_HEIGHT, show: false, frame: false, transparent: true, resizable: false,
+    movable: false, focusable: false, skipTaskbar: true, alwaysOnTop: true, hasShadow: false,
+    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, webviewTag: false, spellcheck: false },
+  });
+  toast.setAlwaysOnTop(true, 'screen-saver');
+  toast.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  toast.webContents.on('will-navigate', (event) => event.preventDefault());
+  toastWindows.push(toast);
+  layoutToasts();
+  const timer = setTimeout(() => { if (!toast.isDestroyed()) toast.destroy(); }, TOAST_DURATION_MS);
+  toast.on('closed', () => {
+    clearTimeout(timer);
+    const index = toastWindows.indexOf(toast);
+    if (index >= 0) toastWindows.splice(index, 1);
+    layoutToasts();
+  });
+  void toast.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(toastHtml(content, nativeTheme.shouldUseDarkColors))}`)
+    .then(() => { if (!toast.isDestroyed()) toast.showInactive(); })
+    .catch(() => writeLog('Toast.LoadFailed', 'A task-finished popup could not be displayed.'));
+}
+
+/** Shows a popup for each run that finished since the last activity snapshot. Tracking continues while popups are off. */
+async function showTaskToasts(): Promise<void> {
+  if (quitRequested || !backend || backendStatus !== 'ready') return;
+  try {
+    const parsed = runActivitySnapshotSchema.safeParse(await backend.request('activity/list', {}));
+    if (!parsed.success) return;
+    const fresh = toastTracker.next(parsed.data.entries);
+    if (!notificationPrefs.taskToasts) return;
+    for (const entry of fresh.slice(-TOAST_MAX_VISIBLE)) showToast(entry);
+  } catch (error) {
+    writeLog('Toast.ActivityFailed', 'Run activity could not be read for popups.', { error: String(error) });
+  }
+}
+
+async function seedTaskToasts(): Promise<void> {
+  try {
+    const parsed = runActivitySnapshotSchema.safeParse(await backend?.request('activity/list', {}));
+    if (parsed.success) toastTracker.next(parsed.data.entries);
+  } catch { /* The first change event seeds instead. */ }
 }
 
 function createTray(): boolean {
@@ -838,6 +902,14 @@ function registerIpc(): void {
   ipcMain.handle('automator:relink-binding', (event, bindingId: string) => withOpenFileDialog(event, [
     { name: 'Applications and shortcuts', extensions: ['exe', 'lnk'] },
   ], 'settings/relink', (filePath) => ({ bindingId, path: filePath })));
+  ipcMain.handle('automator:get-notification-prefs', (event) => { assertMainFrame(event); return { ...notificationPrefs }; });
+  ipcMain.handle('automator:set-task-toasts', (event, enabled: unknown) => {
+    assertMainFrame(event);
+    if (typeof enabled !== 'boolean') throw new Error('Task finished popups must be on or off.');
+    notificationPrefs = { taskToasts: enabled };
+    saveNotificationPrefs(notificationPrefsPath, notificationPrefs);
+    return { ...notificationPrefs };
+  });
   ipcMain.handle('automator:mcp-get-status', (event) => { assertMainFrame(event); return requireMcp().status(); });
   ipcMain.handle('automator:mcp-set-enabled', (event, enabled: unknown) => {
     assertMainFrame(event);
@@ -1404,8 +1476,10 @@ async function initializeApp(): Promise<void> {
     testMode,
   });
   registerIpc();
+  notificationPrefs = loadNotificationPrefs(notificationPrefsPath);
   try {
     await startBackend();
+    await seedTaskToasts();
   } catch (error) {
     failBackend(error instanceof Error ? error.message : String(error));
     writeLog('App.InitializationFailed', 'Backend startup failed; the recovery window will remain available.', { error: backendFailure });
