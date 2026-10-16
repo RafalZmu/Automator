@@ -113,6 +113,14 @@ function SettingsDialog({
   const [notice, setNotice] = useState('');
   const [importReport, setImportReport] = useState<SettingsImportResult | null>(null);
   const [variableEditorRevision, setVariableEditorRevision] = useState(0);
+  const [taskToasts, setTaskToasts] = useState(true);
+
+  useEffect(() => {
+    if (!open) return;
+    let current = true;
+    bridge.getNotificationPrefs().then((prefs) => { if (current) setTaskToasts(prefs.taskToasts); }).catch(() => undefined);
+    return () => { current = false; };
+  }, [open, bridge]);
 
   useEffect(() => {
     if (open) {
@@ -215,6 +223,18 @@ function SettingsDialog({
               <label className="setting-row switch-row" htmlFor={startWithWindowsId}>
                 <span className="setting-copy"><strong>Start with Windows</strong><span>Open Automator in the notification area when you sign in.</span></span>
                 <input id={startWithWindowsId} type="checkbox" checked={draft.startWithWindows} onChange={(event) => setDraft((value) => ({ ...value, startWithWindows: event.target.checked }))} />
+              </label>
+            </section>
+
+            <section className="settings-section">
+              <div className="section-heading"><Bell size={15} /><h2>Notifications</h2></div>
+              <label className="setting-row switch-row" htmlFor="task-toast-switch">
+                <span className="setting-copy"><strong>Task finished popups</strong><span>Show a small popup in the bottom-right corner when a task ends. Applies immediately.</span></span>
+                <input id="task-toast-switch" type="checkbox" checked={taskToasts} onChange={(event) => {
+                  const enabled = event.target.checked;
+                  setTaskToasts(enabled);
+                  bridge.setTaskToasts(enabled).then((prefs) => setTaskToasts(prefs.taskToasts)).catch((error) => { setTaskToasts(!enabled); reportError(errorMessage(error)); });
+                }} />
               </label>
             </section>
 

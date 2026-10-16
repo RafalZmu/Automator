@@ -73,6 +73,8 @@ export interface AutomatorBridge {
   relinkBinding(bindingId: string): Promise<BackendUiState | null>;
   openLogFolder(): Promise<boolean>;
   retryBackend(): Promise<InitialState>;
+  getNotificationPrefs(): Promise<{ taskToasts: boolean }>;
+  setTaskToasts(enabled: boolean): Promise<{ taskToasts: boolean }>;
   getMcpStatus(): Promise<McpStatus>;
   setMcpEnabled(enabled: boolean): Promise<McpStatus>;
   setMcpPort(port: number): Promise<McpStatus>;
