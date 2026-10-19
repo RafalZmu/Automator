@@ -15,6 +15,8 @@ The default selection is the newest complete Electron package at `artifacts\elec
 - Use `-StopOnly` to stop workspace-owned Automator processes without starting an app.
 - Use `-ExecutablePath <path-to-Automator.App.exe>` to explicitly launch the retained WinUI rollback build.
 
+To pull the latest changes, rebuild, and restart on the user's normal (production) data, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Update-Automator.ps1`. `scripts\Build-And-Run-Automator.ps1` builds too, but always starts the app with `-TestMode`, so it uses isolated data under `artifacts\test-data` and looks like a different database; never use it when the user wants their real data.
+
 Run the helper in the user's interactive desktop session outside a restricted sandbox when native hooks, tray behavior, or normal per-user logging need inspection. Do not start a second Automator host directly while the helper-managed app is running.
 
 ## Verification and package

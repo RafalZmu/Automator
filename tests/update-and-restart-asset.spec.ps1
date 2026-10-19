@@ -155,6 +155,36 @@ Start-Sleep -Seconds 120
     if ((Get-Content -LiteralPath $log -Raw) -like '*Electron Windows runtime*') { throw 'An installed Electron runtime was installed again' }
     if ((Get-Lines $npmCalls) -join '|' -ne 'ci|run package:win|run package:win') { throw "Dependencies were reinstalled: $((Get-Lines $npmCalls) -join '|')" }
 
+    # scripts\Update-Automator.ps1 runs the same script from the checkout it lives in, with no installed copy.
+    $wrapperTemplates = Join-Path $work 'src\Automator.Application\Automation\Templates'
+    New-Item -ItemType Directory -Path $wrapperTemplates -Force | Out-Null
+    Copy-Item -LiteralPath $assetPath -Destination $wrapperTemplates
+    $wrapperPath = Join-Path $work 'scripts\Update-Automator.ps1'
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\scripts\Update-Automator.ps1') -Destination $wrapperPath
+    function Invoke-Wrapper([string[]]$arguments) {
+        $previous = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $text = & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $wrapperPath @arguments 2>&1 | Out-String
+            [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $text }
+        }
+        finally { $ErrorActionPreference = $previous }
+    }
+    $restartBefore = (Get-Lines $restartCalls).Count
+    $result = Invoke-Wrapper @()
+    if ($result.ExitCode -ne 0 -or $result.Output -notlike '*Already up to date*' -or $result.Output -notlike '*Production data:*') { throw "Wrapper up-to-date run failed: $($result.Output)" }
+    if ((Get-Lines $restartCalls).Count -ne $restartBefore) { throw 'The wrapper restarted an up-to-date checkout' }
+    $result = Invoke-Wrapper @('-RebuildAnyway')
+    if ($result.ExitCode -ne 0 -or $result.Output -notlike '*rebuilding anyway*' -or $result.Output -notlike '*Production data:*') { throw "Wrapper forced rebuild did not start: $($result.Output)" }
+    $log = Get-LogPath $result.Output
+    if (-not (Wait-ForText $log 'Finished:|FAILED:')) { throw 'The wrapper rebuild never finished' }
+    if ((Get-Content -LiteralPath $log -Raw) -notmatch 'Finished:') { throw "Wrapper rebuild failed: $(Get-Content -LiteralPath $log -Raw)" }
+    if ((Get-Lines $restartCalls).Count -ne $restartBefore + 2) { throw 'The wrapper rebuild did not stop and start the app once' }
+    $result = Invoke-Wrapper @('-Checkout', $fixtureRoot)
+    if ($result.ExitCode -eq 0) { throw 'The wrapper accepted a folder without the update script' }
+    # Everything after this point works on the fixture's own tracked files only.
+    Remove-Item -LiteralPath $wrapperPath, (Join-Path $wrapperTemplates 'update-and-restart.v1.ps1') -Force
+
     # A failed build is logged. The app is started again when a build is left, and the outcome says whether it was.
     function Invoke-FailingWorker([string]$logFile) {
         $previous = $ErrorActionPreference
