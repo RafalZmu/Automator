@@ -252,8 +252,10 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         var test = discovered.Tests.FirstOrDefault(candidate => string.Equals(candidate.Id, id, StringComparison.Ordinal));
         if (test is null) throw new InvalidDataException("That test is no longer in the selected project. Refresh before opening its code.");
         if (!IsValidTestPath(test.File)) throw new InvalidDataException("That test file path is not supported.");
-        var target = ResolveProjectFile(root, test.File, inspectExistingSegments: true);
-        EnsureNoReparsePoints(root, test.File, includeFile: true);
+        // `playwright test --list` prints files relative to the configured testDir, which may be a subfolder of the project.
+        var relativeFile = FindListedSourceFile(root, test.File) ?? test.File;
+        var target = ResolveProjectFile(root, relativeFile, inspectExistingSegments: true);
+        EnsureNoReparsePoints(root, relativeFile, includeFile: true);
         var info = new FileInfo(target);
         if (!info.Exists) throw new InvalidDataException("That test file no longer exists. Refresh the explorer first.");
         if (info.Length > 2 * 1024 * 1024) throw new InvalidDataException("This test file is too large to show in Automator.");
@@ -261,6 +263,40 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         var (startLine, code) = ExtractTestSource(source, test.Line);
         return Result(AutomationStatus.Success, $"Loaded the code for {test.File}.",
             new { testId = id, file = test.File, startLine, code });
+    }
+
+    private static string? FindListedSourceFile(string root, string listedFile)
+    {
+        const int MaximumDepth = 6;
+        const int MaximumEntries = 20000;
+        var direct = Path.Combine(root, listedFile.Replace('/', Path.DirectorySeparatorChar));
+        if (File.Exists(direct)) return listedFile;
+        var suffix = "/" + listedFile;
+        var pending = new Queue<(string Directory, int Depth)>();
+        pending.Enqueue((root, 0));
+        var visited = 0;
+        while (pending.Count > 0 && visited < MaximumEntries)
+        {
+            var (directory, depth) = pending.Dequeue();
+            IEnumerable<string> entries;
+            try { entries = Directory.EnumerateFileSystemEntries(directory).ToArray(); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { continue; }
+            foreach (var entry in entries)
+            {
+                visited++;
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    var name = Path.GetFileName(entry);
+                    if (depth < MaximumDepth && name is not ("node_modules" or ".git")) pending.Enqueue((entry, depth + 1));
+                    continue;
+                }
+                var relative = Path.GetRelativePath(root, entry).Replace('\\', '/');
+                if (relative.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) && IsValidTestPath(relative)) return relative;
+            }
+        }
+        return null;
     }
 
     /// <summary>Returns the lines of the test declared at <paramref name="line"/>, through its closing bracket (bounded).</summary>
