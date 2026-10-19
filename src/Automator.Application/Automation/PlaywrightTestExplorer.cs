@@ -272,12 +272,24 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         var depth = 0;
         var seenOpen = false;
         var end = start;
+        var quote = '\0';
         for (var index = start - 1; index < lines.Length && index < start - 1 + MaximumLines; index++)
         {
             end = index + 1;
-            foreach (var character in lines[index])
+            var text = lines[index];
+            if (quote is '\'' or '"') quote = '\0';
+            for (var position = 0; position < text.Length; position++)
             {
-                if (character is '(' or '{' or '[') { depth++; seenOpen = true; }
+                var character = text[position];
+                if (quote != '\0')
+                {
+                    if (character == '\\') position++;
+                    else if (character == quote) quote = '\0';
+                    continue;
+                }
+                if (character is '\'' or '"' or '`') quote = character;
+                else if (character == '/' && position + 1 < text.Length && text[position + 1] == '/') break;
+                else if (character is '(' or '{' or '[') { depth++; seenOpen = true; }
                 else if (character is ')' or '}' or ']') depth--;
             }
             if (seenOpen && depth <= 0) break;
