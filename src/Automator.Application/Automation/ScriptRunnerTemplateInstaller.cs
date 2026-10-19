@@ -47,11 +47,12 @@ public sealed class ScriptRunnerTemplateInstaller
             using var source = _openAsset("Automator.Templates." + filename)
                 ?? throw new IOException("Bundled template asset is unavailable. Repair or reinstall Automator.");
             Directory.CreateDirectory(_directory);
-            // Another copy of an installed template shares the one installed script, but only when it is still the exact bundled asset.
-            var reuseInstalled = additionalCopy && File.Exists(destination) && SameBytes(source, destination);
+            // An additional copy, or a template whose profile was removed or detached from its origin (for example an editable copy),
+            // shares the already installed script, but only when it is still the exact bundled asset.
+            var reuseInstalled = File.Exists(destination) && SameBytes(source, destination);
             if (File.Exists(destination) && !reuseInstalled) throw new IOException("Template script already exists. Preserve or move it before installing again; Automator will not overwrite it.");
             var name = template.Name;
-            if (additionalCopy && usedNames.Contains(name))
+            if (usedNames.Contains(name))
             {
                 var copyNumber = 2;
                 while (usedNames.Contains($"{template.Name} ({copyNumber})")) copyNumber++;

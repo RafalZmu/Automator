@@ -65,6 +65,12 @@ internal static class ScriptRunnerTemplateInstallSpecs
             Ensure(firstCopyProfile.GetProperty("name").GetString() == originalProfile.GetProperty("name").GetString() + " (2)"
                 && secondCopyProfile.GetProperty("name").GetString() == originalProfile.GetProperty("name").GetString() + " (3)", "copies get numbered names");
             Ensure(firstCopyProfile.GetProperty("scriptPath").GetString() == path && secondCopyProfile.GetProperty("scriptPath").GetString() == path, "copies share the installed script");
+            foreach (var removed in new[] { originalProfile, firstCopyProfile, secondCopyProfile })
+                await copyContext.Library!.DeleteAsync("profiles", removed.GetProperty("id").GetString()!, CancellationToken.None);
+            using var detachedInput = JsonDocument.Parse("""{"id":"firebird-3-backup-zip"}""");
+            var reinstalled = await module.ExecuteAsync("installTemplate", detachedInput.RootElement, module.CreateDefaultSettings(), copyContext, CancellationToken.None);
+            Ensure(reinstalled.Status == AutomationStatus.Success && reinstalled.Data.GetProperty("profile").GetProperty("scriptPath").GetString() == path,
+                "an unmodified installed script is reused when no profile references the template");
             await File.WriteAllTextAsync(path, "user modification");
             var modifiedCopy = await module.ExecuteAsync("installTemplate", copyInput.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
             Ensure(modifiedCopy.Status == AutomationStatus.Error && await File.ReadAllTextAsync(path) == "user modification", "a copy never reuses or overwrites a modified script");
