@@ -19,6 +19,8 @@ The tab has two related surfaces:
 
 When the configured managed project is first created, Automator creates a tests directory and an example spec file. For an existing project, choose its project root; Automator does not install or change that project's dependencies.
 
+While editing a test's tags, tags already used on any test in the project are offered as clickable suggestions under the input (filtered by what you are typing; picking one adds it to the comma-separated list). The code button on each test row loads that test's source (from its declaration line to its closing bracket, at most 200 lines) from the host through `readTestSource` and shows it inline; select it again to hide it. The view is read-only.
+
 Runs started from the Playwright Test Explorer are listed in Run Activity without a saved profile identifier.
 
 ### Running state and run history
@@ -75,6 +77,7 @@ Read the root AGENTS.md first. This tab contains both saved browser-action profi
 - Do not install, upgrade, or rewrite dependencies in a user-selected project. If its Playwright runner is missing, show the existing setup error and let the user/agent maintain that project explicitly.
 - Store Automator-managed tags as metadata keyed to the test/project identity; do not modify test source to add tags. Keep stale-tag cleanup explicit.
 - Preserve the project-root containment and reparse-point checks when creating or editing section files.
+- `readTestSource` is read-only: it resolves the test through discovery by id, keeps the project-root containment and reparse-point checks, caps the file at 2 MiB and the returned excerpt at 200 lines. Tag suggestions are derived in the renderer from the explorer's known tags; do not add a separate suggestion store.
 - Run individual tests, a section file, or a tag group through the host process service. Never build a shell command by concatenating project paths or test names.
 - Playwright test runs have no saved profile and are recorded in Run Activity with a null profile ID; keep that field explicit in the activity RPC response.
 - Codex-generated Playwright tasks are stored as `playwright-task` profiles under the managed project's `tests/codex` directory. Keep their relative paths contained in that project, preserve create-new behavior, validate their declared JSON inputs, and reject a source hash that no longer matches its approval. They run through this host-owned Explorer path; do not rewrite tests in a user-selected project or change project dependencies.
