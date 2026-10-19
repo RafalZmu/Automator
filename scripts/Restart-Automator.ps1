@@ -4,7 +4,8 @@ param(
     [switch]$Development,
     [switch]$Show,
     [switch]$StopOnly,
-    [switch]$TestMode
+    [switch]$TestMode,
+    [ValidateRange(5, 600)][int]$StartupTimeoutSeconds = 30
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,6 +19,15 @@ $isElectronBuild = $false
 $isPortableBuild = $false
 $testDataDirectory = $null
 $manifestBuildId = $null
+
+# Sets or removes a variable in this process, which the host then inherits. Remove a variable instead of
+# assigning it $null or '': PowerShell 7 passes $null to a .NET string parameter as '', and .NET on Windows then
+# creates an empty variable instead of deleting it. A host that sees AUTOMATOR_RENDERER_URL='' tries to load
+# that URL, fails, and sits with an unloaded window and no App.Ready (the "stall" on PowerShell 7).
+function Set-ProcessEnvironmentVariable([string]$Name, [string]$Value) {
+    if ([string]::IsNullOrEmpty($Value)) { Remove-Item -LiteralPath "Env:$Name" -ErrorAction SilentlyContinue }
+    else { Set-Item -LiteralPath "Env:$Name" -Value $Value }
+}
 
 function Test-PathInsideWorkspace([string]$Path) {
     if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
@@ -281,18 +291,18 @@ if ($Development) {
         $previousEnvironment[$name] = [System.Environment]::GetEnvironmentVariable($name, 'Process')
     }
 
-    [System.Environment]::SetEnvironmentVariable('AUTOMATOR_TEST_MODE', '1', 'Process')
-    [System.Environment]::SetEnvironmentVariable('AUTOMATOR_TEST_TRAY', '1', 'Process')
-    [System.Environment]::SetEnvironmentVariable('AUTOMATOR_SHOW_ON_START', $(if ($Show) { '1' } else { '0' }), 'Process')
-    [System.Environment]::SetEnvironmentVariable('AUTOMATOR_BUILD_ID', $buildId, 'Process')
-    [System.Environment]::SetEnvironmentVariable('AUTOMATOR_RENDERER_URL', $null, 'Process')
-    [System.Environment]::SetEnvironmentVariable('AUTOMATOR_TEST_DATA_DIRECTORY', $null, 'Process')
-    [System.Environment]::SetEnvironmentVariable('PORTABLE_EXECUTABLE_FILE', $null, 'Process')
+    Set-ProcessEnvironmentVariable 'AUTOMATOR_TEST_MODE' '1'
+    Set-ProcessEnvironmentVariable 'AUTOMATOR_TEST_TRAY' '1'
+    Set-ProcessEnvironmentVariable 'AUTOMATOR_SHOW_ON_START' ($(if ($Show) { '1' } else { '0' }))
+    Set-ProcessEnvironmentVariable 'AUTOMATOR_BUILD_ID' $buildId
+    Set-ProcessEnvironmentVariable 'AUTOMATOR_RENDERER_URL' $null
+    Set-ProcessEnvironmentVariable 'AUTOMATOR_TEST_DATA_DIRECTORY' $null
+    Set-ProcessEnvironmentVariable 'PORTABLE_EXECUTABLE_FILE' $null
     try {
         $startedProcess = Start-Process -FilePath $ExecutablePath -ArgumentList $startArguments -WorkingDirectory $workingDirectory -PassThru
     } finally {
         foreach ($name in $previousEnvironment.Keys) {
-            [System.Environment]::SetEnvironmentVariable($name, $previousEnvironment[$name], 'Process')
+            Set-ProcessEnvironmentVariable $name $previousEnvironment[$name]
         }
     }
 } elseif ($isElectronBuild -or $isPortableBuild) {
@@ -310,18 +320,18 @@ if ($Development) {
     foreach ($name in $environmentNames) {
         $previousEnvironment[$name] = [System.Environment]::GetEnvironmentVariable($name, 'Process')
     }
-    [System.Environment]::SetEnvironmentVariable('AUTOMATOR_TEST_MODE', $(if ($TestMode) { '1' } else { $null }), 'Process')
-    [System.Environment]::SetEnvironmentVariable('AUTOMATOR_TEST_TRAY', $(if ($TestMode) { '1' } else { $null }), 'Process')
-    [System.Environment]::SetEnvironmentVariable('AUTOMATOR_TEST_DATA_DIRECTORY', $testDataDirectory, 'Process')
-    [System.Environment]::SetEnvironmentVariable('AUTOMATOR_RENDERER_URL', $null, 'Process')
-    [System.Environment]::SetEnvironmentVariable('PORTABLE_EXECUTABLE_FILE', $null, 'Process')
-    [System.Environment]::SetEnvironmentVariable('AUTOMATOR_BUILD_ID', $buildId, 'Process')
-    [System.Environment]::SetEnvironmentVariable('AUTOMATOR_SHOW_ON_START', $(if ($Show) { '1' } else { $null }), 'Process')
+    Set-ProcessEnvironmentVariable 'AUTOMATOR_TEST_MODE' ($(if ($TestMode) { '1' } else { $null }))
+    Set-ProcessEnvironmentVariable 'AUTOMATOR_TEST_TRAY' ($(if ($TestMode) { '1' } else { $null }))
+    Set-ProcessEnvironmentVariable 'AUTOMATOR_TEST_DATA_DIRECTORY' $testDataDirectory
+    Set-ProcessEnvironmentVariable 'AUTOMATOR_RENDERER_URL' $null
+    Set-ProcessEnvironmentVariable 'PORTABLE_EXECUTABLE_FILE' $null
+    Set-ProcessEnvironmentVariable 'AUTOMATOR_BUILD_ID' $buildId
+    Set-ProcessEnvironmentVariable 'AUTOMATOR_SHOW_ON_START' ($(if ($Show) { '1' } else { $null }))
     try {
         $startedProcess = Start-Process -FilePath $ExecutablePath -WorkingDirectory $workingDirectory -PassThru
     } finally {
         foreach ($name in $previousEnvironment.Keys) {
-            [System.Environment]::SetEnvironmentVariable($name, $previousEnvironment[$name], 'Process')
+            Set-ProcessEnvironmentVariable $name $previousEnvironment[$name]
         }
     }
 } else {
@@ -332,7 +342,7 @@ if ($Development) {
 
 $logDate = [DateTime]::UtcNow.ToString('yyyy-MM-dd')
 $logPath = Join-Path $logDirectory "automator-$logDate.jsonl"
-$startupDeadline = (Get-Date).AddSeconds(30)
+$startupDeadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
 $readyEvent = $null
 
 do {
@@ -366,7 +376,12 @@ do {
 } while ((Get-Date) -lt $startupDeadline)
 
 if ($null -eq $readyEvent) {
-    throw "Automator host PID $($startedProcess.Id) build '$buildId' is running but did not log a fresh App.Ready within 30 seconds. Inspect: $logPath"
+    # Say where the host stopped: a host that never logs Panel.ReadyToShow never loaded its window.
+    $lastLogged = if ($null -ne $events) {
+        $events | Where-Object { $_.ProcessId -eq $hostProcessId -and ([string]::IsNullOrWhiteSpace($buildId) -or $_.BuildId -eq $buildId) } | Select-Object -Last 1
+    } else { $null }
+    $lastLoggedText = if ($null -ne $lastLogged) { " Its last logged event was $($lastLogged.Event)." } else { ' It logged nothing.' }
+    throw "Automator host PID $($startedProcess.Id) build '$buildId' is running but did not log a fresh App.Ready within $StartupTimeoutSeconds seconds.$lastLoggedText Inspect: $logPath"
 }
 
 if ($Show -and ($Development -or $isElectronBuild -or $isPortableBuild) -and -not $readyEvent.visible) {

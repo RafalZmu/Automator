@@ -116,6 +116,20 @@ Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\update-and-re
 
 **Expected result:** Invalid folders exit nonzero. An up-to-date checkout is not rebuilt and the app is not stopped, even with an uncommitted edit and `pull.rebase=true`. The new commit is pulled and listed, the edit is untouched, and the worker still finishes after its launcher's process tree was killed, stopping the app, running `npm ci`, installing the missing Electron runtime, running `npm run package:win`, and starting the app. The forced rebuild skips `npm ci` and the Electron install. A failed build is logged, exits nonzero, starts the app again, and says it was restarted; when the restart also fails the log says Automator is closed. A diverged checkout fails the pull without stopping the app or rewriting the local commit.
 
+## Restart helper environment — tests/restart-automator-helper.spec.ps1
+
+Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\restart-automator-helper.spec.ps1` on Windows PowerShell 5.1 or PowerShell 7. It takes about 40 seconds, needs no npm or git, and compiles a fake `Automator.exe` with the .NET Framework `csc.exe`. The fake host runs inside a fixture workspace under `artifacts\test-data` with `LOCALAPPDATA` pointed at the fixture, so the real app and its data are never stopped, started, or touched. `-HelperPath <file>` tests another copy of the helper (for example an older revision from `git show`) to see the spec fail. The update-and-restart worker starts the app through this helper, and this is the check for the stall that happened under PowerShell 7.
+
+### restart helper hands the host a clean environment and reports a stall truthfully
+
+**Steps**
+
+1. In a shell that exports `AUTOMATOR_RENDERER_URL`, `AUTOMATOR_TEST_MODE`, `AUTOMATOR_TEST_TRAY`, `AUTOMATOR_TEST_DATA_DIRECTORY`, and `PORTABLE_EXECUTABLE_FILE`, run the helper with `-Show` under Windows PowerShell 5.1 and under `pwsh.exe`, and read the environment the fake host recorded.
+2. Run it with `-Show -TestMode` under both shells.
+3. Make the fake host stall after `Panel.NativeThemeInitialized` and run the helper with `-StartupTimeoutSeconds 5` under both shells.
+
+**Expected result:** Normal start gives the host `AUTOMATOR_SHOW_ON_START=1` and a `host-` build id and none of the five exported variables, not even as empty values; the fake host stalls (as the real one did) if any variable is present but empty. Test mode gives it `AUTOMATOR_TEST_MODE=1`, `AUTOMATOR_TEST_TRAY=1`, the fixture's `artifacts\test-data\electron-host` as data directory, and a `test-host-` build id, with no renderer URL or portable path. A stalled host makes the helper fail and say it did not log a fresh App.Ready within the timeout and which event the host logged last; it never reports success. Against the pre-fix helper the PowerShell 7 normal start fails with the 30-second App.Ready error.
+
 ## Filesystem path field tests — tests/electron/path-field.test.cjs
 
 ### path drop accepts one File and resolves its path without reading contents

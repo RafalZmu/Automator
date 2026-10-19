@@ -41,10 +41,13 @@ import type { TokenProtector } from './mcp/config';
 
 const moduleDirectory = __dirname;
 const workspaceRoot = path.resolve(moduleDirectory, '../..');
-const buildId = process.env.AUTOMATOR_BUILD_ID ?? (app.isPackaged ? app.getVersion() : 'dev');
+// A launcher can leave a variable present but empty (PowerShell 7 does when it "clears" one). Treat that as unset:
+// an empty AUTOMATOR_RENDERER_URL would otherwise be loaded as a URL and the window would never show.
+const environmentValue = (name: string): string | undefined => process.env[name] || undefined;
+const buildId = environmentValue('AUTOMATOR_BUILD_ID') ?? (app.isPackaged ? app.getVersion() : 'dev');
 const testMode = process.env.AUTOMATOR_TEST_MODE === '1';
-const rendererUrl = process.env.AUTOMATOR_RENDERER_URL;
-  const testData = path.resolve(process.env.AUTOMATOR_TEST_DATA_DIRECTORY
+const rendererUrl = environmentValue('AUTOMATOR_RENDERER_URL');
+  const testData = path.resolve(environmentValue('AUTOMATOR_TEST_DATA_DIRECTORY')
     ?? path.resolve(workspaceRoot, 'artifacts/test-data/electron-host'));
 
 app.setName('Automator');
@@ -362,7 +365,7 @@ async function startBackend(): Promise<void> {
   if (app.isPackaged && !portablePath && isPathWithin(process.execPath, os.tmpdir())) {
     throw new Error('Portable host did not provide PORTABLE_EXECUTABLE_FILE; startup registration is disabled until the stable executable path is known.');
   }
-  const testBackendDirectory = process.env.AUTOMATOR_TEST_BACKEND_DATA_DIRECTORY;
+  const testBackendDirectory = environmentValue('AUTOMATOR_TEST_BACKEND_DATA_DIRECTORY');
   const dataDirectory = testMode
     ? path.resolve(testBackendDirectory ?? path.resolve(testData, 'backend', `${buildId}-${process.pid}`))
     : null;
@@ -1500,9 +1503,14 @@ function createWindow(): void {
 }
 
 async function loadRenderer(window: BrowserWindow, packagedRendererUrl: string, role: 'launcher' | 'workspace' = 'launcher'): Promise<void> {
-  const url = new URL(rendererUrl ?? packagedRendererUrl);
-  if (role === 'workspace') url.searchParams.set('surface', 'workspace');
-  await window.loadURL(url.toString());
+  try {
+    const url = new URL(rendererUrl ?? packagedRendererUrl);
+    if (role === 'workspace') url.searchParams.set('surface', 'workspace');
+    await window.loadURL(url.toString());
+  } catch (error) {
+    // Callers do not await this. An unlogged rejection leaves a window that never signals ready-to-show.
+    writeLog('Renderer.LoadRejected', 'The renderer page could not be loaded.', { role, error: String(error) });
+  }
 }
 
 function isAllowedRendererUrl(url: string, packagedRendererUrl: string, dev: URL | undefined): boolean {
@@ -1524,7 +1532,7 @@ async function initializeApp(): Promise<void> {
   app.setAppUserModelId('com.automator.desktop');
   writeLog('App.Starting', 'Automator Electron host is starting.', {
     executable: process.execPath,
-    portableExecutablePath: process.env.PORTABLE_EXECUTABLE_FILE ?? null,
+    portableExecutablePath: environmentValue('PORTABLE_EXECUTABLE_FILE') ?? null,
     testMode,
   });
   registerIpc();
