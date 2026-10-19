@@ -242,6 +242,61 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         return Result(AutomationStatus.Success, tags.Count == 0 ? "Removed tags from this test." : "Saved test tags.", new { testId = id, tags });
     }
 
+    public async Task<AutomationResult> ReadTestSourceAsync(JsonElement input, CancellationToken cancellationToken)
+    {
+        var root = await RequireProjectRootAsync(cancellationToken).ConfigureAwait(false);
+        var id = ReadString(input, "testId", 96);
+        var runner = ResolveRunner(root);
+        if (!runner.Available) return Result(AutomationStatus.Warning, runner.Message, new { });
+        var discovered = await DiscoverTestsAsync(root, runner, cancellationToken).ConfigureAwait(false);
+        var test = discovered.Tests.FirstOrDefault(candidate => string.Equals(candidate.Id, id, StringComparison.Ordinal));
+        if (test is null) throw new InvalidDataException("That test is no longer in the selected project. Refresh before opening its code.");
+        if (!IsValidTestPath(test.File)) throw new InvalidDataException("That test file path is not supported.");
+        var target = ResolveProjectFile(root, test.File, inspectExistingSegments: true);
+        EnsureNoReparsePoints(root, test.File, includeFile: true);
+        var info = new FileInfo(target);
+        if (!info.Exists) throw new InvalidDataException("That test file no longer exists. Refresh the explorer first.");
+        if (info.Length > 2 * 1024 * 1024) throw new InvalidDataException("This test file is too large to show in Automator.");
+        var source = await File.ReadAllTextAsync(target, cancellationToken).ConfigureAwait(false);
+        var (startLine, code) = ExtractTestSource(source, test.Line);
+        return Result(AutomationStatus.Success, $"Loaded the code for {test.File}.",
+            new { testId = id, file = test.File, startLine, code });
+    }
+
+    /// <summary>Returns the lines of the test declared at <paramref name="line"/>, through its closing bracket (bounded).</summary>
+    internal static (int StartLine, string Code) ExtractTestSource(string source, int line)
+    {
+        const int MaximumLines = 200;
+        var lines = source.Replace("\r\n", "\n").Split('\n');
+        var start = Math.Clamp(line, 1, Math.Max(1, lines.Length));
+        var depth = 0;
+        var seenOpen = false;
+        var end = start;
+        var quote = '\0';
+        for (var index = start - 1; index < lines.Length && index < start - 1 + MaximumLines; index++)
+        {
+            end = index + 1;
+            var text = lines[index];
+            if (quote is '\'' or '"') quote = '\0';
+            for (var position = 0; position < text.Length; position++)
+            {
+                var character = text[position];
+                if (quote != '\0')
+                {
+                    if (character == '\\') position++;
+                    else if (character == quote) quote = '\0';
+                    continue;
+                }
+                if (character is '\'' or '"' or '`') quote = character;
+                else if (character == '/' && position + 1 < text.Length && text[position + 1] == '/') break;
+                else if (character is '(' or '{' or '[') { depth++; seenOpen = true; }
+                else if (character is ')' or '}' or ']') depth--;
+            }
+            if (seenOpen && depth <= 0) break;
+        }
+        return (start, string.Join('\n', lines[(start - 1)..end]));
+    }
+
     public async Task<AutomationResult> RemoveStaleTagsAsync(CancellationToken cancellationToken)
     {
         var root = await RequireProjectRootAsync(cancellationToken).ConfigureAwait(false);
