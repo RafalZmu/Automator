@@ -43,14 +43,19 @@ public sealed class ScriptRunnerTemplateInstaller
             var interpreter = ResolveInterpreter(settings);
             // Catalog IDs have already been validated; an exact resource name is the only source of bytes.
             var filename = $"{template.AssetId}.v{template.Version}.ps1";
-            var destination = Path.Combine(_directory, filename);
             using var source = _openAsset("Automator.Templates." + filename)
                 ?? throw new IOException("Bundled template asset is unavailable. Repair or reinstall Automator.");
             Directory.CreateDirectory(_directory);
-            // An additional copy, or a template whose profile was removed or detached from its origin (for example an editable copy),
-            // shares the already installed script, but only when it is still the exact bundled asset.
-            var reuseInstalled = File.Exists(destination) && SameBytes(source, destination);
-            if (File.Exists(destination) && !reuseInstalled) throw new IOException("Template script already exists. Preserve or move it before installing again; Automator will not overwrite it.");
+            // Read the bundled bytes once so every comparison and the copy use the same content.
+            using var bundled = new MemoryStream();
+            await source.CopyToAsync(bundled, cancellationToken).ConfigureAwait(false);
+            var bundledBytes = bundled.ToArray();
+            // An installed script that is byte-identical to the bundled asset is shared. A file that differs (edited by the user, or left
+            // by an older build) is never overwritten or reused; the bundled script goes to the next free numbered name beside it.
+            var destination = Path.Combine(_directory, filename);
+            for (var suffix = 2; File.Exists(destination) && !SameBytes(bundledBytes, destination); suffix++)
+                destination = Path.Combine(_directory, $"{template.AssetId}.v{template.Version}.{suffix}.ps1");
+            var reuseInstalled = File.Exists(destination);
             var name = template.Name;
             if (usedNames.Contains(name))
             {
@@ -66,7 +71,7 @@ public sealed class ScriptRunnerTemplateInstaller
                 {
                     await using (var target = new FileStream(staging, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     {
-                        await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+                        await target.WriteAsync(bundledBytes, cancellationToken).ConfigureAwait(false);
                         await target.FlushAsync(cancellationToken).ConfigureAwait(false);
                     }
                     cancellationToken.ThrowIfCancellationRequested();
@@ -92,13 +97,10 @@ public sealed class ScriptRunnerTemplateInstaller
         finally { InstallGate.Release(); }
     }
 
-    private static bool SameBytes(Stream source, string path)
+    private static bool SameBytes(byte[] expected, string path)
     {
-        using var expected = new MemoryStream();
-        source.CopyTo(expected);
-        if (source.CanSeek) source.Position = 0;
         var info = new FileInfo(path);
-        return info.Length == expected.Length && expected.ToArray().AsSpan().SequenceEqual(File.ReadAllBytes(path));
+        return info.Length == expected.Length && expected.AsSpan().SequenceEqual(File.ReadAllBytes(path));
     }
 
     /// <summary>Confirms a profile still points at the exact registered asset installed under this data root.</summary>
@@ -121,7 +123,7 @@ public sealed class ScriptRunnerTemplateInstaller
             return false;
         }
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        if (!string.Equals(expectedPath, actualPath, comparison)) return false;
+        if (!string.Equals(expectedPath, actualPath, comparison) && !IsNumberedInstall(template.AssetId, template.Version, actualPath, comparison)) return false;
 
         using var source = _openAsset("Automator.Templates." + filename);
         if (source is null || !File.Exists(actualPath)) return false;
@@ -131,6 +133,17 @@ public sealed class ScriptRunnerTemplateInstaller
         if (info.Length != expected.Length) return false;
         var installedBytes = File.ReadAllBytes(actualPath);
         return expected.ToArray().AsSpan().SequenceEqual(installedBytes);
+    }
+
+    /// <summary>True for the numbered file name used when an unrelated script already occupies the plain installed name.</summary>
+    private bool IsNumberedInstall(string assetId, int version, string actualPath, StringComparison comparison)
+    {
+        var name = Path.GetFileName(actualPath);
+        var prefix = $"{assetId}.v{version}.";
+        if (!string.Equals(Path.GetDirectoryName(actualPath), Path.GetFullPath(_directory).TrimEnd(Path.DirectorySeparatorChar), comparison)
+            || name.Length <= prefix.Length + 4 || !name.StartsWith(prefix, comparison) || !name.EndsWith(".ps1", comparison)) return false;
+        var middle = name[prefix.Length..^4];
+        return middle.Length > 0 && middle.All(char.IsAsciiDigit);
     }
 
     private string ResolveInterpreter(JsonElement settings)

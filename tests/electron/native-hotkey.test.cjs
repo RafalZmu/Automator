@@ -79,6 +79,8 @@ test('real Right Ctrl and Escape input reaches the global hook from an owned for
   }
   const setCursorPosition = async (point) => { await fixtureCommand(`CURSOR:${point.x}:${point.y}`); };
   let app;
+  let page;
+  let completed = false;
   try {
     await waitFor(() => output.includes('FIXTURE_READY:'), 'the owned WinForms target window');
     const fixtureHandle = `0x${BigInt(output.match(/FIXTURE_READY:(\d+)/)[1]).toString(16)}`.toUpperCase();
@@ -101,7 +103,7 @@ test('real Right Ctrl and Escape input reaches the global hook from an owned for
       },
       timeout: 60_000,
     });
-    const page = await app.firstWindow();
+    page = await app.firstWindow();
     await page.getByRole('main', { name: 'Automator launcher' }).waitFor({ state: 'visible' });
     await waitFor(() => page.evaluate(async () => {
       const [initial, diagnostics] = await Promise.all([
@@ -161,7 +163,9 @@ test('real Right Ctrl and Escape input reaches the global hook from an owned for
 
     await sendKey(0x39);
     await waitFor(async () => (await page.evaluate(() => window.automator.getInitialState())).state?.selectedTab === 9, 'the native 9 shortcut to select tab 9');
-    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Snippets, tab 9');
+    // Quick Actions keeps a text field focused, so the host may let the digit through as text. Its delayed action then opens the tab and focuses
+    // the tab search; when the native shortcut wins instead, the tab button is focused. Both are valid ways to reach tab 9.
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Snippets, tab 9' || document.activeElement?.id === 'tab-command-input');
     await sendKey(0x31);
     await waitFor(async () => (await page.evaluate(() => window.automator.getInitialState())).state?.selectedTab === 1, 'the native 1 shortcut to return to tab 1');
     await page.waitForFunction(() => document.activeElement?.id === 'search');
@@ -186,7 +190,28 @@ test('real Right Ctrl and Escape input reaches the global hook from an owned for
     await sendKey(0x1B);
     await waitFor(async () => (await page.evaluate(() => window.automator.getWindowDiagnostics()))?.visible === false, 'Escape to close the reopened launcher');
     await waitFor(async () => (await foregroundWindowHandle()) === fixtureHandle, 'Windows to reactivate the previous foreground app after the reopened launcher closes');
+    completed = true;
   } finally {
+    if (!completed && page) {
+      // CI-only diagnostics: show what the renderer and the host thought when a step timed out.
+      try {
+        const snapshot = await Promise.race([delay(5000, null), page.evaluate(async () => {
+          const state = (await window.automator.getInitialState()).state;
+          const active = document.activeElement;
+          return {
+            active: active ? `${active.tagName}#${active.id}[${active.getAttribute('aria-label') ?? ''}]` : null,
+            hasFocus: document.hasFocus(),
+            selectedTab: state?.selectedTab, visible: state?.visible, mode: state?.mode,
+            diagnostics: await window.automator.getWindowDiagnostics(),
+          };
+        })]);
+        console.error('native-hotkey diagnostics:', JSON.stringify(snapshot));
+        const diagnosticLogDirectory = path.join(dataDirectory, 'Logs');
+        const lines = (await Promise.all((await fs.readdir(diagnosticLogDirectory)).map((name) => fs.readFile(path.join(diagnosticLogDirectory, name), 'utf8')))).join('\n')
+          .split('\n').filter((line) => /Panel\./.test(line));
+        console.error(`native-hotkey host log tail:\n${lines.slice(-25).join('\n')}`);
+      } catch (error) { console.error('native-hotkey diagnostics failed:', String(error)); }
+    }
     keySender?.kill();
     await app?.close().catch(() => {});
     if (originalCursor) {
