@@ -89,6 +89,8 @@ internal static class ScriptRunnerTemplateInstallSpecs
             var collision = await module.ExecuteAsync("installTemplate", input.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
             Ensure(collision.Status != AutomationStatus.Error && await File.ReadAllTextAsync(path) == "user modification",
                 "orphan asset collision installs beside the user's script instead of failing");
+            if (collision.Status == AutomationStatus.Success)
+                await context.Library!.DeleteAsync("profiles", collision.Data.GetProperty("profile").GetProperty("id").GetString()!, CancellationToken.None);
             using var unsafeInput = JsonDocument.Parse("""{"id":"../../escape"}""");
             var unsafeResult = await module.ExecuteAsync("installTemplate", unsafeInput.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
             Ensure(unsafeResult.Status == AutomationStatus.Error, "unknown asset rejected");
