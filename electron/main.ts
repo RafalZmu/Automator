@@ -196,6 +196,9 @@ function setSidePanel(window: BrowserWindow, open: boolean, animate: boolean): v
   // A toggle during an animation starts from wherever the window is; opening is always computed from its closed equivalent.
   const closed = computeSidePanelBounds(from, workArea, panelSize.width, SIDE_PANEL_WIDTH, false);
   const to = open ? computeSidePanelBounds(closed, workArea, panelSize.width, SIDE_PANEL_WIDTH, true) : closed;
+  // Every tab with a history panel asks to close it when it unmounts, even when the window is already narrow. Re-applying equal bounds is not
+  // free on scaled displays (the DIP/pixel round trip can move the window by a pixel), so a switch between tabs would nudge it sideways.
+  if (to.x === from.x && to.y === from.y && to.width === from.width && to.height === from.height) return;
   if (!animate || to.x === from.x && to.width === from.width) { window.setBounds(to, false); return; }
   const started = Date.now();
   sidePanelTimer = setInterval(() => {
