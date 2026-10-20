@@ -48,7 +48,7 @@ public sealed class ScriptRunnerTemplateInstaller
             Directory.CreateDirectory(_directory);
             // Read the bundled bytes once so every comparison and the copy use the same content.
             using var bundled = new MemoryStream();
-            source.CopyTo(bundled);
+            await source.CopyToAsync(bundled, cancellationToken).ConfigureAwait(false);
             var bundledBytes = bundled.ToArray();
             // An installed script that is byte-identical to the bundled asset is shared. A file that differs (edited by the user, or left
             // by an older build) is never overwritten or reused; the bundled script goes to the next free numbered name beside it.
