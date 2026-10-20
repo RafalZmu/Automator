@@ -438,8 +438,8 @@ The coordinator and API cases below are executed by `npm.cmd run test:dotnet`. R
 
 **Steps**
 
-1. Launch the isolated compact host and locate slots 1–8 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
-2. Open Workspace and verify slots 2–8 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
+1. Launch the isolated compact host and locate slots 1–9 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
+2. Open Workspace and verify slots 2–9 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
 
 **Expected result:** The numbered tabs retain their accessible names and show one visible icon in both windows.
 

@@ -99,7 +99,9 @@ public static class LauncherTabRegistry
             new SchedulerModule(),
             new FocusSessionsModule(),
             new WebsiteLauncherModule(),
-            new CodexTaskModule(),
+            // Slot 9 is Snippets. CodexTaskModule and its service, renderer view, and tests are kept but no longer registered;
+            // rebind the module to a slot (it declares slot 9) to bring the Codex task builder back.
+            new SnippetsModule(),
         };
 
         return providers.AsReadOnly();

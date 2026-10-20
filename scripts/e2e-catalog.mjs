@@ -15,13 +15,13 @@ export const pagePath = path.join(root, 'docs', 'e2e', 'index.html');
 
 export const categories = [
   'Launcher', 'Script Runner', 'API', 'Browser Automation', 'Workflows', 'Scheduler', 'Work Time',
-  'Website Launcher', 'Codex', 'Global action search', 'Options', 'Activity and notifications',
+  'Website Launcher', 'Snippets', 'Codex', 'Global action search', 'Options', 'Activity and notifications',
   'Workspace window', 'Agent access (MCP)', 'Platform and shell',
 ];
 
 const tabDirectories = {
   launcher: 'Launcher', 'script-runner': 'Script Runner', api: 'API', 'browser-automation': 'Browser Automation',
-  workflows: 'Workflows', scheduler: 'Scheduler', 'work-time': 'Work Time', 'website-launcher': 'Website Launcher', codex: 'Codex',
+  workflows: 'Workflows', scheduler: 'Scheduler', 'work-time': 'Work Time', 'website-launcher': 'Website Launcher', snippets: 'Snippets', codex: 'Codex',
 };
 
 // First match wins. Matched against the repo-relative path with forward slashes.
@@ -32,6 +32,7 @@ const pathRules = [
   [/api-view/i, 'API'],
   [/browser|playwright/i, 'Browser Automation'],
   [/website-launcher/i, 'Website Launcher'],
+  [/snippets/i, 'Snippets'],
   [/codex/i, 'Codex'],
   [/scheduler/i, 'Scheduler'],
   [/work-time|Focus\.Specs/i, 'Work Time'],

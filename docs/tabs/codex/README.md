@@ -1,4 +1,6 @@
-# Codex — slot 9
+# Codex — not bound to a slot
+
+**Current status:** Slot 9 is now [Snippets](../snippets/README.md). `LauncherTabRegistry` no longer registers `CodexTaskModule`, so the Codex task builder cannot be opened in the running app. The code, contracts, host bridges, and tests below are kept so the module can be registered again; the behavior described here is what that retained code does once it is registered, not what the app offers today. Python, Playwright, and Workflow profiles that Codex saved earlier remain ordinary profiles and keep running through Script Runner, Workflows, and Scheduler.
 
 The **Assistant** selector chooses the local CLI that drafts the task: Codex (default) or Claude Code. Each uses its own installed CLI and sign-in, and the choice is remembered in the browser profile. Claude drafts run `claude -p --model claude-haiku-5-5` with a JSON schema, no tools, no MCP servers, no slash commands, no hooks, and no saved session; the CLI is discovered as `claude.exe` (`~/.local/bin`, `%LOCALAPPDATA%\Programs\claude`, or `PATH`). Implementation: `ClaudeCliClient.cs` and the shared `IAuthoringCliClient.cs`; the provider travels as the optional `provider` property of `getStatus` and `generateDraft`.
 

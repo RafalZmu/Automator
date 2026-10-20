@@ -55,7 +55,7 @@ Run a focused contract test with node --experimental-strip-types --test TEST_FIL
 1. Launch an isolated host, select Launcher, and verify the app search focus and initial view.
 2. Attempt a module action for an inactive tab.
 3. Change the theme, save it, and wait for the visible launcher transition to settle.
-4. Select reserved tab 9 and return to Launcher, then close with Escape.
+4. Select the Snippets tab (tab 9) and return to Launcher, then close with Escape.
 
 **Expected result:** Inactive module actions are rejected, the selected theme is applied, tab changes preserve the expected focus, and Escape hides the launcher and native window.
 
@@ -440,7 +440,7 @@ Run this packaged lifecycle case separately with npm.cmd run test:packaged-lifec
 
 **Steps**
 
-1. Launch the isolated compact host and locate slots 1–8 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
-2. Open Workspace and verify slots 2–8 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
+1. Launch the isolated compact host and locate slots 1–9 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
+2. Open Workspace and verify slots 2–9 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
 
 **Expected result:** The numbered tabs retain their accessible names and show one visible icon in both windows.

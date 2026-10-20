@@ -8,6 +8,8 @@ const { waitForPageCondition } = require('./wait-for-page.cjs');
 
 const workspace = path.resolve(__dirname, '../..');
 
+const codexUnboundReason = 'Codex is not bound to a slot while slot 9 is Snippets; re-enable when the Codex tab is registered again.';
+
 function isolatedDataDirectory(name) {
   return path.join(workspace, 'artifacts', 'test-data', 'electron-ui', name, randomUUID());
 }
@@ -30,7 +32,7 @@ async function launchHost(name, dataDirectory = isolatedDataDirectory(name), bac
   });
 }
 
-test('Codex slot 9 shows recoverable CLI readiness and blocks export unless active', async () => {
+test('Codex slot 9 shows recoverable CLI readiness and blocks export unless active', { skip: codexUnboundReason }, async () => {
   const app = await launchHost('codex-builder-ui');
   try {
     const page = await app.firstWindow();
@@ -55,7 +57,7 @@ test('Codex slot 9 shows recoverable CLI readiness and blocks export unless acti
   } finally { await app.close(); }
 });
 
-test('Codex native export does not open a save dialog for an unsaved draft', async () => {
+test('Codex native export does not open a save dialog for an unsaved draft', { skip: codexUnboundReason }, async () => {
   const dataDirectory = isolatedDataDirectory('codex-unsaved-export');
   const backendDataDirectory = path.join(dataDirectory, 'backend');
   const draftId = randomUUID().replaceAll('-', '');
@@ -236,10 +238,10 @@ test('settings and tab transitions preserve focus in the isolated desktop host',
     await assertVisibleLauncher(page);
     await page.screenshot({ path: path.join(workspace, 'artifacts', 'gui-migration', 'dark-launcher.png'), animations: 'allow' });
 
-    await page.getByRole('tab', { name: 'Codex, tab 9' }).click();
+    await page.getByRole('tab', { name: 'Snippets, tab 9' }).click();
     await page.getByRole('textbox', { name: 'Search applications' }).waitFor({ state: 'hidden' });
     await assertVisibleLauncher(page);
-    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Codex, tab 9');
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Snippets, tab 9');
     await page.getByRole('tab', { name: 'Launcher, tab 1' }).click();
     await page.getByRole('textbox', { name: 'Search applications' }).waitFor({ state: 'visible' });
     await assertVisibleLauncher(page);

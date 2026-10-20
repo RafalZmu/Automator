@@ -1,6 +1,6 @@
 # Codex task builder test coverage
 
-This guide describes the Codex tab's renderer, CLI, approval, save/export, and execution integration checks. Node test titles match their source tests; backend specifications are listed by their registered suite name or method.
+This guide describes the Codex tab's renderer, CLI, approval, save/export, and execution integration checks. Codex is not bound to a slot while slot 9 is Snippets, so the two Electron UI flows under `tests/electron/ui-flow.test.cjs` are skipped (and left out of the E2E catalog); the other cases here exercise code that does not need a registered tab. Node test titles match their source tests; backend specifications are listed by their registered suite name or method.
 
 Run focused Node checks with `node --experimental-strip-types --test tests/rpc-contracts.test.mjs tests/electron/codex-builder.test.cjs`. Run the Codex UI flow after `npm.cmd run build:desktop` with `node --experimental-strip-types --test --test-concurrency=1 tests/electron/ui-flow.test.cjs`. Run Codex Application specifications with `dotnet run --project tests/Automator.Application.Specs/Automator.Application.Specs.csproj --no-restore`; Workflow specifications are in `tests/Automator.Workflows.Specs`.
 

@@ -11,6 +11,7 @@ import { WorkflowsView } from './modules/WorkflowsView';
 import { SchedulerView } from './modules/SchedulerView';
 import { FocusSessionsView } from './modules/FocusSessionsView';
 import { WebsiteLauncherView } from './modules/WebsiteLauncherView';
+import { SnippetsView } from './modules/SnippetsView';
 import { CodexView } from './modules/CodexView';
 
 type ViewProps = {
@@ -64,6 +65,8 @@ export const launcherViewRegistry = Object.freeze({
   scheduler: SchedulerView,
   'focus-sessions': FocusSessionsView,
   'website-launcher': WebsiteLauncherView,
+  snippets: SnippetsView,
+  // Kept so the Codex view can be bound to a slot again; no registered module currently uses this kind.
   codex: CodexView,
   reserved: ReservedTabView,
 } satisfies Record<BundledTabViewKind, ComponentType<ViewProps>>);

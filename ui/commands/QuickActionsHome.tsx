@@ -3,7 +3,7 @@ import { AppWindow, ArrowDown, ArrowUp, CornerDownLeft, Search, Settings2, Spark
 import { canAutoRunTabCommand, matchTabCommands, resolveTabCommand, type TabCommand } from './commandMatching';
 
 export type QuickAction = TabCommand & {
-  kind: 'binding' | 'module' | 'tab' | 'system';
+  kind: 'binding' | 'module' | 'tab' | 'system' | 'snippet';
   scope: string;
   category: string;
   shortcut?: string;

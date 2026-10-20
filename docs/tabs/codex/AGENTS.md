@@ -2,13 +2,17 @@
 
 Read the root AGENTS.md first. Codex drafts repeatable tasks in Python, Playwright, or Workflow formats using the installed local Codex CLI and its existing sign-in.
 
+## Current status: unbound
+
+Slot 9 belongs to Snippets, and `LauncherTabRegistry.CreateProviders` does not register `CodexTaskModule`. Keep the module, service, CLI clients, renderer view, contracts, export/picker bridges, and tests in place. To bring the tab back, register `CodexTaskModule` in a free slot (its definition still declares slot 9, and the registry allows only nine modules, so one existing module must move or leave), add its icon to `numberedTabIcons` in `ui/App.tsx`, restore its tab entry in the browser-preview bridge `ui/bridge.ts`, and remove the `skip` from the Codex flows in `tests/electron/ui-flow.test.cjs`. Update the registry specs, this guide, and the root README in the same change. Until then do not describe Codex as reachable.
+
 ## Authoring and execution rules
 
 - Keep CLI discovery, status, structured generation, draft storage, execution, approval metadata, and saved-profile persistence in `CodexCliClient.cs`, `CodexTaskService.cs`, and `CodexTaskModule.cs`. Keep the renderer in `ui/modules/CodexView.tsx` and route actions through the declared `codex` module capability.
 - Codex CLI is an authoring tool only. Generate with the CLI's read-only sandbox and structured output schema. Never ask Codex to execute the user's requested task. Do not add a separate API-key, login, or provider path; show the CLI setup/sign-in state and let the user retry.
 - For draft generation, ignore user CLI configuration and disable the known local execution, browser, app, MCP, plugin, hook, and search features; keep the read-only sandbox as defense in depth. CLI authentication still comes from its existing CODEX_HOME sign-in. Do not claim the selected scope is technically enforced or that the CLI can never access other resources.
 - Present the generated plan, complete source, declared scope, inputs, and effects before execution. Require an explicit first-run review and approval. Require an additional immediate confirmation for overwrite, delete, submit, or send effects.
-- Let users add local files and folders to the declared scope with the native picker or by typing paths; websites are entered as URLs. Authorize the native picker only while Codex slot 9 is active.
+- Let users add local files and folders to the declared scope with the native picker or by typing paths; websites are entered as URLs. Authorize the native picker only while the Codex tab is active.
 - The selected scope is consent context, not a technical boundary. Generated Python and Playwright run with the signed-in Windows user's permissions through existing Automator runners. Never describe the scope as an OS sandbox or promise that generated code cannot access other user resources.
 - If Codex proposes scope beyond the selected items, require the user to accept the additional items and generate a fresh draft for that scope. Review and approve the new source and scope before running it.
 - Saving is available only after a successful run. Python saves as a normal Script Runner profile; Playwright saves as a `playwright-task` profile; Workflow saves as a normal Workflow profile made from existing saved profile IDs. Export is available only for saved tasks and uses the narrow Codex export bridge.
