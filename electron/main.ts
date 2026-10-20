@@ -188,9 +188,14 @@ let sidePanelTimer: NodeJS.Timeout | undefined;
 
 /** Widens (to the left) or narrows the compact window for the side panel, easing the bounds. A hidden window just records the state and is sized when it is next shown. */
 function setSidePanel(window: BrowserWindow, open: boolean, animate: boolean): void {
+  const wasOpen = sidePanelOpen;
+  const animating = sidePanelTimer !== undefined;
   sidePanelOpen = open;
   if (sidePanelTimer) { clearInterval(sidePanelTimer); sidePanelTimer = undefined; }
   if (!window.isVisible()) return;
+  // Closing a panel that is already closed must not touch the window: the closed bounds are derived from getBounds(), and a width that
+  // differs from the base by a rounding pixel on a scaled display would shift x on every tab switch.
+  if (!open && !wasOpen && !animating) return;
   const from = window.getBounds();
   const workArea = screen.getDisplayMatching(from).workArea;
   // A toggle during an animation starts from wherever the window is; opening is always computed from its closed equivalent.
