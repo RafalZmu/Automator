@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronRight, CircleAlert, FilePlus2, Code2, FolderOpen, Loader2, LoaderCircle, Play, Plus, RefreshCw, Square, Tag, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, CircleAlert, FilePlus2, Code2, FolderOpen, Loader2, LoaderCircle, MonitorPlay, Play, Plus, RefreshCw, Square, Tag, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { BackendUiState } from '../../contracts/rpc';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
@@ -106,6 +106,7 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
   const [history, setHistory] = useState<PlaywrightRunRecord[]>([]);
   const [backendActive, setBackendActive] = useState<PlaywrightActiveRun[]>([]);
   const [shownRunId, setShownRunId] = useState<string | null>(null);
+  const [uiModeOpen, setUiModeOpen] = useState(false);
   const [profiles, setProfiles] = useState<BrowserAutomationProfile[]>([]);
   const { active: activeRun, last: lastRun } = useBrowserRun();
   const sidePanel = useHistorySidePanel(surface, historyOpenKey);
@@ -365,6 +366,36 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
     }
   };
 
+  const openUiMode = async () => {
+    if (busy || activeRun || foreignRunning || uiModeOpen) return;
+    // Like runs, dispatch through the bridge: the backend keeps UI mode alive until its window closes, even if this tab unmounts.
+    const bridge = window.automator;
+    const action = tab.actions.find((candidate) => candidate.id === 'openUiMode');
+    if (!bridge || !action) {
+      setNotice('Playwright UI mode is not available in this window.');
+      setNoticeIsError(true);
+      return;
+    }
+    setUiModeOpen(true);
+    setNotice('Playwright UI mode is open in its own window. Close it to run tests from here again.');
+    setNoticeIsError(false);
+    try {
+      const result = await bridge.dispatchModuleAction({
+        requestId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        contractVersion: tab.contractVersion, moduleId: tab.id, actionId: action.id, actionVersion: action.version, input: {},
+      });
+      if (!mounted.current) return;
+      setNotice(result.message);
+      setNoticeIsError(result.status !== 'success');
+    } catch (error) {
+      if (!mounted.current) return;
+      setNotice(error instanceof Error ? error.message : 'Playwright UI mode failed.');
+      setNoticeIsError(true);
+    } finally {
+      if (mounted.current) setUiModeOpen(false);
+    }
+  };
+
   const removeStaleTags = async () => {
     if (busy || !explorer?.staleTags.length) return;
     setBusy('stale');
@@ -378,9 +409,10 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
     } finally { setBusy(null); }
   };
 
-  const locked = !!busy || !!activeRun || foreignRunning;
+  const locked = !!busy || !!activeRun || foreignRunning || uiModeOpen;
   const commands = [
     ...(activeRun ? [{ id: 'cancel-playwright-run', label: 'Cancel running Playwright run', keywords: ['stop', 'terminate'], disabled: activeRun.canceling, run: () => cancelBrowserRun() }] : []),
+    { id: 'open-ui-mode', label: 'Open Playwright tests in UI mode', keywords: ['ui', 'debug', 'watch'], disabled: !explorer?.projectRoot || !explorer.runner.available || locked, run: openUiMode },
     { id: 'refresh-tests', label: 'Refresh Playwright tests', keywords: ['discover', 'reload'], disabled: !explorer?.projectRoot || !!busy, run: refreshTests },
     { id: 'choose-project', label: 'Choose Playwright project folder', keywords: ['folder', 'directory'], disabled: !!busy, run: chooseProject },
     { id: 'create-section', label: 'Create Playwright test section', keywords: ['new file', 'spec'], disabled: !explorer?.projectRoot || !!busy, run: openCreateSection },
@@ -465,6 +497,7 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
     <div className="playwright-toolbar">
       <button className="secondary-button" type="button" disabled={!!busy || !explorer?.projectRoot} onClick={() => void refreshTests()}>{busy === 'discover' ? <LoaderCircle size={12} /> : <RefreshCw size={12} />} Refresh tests</button>
       <button className="secondary-button" type="button" disabled={!!busy || !explorer?.projectRoot} onClick={openCreateSection}><Plus size={12} /> New section</button>
+      <button className="secondary-button" type="button" title="Run `playwright test --ui` in its own window" disabled={locked || !explorer?.projectRoot || !explorer.runner.available} onClick={() => void openUiMode()}>{uiModeOpen ? <LoaderCircle size={12} /> : <MonitorPlay size={12} />} UI mode</button>
       <span className="spacer" />
       <select aria-label="Tag group" value={selectedTag} onChange={(event) => setSelectedTag(event.target.value)} disabled={!explorer?.tags.length}>
         {explorer?.tags.length ? explorer.tags.map((tag) => <option key={tag} value={tag}>{tag}</option>) : <option value="">No tag groups</option>}

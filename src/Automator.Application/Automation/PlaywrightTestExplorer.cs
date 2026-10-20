@@ -30,6 +30,7 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
     private const int MaximumTagsPerTest = 16;
     private const int MaximumTagLength = 48;
     private static readonly TimeSpan DiscoveryTimeout = TimeSpan.FromSeconds(90);
+    private static readonly TimeSpan UiModeTimeout = AutomationProcessLimits.MaximumTimeout;
     private static readonly TimeSpan MaximumRunTimeout = TimeSpan.FromMinutes(30);
     private static readonly Regex TestListLine = new(
         "^(?:\\[(?<project>[^\\]]{1,128})\\]\\s*[›>]\\s*)?(?<file>.+?\\.(?:spec|test)\\.[jt]s)(?::(?<line>\\d{1,8})(?::(?<column>\\d{1,8}))?)?\\s*[›>]\\s*(?<titles>.+)$",
@@ -345,6 +346,24 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         foreach (var record in stale)
             await library.DeleteAsync(TagCollection, TestRecordId(root, record.Identity.Id), cancellationToken).ConfigureAwait(false);
         return Result(AutomationStatus.Success, stale.Length == 0 ? "There are no stale tag records." : $"Removed {stale.Length} stale tag record{(stale.Length == 1 ? string.Empty : "s")}.", new { removed = stale.Length });
+    }
+
+    /// <summary>
+    /// Opens `playwright test --ui` for the selected project and waits until its window is closed. It is an interactive
+    /// session, not a recorded run: it has no run history entry, reporter events, or per-test outcomes.
+    /// </summary>
+    public async Task<AutomationResult> OpenUiModeAsync(CancellationToken cancellationToken)
+    {
+        var root = await RequireProjectRootAsync(cancellationToken).ConfigureAwait(false);
+        var runner = ResolveRunner(root);
+        if (!runner.Available) return Result(AutomationStatus.Warning, runner.Message, new { });
+        var process = await processes.ExecuteAsync(new AutomationProcessRequest(runner.NodePath!,
+            [runner.CliPath!, "test", "--ui"], root, UiModeTimeout), cancellationToken).ConfigureAwait(false);
+        if (process.TimedOut)
+            return Result(AutomationStatus.Warning, "Playwright UI mode was closed after its 1-hour limit.", new { timedOut = true, durationMilliseconds = process.DurationMilliseconds });
+        return process.ExitCode == 0
+            ? Result(AutomationStatus.Success, "Playwright UI mode was closed.", new { timedOut = false, exitCode = process.ExitCode, durationMilliseconds = process.DurationMilliseconds })
+            : Result(AutomationStatus.Error, $"Playwright UI mode exited with code {process.ExitCode}.", new { timedOut = false, exitCode = process.ExitCode, durationMilliseconds = process.DurationMilliseconds });
     }
 
     public async Task<AutomationResult> RunAsync(JsonElement input, CancellationToken cancellationToken)

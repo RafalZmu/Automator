@@ -60,6 +60,7 @@ public sealed class BrowserAutomationModule : ILauncherTabModuleProvider
             new("readTestSource", 1, [LibraryCapability, ProcessCapability]),
             new("removeStaleTags", 1, [LibraryCapability, ProcessCapability]),
             new("runTests", 1, [LibraryCapability, ProcessCapability]),
+            new("openUiMode", 1, [LibraryCapability, ProcessCapability]),
             new("listRunHistory", 1, [LibraryCapability]),
             new("deleteRunHistory", 1, [LibraryCapability]),
             new("listProfiles", 1, [LibraryCapability]),
@@ -102,6 +103,7 @@ public sealed class BrowserAutomationModule : ILauncherTabModuleProvider
                 "readTestSource" => await CreateExplorer(services).ReadTestSourceAsync(input, cancellationToken).ConfigureAwait(false),
                 "removeStaleTags" => await CreateExplorer(services).RemoveStaleTagsAsync(cancellationToken).ConfigureAwait(false),
                 "runTests" => await CreateExplorer(services).RunAsync(input, cancellationToken).ConfigureAwait(false),
+                "openUiMode" => await CreateExplorer(services).OpenUiModeAsync(cancellationToken).ConfigureAwait(false),
                 "listRunHistory" => await CreateExplorer(services).ListRunHistoryAsync(cancellationToken).ConfigureAwait(false),
                 "deleteRunHistory" => await CreateExplorer(services).DeleteRunHistoryAsync(input, cancellationToken).ConfigureAwait(false),
                 "listProfiles" => await ListProfilesAsync(services, cancellationToken).ConfigureAwait(false),
@@ -115,7 +117,7 @@ public sealed class BrowserAutomationModule : ILauncherTabModuleProvider
         }
         catch (OperationCanceledException) { throw; }
         catch (BrowserProfileValidationException exception) { return Error(exception.Message); }
-        catch (InvalidDataException exception) when (actionId is "setProject" or "discoverTests" or "createSection" or "appendTest" or "saveTestTags" or "readTestSource" or "removeStaleTags" or "runTests" or "deleteRunHistory")
+        catch (InvalidDataException exception) when (actionId is "setProject" or "discoverTests" or "createSection" or "appendTest" or "saveTestTags" or "readTestSource" or "removeStaleTags" or "runTests" or "openUiMode" or "deleteRunHistory")
         { return Error(exception.Message); }
         catch
         {
@@ -131,6 +133,7 @@ public sealed class BrowserAutomationModule : ILauncherTabModuleProvider
                 "readTestSource" => "The test code could not be loaded.",
                 "removeStaleTags" => "Stale test tags could not be removed.",
                 "runTests" => "The Playwright test run failed. Check the project runner and configuration.",
+                "openUiMode" => "Playwright UI mode could not be started. Check the project runner and configuration.",
                 "listRunHistory" => "The Playwright run history could not be loaded.",
                 "deleteRunHistory" => "The Playwright run history could not be updated.",
                 "getRuntimeStatus" => "Browser runtime status is unavailable.",
