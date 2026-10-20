@@ -1,6 +1,6 @@
 # Snippets test coverage
 
-This file documents the snippet settings contract, module registration, and the Electron save-and-copy flow. Test titles match their node:test descriptions or registered specification names.
+This file documents the snippet settings and state contracts, module registration, the published launch-panel shortcuts, and the Electron save-and-copy and launch-panel flows. Test titles match their node:test descriptions or registered specification names.
 
 Run the focused contract cases with:
 
@@ -81,6 +81,23 @@ Run the full contract suite with npm.cmd run test:contracts. The Application spe
 
 **Expected result:** Each read returns an empty list rather than a partly valid one.
 
+### rebuilds copyable snippets from the module state, joining chunked text
+
+**Steps**
+
+1. Read a module state holding one single-piece snippet and one whose text is split into two pieces, plus an unrelated status entry.
+2. Read an undefined state and a state with no snippet entries.
+
+**Expected result:** Each snippet is rebuilt with its name, lower-case shortcut, and the pieces joined in order; empty states give no snippets.
+
+### skips state snippets that are incomplete, invalid, or repeat a shortcut without hiding the others
+
+**Steps**
+
+1. Read a state containing one valid snippet and entries with a missing text piece, invalid JSON, an invalid or empty shortcut, control characters, blank text, too many pieces, a repeated shortcut, and an invalid key.
+
+**Expected result:** Only the valid snippet is returned.
+
 ## Application specification — tests/Automator.Application.Specs/Program.cs
 
 ### snippets module keeps its text in module settings and registers no actions
@@ -92,6 +109,16 @@ Run the full contract suite with npm.cmd run test:contracts. The Application spe
 3. Try to dispatch an action to the module.
 
 **Expected result:** Snippets is registered in slot 9 as `snippets` with no actions or capabilities, defaults to an empty list, stores and returns the text unchanged, and rejects every action dispatch. The related registry case **tab registry publishes nine stable slots and their actions** checks that slot 9 is Snippets and that Codex is not registered.
+
+### snippets module publishes copyable shortcuts in state-sized chunks and skips invalid entries
+
+**Steps**
+
+1. Build the published state entries from settings holding snippets with a shortcut, a text that straddles a 2000-character boundary with a surrogate pair, a 4000-character text, and entries without a shortcut, with a repeated shortcut, with an invalid key, with blank text, and with a control character.
+2. Check every value's length, the published keys, and the rejoined text.
+3. Build entries from missing, non-array, and malformed settings.
+
+**Expected result:** Only valid snippets with a unique shortcut are published, every value is at most 2048 characters, text is chunked without splitting a surrogate pair and rejoins exactly, and malformed settings publish nothing instead of throwing.
 
 ## Electron happy path — tests/electron/tab-happy-path-visibility.test.cjs
 
@@ -108,6 +135,17 @@ Run the full contract suite with npm.cmd run test:contracts. The Application spe
 **Expected result:** The Copy and Save buttons are visible, inside their bounds, and uncovered. Both ways of copying put the saved text on the clipboard (with Windows line endings), no notice repeats the text, and the settings store the name, shortcut, and text.
 
 Run after npm.cmd run build:desktop with node --experimental-strip-types --test --test-concurrency=1 tests/electron/tab-happy-path-visibility.test.cjs.
+
+### Snippets copy from the launch panel, close the launcher, and never open their tab
+
+**Steps**
+
+1. Start an isolated host whose saved Snippets preferences hold a short snippet, a snippet over 2500 characters, and one without a shortcut.
+2. Set the clipboard to a placeholder, then type the short snippet's shortcut in the Quick Actions search and press Enter.
+3. Read the clipboard, the launcher's visibility, and the selected tab. Check that no Snippets view was rendered.
+4. Repeat from a fresh host with the long snippet's shortcut.
+
+**Expected result:** The matching option is listed under Snippets. The exact text (including the long snippet's line break) is on the clipboard, the launcher closes, Launcher stays the selected tab, and the Snippets view never opens.
 
 ## Shared numbered-tab icon coverage
 

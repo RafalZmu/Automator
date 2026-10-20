@@ -1064,6 +1064,23 @@ public sealed class BackendServer : IAsyncDisposable
                 // Invalid imported preferences are not exposed to Global Action Search; the tab reports the settings issue.
             }
         }
+
+        // Snippets with a shortcut are published so the launch panel can copy one without opening the Snippets tab.
+        var snippetsStateIndex = Array.FindIndex(moduleStates, item => item.ModuleId == SnippetsModule.IdValue);
+        if (snippetsStateIndex >= 0 && _automationModules is not null)
+        {
+            try
+            {
+                var snippetSettings = _automationModules.GetSettings(SnippetsModule.IdValue, settings.ModuleSettings);
+                var values = new Dictionary<string, string>(moduleStates[snippetsStateIndex].Values, StringComparer.Ordinal);
+                foreach (var (key, value) in SnippetsModule.CreateShortcutStateValues(snippetSettings)) values[key] = value;
+                moduleStates[snippetsStateIndex] = moduleStates[snippetsStateIndex] with { Values = values };
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or JsonException or InvalidDataException)
+            {
+                // Unreadable preferences publish no shortcuts; the tab reports the settings issue.
+            }
+        }
         return new BackendUiState(
             RpcProtocol.Version,
             _buildId,

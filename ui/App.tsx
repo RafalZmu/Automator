@@ -11,6 +11,7 @@ import { backendUiStateSchema, type AutomationResult, type BackendUiState, type 
 import type { RunActivityEntry, RunActivitySnapshot } from '../contracts/activity';
 import type { VariableJsonValue } from './contracts/variables';
 import { readWebsiteLauncherQuickActions } from './contracts/websiteLauncher';
+import { readSnippetShortcuts } from './contracts/snippets';
 import { createAutomationServices } from './automationServices';
 import type { AutomationServices } from './automationServices';
 import { getAutomatorBridge } from './bridge';
@@ -339,6 +340,8 @@ export function App() {
   const quickActionsHomeRef = useRef(false);
   const commandCatalog = useAllTabCommandCatalog();
   const resolveLiveCommand = useTabCommandResolver();
+  const snippetStateValues = state?.moduleStates.find((item) => item.moduleId === 'snippets')?.values;
+  const snippetShortcuts = useMemo(() => readSnippetShortcuts(snippetStateValues), [snippetStateValues]);
 
   const setQuickActionsHome = useCallback((open: boolean) => {
     quickActionsHomeRef.current = open;
@@ -709,7 +712,8 @@ export function App() {
     });
     const moduleCommands: QuickAction[] = [...bootstrappedCommands, ...commandCatalog.flatMap(({ scope, command }) => {
       const tab = state.tabs.find((candidate) => candidate.id === scope);
-      if (!tab) return [];
+      // Snippets copy from the launch panel through snippetActions below, without opening their tab.
+      if (!tab || scope === 'snippets') return [];
       return [{
         id: `action:${scope}:${command.id}`,
         label: command.label,
@@ -723,11 +727,23 @@ export function App() {
         run: noop,
       }];
     })];
+    // Only the name and shortcut are searchable; the text is read from the module state when the action runs.
+    const snippetActions: QuickAction[] = snippetShortcuts.map((snippet) => ({
+      id: `snippet:${snippet.id}`,
+      label: `${snippet.alias} · ${snippet.name}`,
+      keywords: [snippet.alias, snippet.name, 'snippet copy clipboard paste'],
+      kind: 'snippet',
+      scope: 'snippets',
+      category: 'Snippets · copy to clipboard',
+      shortcut: snippet.alias,
+      targetId: snippet.id,
+      run: noop,
+    }));
     const systemActions: QuickAction[] = [
       { id: 'system:add-app', label: 'Add an application', keywords: ['browse', 'launcher', 'catalog'], kind: 'system', scope: 'system', category: 'Launcher', targetId: 'catalog', run: noop },
       { id: 'system:settings', label: 'Open Settings', keywords: ['preferences', 'appearance', 'hotkey'], kind: 'system', scope: 'system', category: 'Automator', targetId: 'settings', run: noop },
     ];
-    return [...bindings, ...moduleCommands, ...tabs, ...systemActions];
+    return [...bindings, ...moduleCommands, ...snippetActions, ...tabs, ...systemActions];
   })();
 
   const waitForTabInput = async (tabId: string, timeoutMs = 2500): Promise<HTMLInputElement | null> => {
@@ -746,6 +762,15 @@ export function App() {
     if (action.kind === 'binding') {
       const next = await bridge.activateBinding(action.targetId!);
       acceptState(next);
+      return;
+    }
+    if (action.kind === 'snippet') {
+      const snippet = snippetShortcuts.find((candidate) => candidate.id === action.targetId);
+      if (!snippet) throw new Error('That snippet is no longer available.');
+      if (!navigator.clipboard?.writeText) throw new Error('The clipboard is unavailable.');
+      // Copy while this window still has focus, then hide the launcher without switching tabs so the user can paste at once.
+      await navigator.clipboard.writeText(snippet.value);
+      await runCommand(() => bridge.close());
       return;
     }
     if (action.kind === 'system') {

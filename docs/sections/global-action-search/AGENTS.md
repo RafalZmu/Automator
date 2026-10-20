@@ -8,6 +8,7 @@ Read the root AGENTS.md first. Global Action Search is the compact launcher's ho
 - Add confirmation prompts for actions with destructive or externally visible effects; do not auto-run a command merely because its name is similar.
 - Preserve app aliases as a separate Tab 1 flow. Do not repurpose digit keys or add a new numbered slot for search.
 - Website Launcher aliases are exposed as `<alias>w`; keep the suffix and route the resulting command through the Website Launcher tab's live module command.
+- Snippets are the one case where the global surface runs an action itself: it lists the published Snippets state entries, copies the text, and closes the launcher without selecting a tab. Keep the Snippets tab's own commands out of this surface so they do not appear twice, and keep the text out of labels and keywords.
 - Add command matching and renderer integration tests when changing ranking, routing, focus, or execution timing.
 
 Code: ui/commands/QuickActionsHome.tsx, TabCommandBar.tsx, TabCommandRegistry.tsx, and commandMatching.ts; composition and routing live in ui/App.tsx.

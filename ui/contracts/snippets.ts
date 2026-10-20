@@ -59,6 +59,42 @@ export function validateSnippetsSettings(value: unknown): string[] {
   return errors;
 }
 
+/** A snippet the launch panel can copy: it has a shortcut. */
+export type SnippetShortcut = { id: string; name: string; alias: string; value: string };
+
+const META_PREFIX = 'meta/';
+const TEXT_PREFIX = 'text/';
+const MAX_TEXT_CHUNKS = 4;
+
+/**
+ * Rebuilds the copyable snippets from the Snippets module state. The host publishes each one as a `meta/{id}` entry (name, shortcut,
+ * chunk count) and its text in `text/{id}/{index}` entries, because state values are limited to 2048 characters. Anything incomplete
+ * or invalid is skipped so a bad entry can never hide the others.
+ */
+export function readSnippetShortcuts(values: Readonly<Record<string, string>> | undefined): SnippetShortcut[] {
+  if (!values) return [];
+  const shortcuts: SnippetShortcut[] = [];
+  const aliases = new Set<string>();
+  for (const [key, meta] of Object.entries(values)) {
+    if (!key.startsWith(META_PREFIX) || shortcuts.length >= MAX_SNIPPETS) continue;
+    const id = key.slice(META_PREFIX.length);
+    if (!idPattern.test(id)) continue;
+    let parsed: unknown;
+    try { parsed = JSON.parse(meta); } catch { continue; }
+    if (!isRecord(parsed) || !validName(parsed.name) || typeof parsed.alias !== 'string' || !aliasPattern.test(parsed.alias)) continue;
+    const chunks = parsed.chunks;
+    if (typeof chunks !== 'number' || !Number.isInteger(chunks) || chunks < 1 || chunks > MAX_TEXT_CHUNKS) continue;
+    const parts = Array.from({ length: chunks }, (_, index) => values[`${TEXT_PREFIX}${id}/${index}`]);
+    if (parts.some((part) => typeof part !== 'string')) continue;
+    const value = parts.join('');
+    const alias = parsed.alias.toLocaleLowerCase();
+    if (!validValue(value) || aliases.has(alias)) continue;
+    aliases.add(alias);
+    shortcuts.push({ id, name: parsed.name, alias, value });
+  }
+  return shortcuts;
+}
+
 export function parseSnippetsSettings(value: unknown): SnippetsSettings {
   const errors = validateSnippetsSettings(value);
   if (errors.length || !isRecord(value) || !Array.isArray(value.snippets)) throw new Error(errors[0] ?? 'Snippet settings are invalid.');

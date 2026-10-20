@@ -14,6 +14,8 @@ Source of truth: `docs/sections/global-action-search/` in the repository. This c
 
 Global Action Search appears as the default home surface when the compact launcher opens. It searches actions registered by tabs; it is not an additional tab and does not replace the Tab 1 app-alias search. A single unambiguous match runs automatically after the search settles. Multiple matches remain visible for selection; a tab-specific action switches to its tab before running.
 
+Snippets that have a shortcut are listed here as `<shortcut> · <name>` under Snippets. Choosing one, or letting a unique match run, copies its text to the clipboard and closes the launcher without switching tabs; see [Snippets](../../tabs/snippets/README.md).
+
 Website Launcher aliases are also available here with a trailing `w` (for example, `docsw`). The suffix keeps website shortcuts distinguishable from app aliases with the same letters. Saved website shortcuts are loaded from their module settings at startup and refreshed after edits.
 
 ### Code map
@@ -37,6 +39,7 @@ Read the root AGENTS.md first. Global Action Search is the compact launcher's ho
 - Add confirmation prompts for actions with destructive or externally visible effects; do not auto-run a command merely because its name is similar.
 - Preserve app aliases as a separate Tab 1 flow. Do not repurpose digit keys or add a new numbered slot for search.
 - Website Launcher aliases are exposed as `<alias>w`; keep the suffix and route the resulting command through the Website Launcher tab's live module command.
+- Snippets are the one case where the global surface runs an action itself: it lists the published Snippets state entries, copies the text, and closes the launcher without selecting a tab. Keep the Snippets tab's own commands out of this surface so they do not appear twice, and keep the text out of labels and keywords.
 - Add command matching and renderer integration tests when changing ranking, routing, focus, or execution timing.
 
 Code: ui/commands/QuickActionsHome.tsx, TabCommandBar.tsx, TabCommandRegistry.tsx, and commandMatching.ts; composition and routing live in ui/App.tsx.

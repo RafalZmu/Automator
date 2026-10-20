@@ -108,6 +108,7 @@ flowchart LR
   registry -->|dispatches to| worktime
   registry -->|dispatches to| website
   snippets -->|stores text as module preferences| settings
+  snippets -->|adds shortcut copy actions| search
 
   launcher -->|app catalog and activation| windows
   script -->|runs saved scripts| processService
@@ -136,7 +137,7 @@ flowchart LR
   host -->|writes structured diagnostics| logs
 ```
 
-The tab nodes represent the user-facing view and, where applicable, its matching compiled-in backend module. Slot 1 keeps legacy command routes, so it does not use the module-action dispatch path shown below. Slot 9 is Snippets: it registers no module actions, so it does not use the dispatch path and keeps its text in module preferences, and the clipboard write happens in the renderer. The Codex task builder code is retained but is not bound to a slot. Work Time is the product label even though its backend module still uses the `FocusSessionsModule` name. The old WinUI application and retained focus-cycle coordinator are compatibility code and are omitted from the active runtime graph.
+The tab nodes represent the user-facing view and, where applicable, its matching compiled-in backend module. Slot 1 keeps legacy command routes, so it does not use the module-action dispatch path shown below. Slot 9 is Snippets: it registers no module actions, so it does not use the dispatch path and keeps its text in module preferences, and the clipboard write happens in the renderer. Its snippets that have a shortcut are also published in the module state so Global Action Search can copy one and close the launcher without opening the tab. The Codex task builder code is retained but is not bound to a slot. Work Time is the product label even though its backend module still uses the `FocusSessionsModule` name. The old WinUI application and retained focus-cycle coordinator are compatibility code and are omitted from the active runtime graph.
 
 ### Method-level layer: Browser Automation `runTests`
 

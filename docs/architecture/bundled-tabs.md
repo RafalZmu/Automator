@@ -34,7 +34,7 @@ Profiles are persisted in the `script-runner/profiles` SQLite collection. Each p
 
 ## Snippets (slot 9)
 
-`SnippetsModule` is registered by `LauncherTabRegistry.CreateProviders` with the `snippets` module ID and view kind. It declares no actions and no capabilities. The renderer reads and writes its `{ "snippets": [...] }` preferences through the module settings bridge, validates them with `ui/contracts/snippets.ts`, and copies a snippet to the clipboard with the renderer's `navigator.clipboard`. Because the preferences are plain JSON in `settings.json`, snippets are not a place for passwords or other secrets.
+`SnippetsModule` is registered by `LauncherTabRegistry.CreateProviders` with the `snippets` module ID and view kind. It declares no actions and no capabilities. The renderer reads and writes its `{ "snippets": [...] }` preferences through the module settings bridge, validates them with `ui/contracts/snippets.ts`, and copies a snippet to the clipboard with the renderer's `navigator.clipboard`. `BackendServer.GetState` also merges the snippets that have a shortcut into the module state through `SnippetsModule.CreateShortcutStateValues` (`meta/{id}` and chunked `text/{id}/{index}` entries, each within the 2048-character state value limit), so the launch panel can copy one and close the launcher without opening the tab. Because the preferences are plain JSON in `settings.json`, snippets are not a place for passwords or other secrets.
 
 ## Codex (not bound to a slot)
 

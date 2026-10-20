@@ -14,22 +14,24 @@ Source of truth: `docs/tabs/snippets/` in the repository. This concept is genera
 
 Snippets saves pieces of text you paste often, such as a tax number or a command like `/plan`. Each snippet has a name, the text to copy, and an optional shortcut of 1 to 32 letters or digits. Shortcuts are unique ignoring letter case; a snippet without one can only be copied with its button.
 
-There are two ways to copy a snippet to the clipboard:
+There are three ways to copy a snippet to the clipboard:
 
+- Type its shortcut in the launch panel's Quick Actions search (the home surface shown when the launcher opens). A unique match runs automatically once typing settles, or press Enter. The text is copied and the launcher closes straight away, without switching to the Snippets tab, so you can paste into the app you came from. Matching is by name and shortcut like other actions, so a shortcut that is the start of another (for example `plan` and `plan2`) lists both until you choose one. Only snippets that have a shortcut appear here.
 - Press the **Copy** button beside it. The button shows a check mark for a moment and the tab reports `Copied <name> to the clipboard.`
 - Type its shortcut in this tab's action search and press Enter. The search lists the matching snippets as `shortcut · name`; Enter copies a unique match, and a shortcut that is the start of another one (for example `plan` and `plan2`) lists both so you can choose with the arrow keys.
 
 The text is copied exactly as written, including line breaks and tabs. Windows stores line breaks on the clipboard as CRLF, so pasted text breaks lines the way Windows apps expect. A snippet is copied as it appears on screen, even before it has been saved; the **Save** button persists the list. Add snippets with **Add snippet**, reorder them with the arrows, and remove them with the bin button.
 
-Snippets are stored as module preferences in plain text in `settings.json`, together with the other tab preferences. They are not encrypted, so keep passwords, API keys, and other secrets out of them. The tab search and the command catalog it registers use only a snippet's name and shortcut, and notices never repeat its text.
+Snippets are stored as module preferences in plain text in `settings.json`, together with the other tab preferences. They are not encrypted, so keep passwords, API keys, and other secrets out of them. The launch panel and the tab search match only a snippet's name and shortcut, and notices never repeat its text. To let the launch panel copy without opening the tab, the host publishes each snippet that has a shortcut in the Snippets module state, with its text split into pieces of at most 2000 characters because state values are limited to 2048 characters. That state stays inside Automator and is not shown by agent access (MCP).
 
 Limits: 100 snippets, 4000 characters of text and 128 characters of name each, and 64 KiB for the whole list. Text may contain line breaks and tabs but no other control characters.
 
 ### Code map
 
 - `ui/modules/SnippetsView.tsx` and `SnippetsView.css` render the editor, the Copy buttons, and the tab commands that copy through the renderer's `navigator.clipboard`.
-- `ui/contracts/snippets.ts` validates and reads the saved settings (`{ "snippets": [{ id, name, alias, value }] }`).
-- `src/Automator.Application/Automation/SnippetsModule.cs` registers the slot, defines the empty default settings, and declares no actions or capabilities. Settings are written and read through the shared module-settings route.
+- `ui/contracts/snippets.ts` validates and reads the saved settings (`{ "snippets": [{ id, name, alias, value }] }`) and rebuilds the copyable snippets from the module state (`readSnippetShortcuts`).
+- `ui/App.tsx` lists those snippets in the launch panel, copies one with the renderer clipboard, and closes the launcher without selecting a tab; `src/Automator.Backend/BackendServer.cs` merges the published entries into the Snippets module state.
+- `src/Automator.Application/Automation/SnippetsModule.cs` registers the slot, defines the empty default settings, and declares no actions or capabilities, and builds the published shortcut entries (`CreateShortcutStateValues`). Settings are written and read through the shared module-settings route.
 - `src/Automator.Application/Launcher/LauncherTabRegistry.cs` registers the module in slot 9; `ui/viewRegistry.tsx`, `ui/viewKinds.ts`, and `contracts/bundled-tab-view-kinds.json` declare the `snippets` view kind; `ui/App.tsx` supplies the tab icon.
 - Tests: `tests/snippets-contract.test.mjs`, the Application specification listed in [TESTS.md](TESTS.md), and `tests/electron/tab-happy-path-visibility.test.cjs`.
 
@@ -45,23 +47,25 @@ Read the root `AGENTS.md` first. Snippets keeps named text in module preferences
 
 - Keep the snippet list in module settings (`{ "snippets": [...] }`, settings version 1) and read and write it only through the module settings bridge. The module declares no actions or capabilities; do not add a clipboard capability or a backend action unless the renderer clipboard stops being sufficient.
 - Copy with the renderer's `navigator.clipboard.writeText` in direct response to a click or Enter in the focused window, and surface a failure to the user instead of hiding it. Copy the text as it is on screen, saved or not.
-- Never put a snippet's text in anything other than the clipboard and the module settings file. Tab commands, the command catalog that Global Action Search snapshots, notices, run activity, and logs must carry only the name and shortcut. Do not add the text to keywords or labels.
+- A snippet's text may exist only in the clipboard, the module settings file, and the Snippets module state that the host publishes for the launch panel. Tab commands, the command catalog that Global Action Search snapshots, action labels, keywords, notices, run activity, and logs must carry only the name and shortcut. Never add the text to keywords or labels, and never log or expose the module state.
 - The settings are plain JSON in `settings.json` and are not encrypted. Do not present Snippets as a place for secrets or add features that imply otherwise, and keep the documentation warning in place.
 - Keep the shortcut optional, 1 to 32 letters or digits, unique ignoring case. Keep names required, text non-blank and at most 4000 characters with only line breaks and tabs as control characters, at most 100 snippets, and 64 KiB in total. The renderer contract in `ui/contracts/snippets.ts` is the validation; the host only stores opaque JSON, so keep that contract strict and keep it unit-tested.
 - The tab uses the shared tab action search. A typed shortcut resolves like every other tab alias: only a single match runs, so shortcuts that start another shortcut list both. Do not change the shared matcher for Snippets alone.
+- The launch panel copies a snippet from the published module state and then closes the launcher with the same close command Escape uses. It must not select the Snippets tab or run the tab's own commands, and the tab's registered commands stay out of Global Action Search so they cannot appear twice. Copy before closing, because the clipboard write needs the focused window.
+- Keep every published state value within the renderer's 2048-character limit (name, shortcut, and chunk count in `meta/{id}`, text in `text/{id}/{index}` pieces of at most 2000 characters that never split a surrogate pair), and skip invalid snippets instead of throwing so the launcher state always publishes. A value over the limit would make the renderer reject the whole state.
 - Keep the module in slot 9 with the stable `snippets` ID, view kind, and settings version. Changing the settings shape requires a migration in `SnippetsModule.MigrateSettings`.
 
 ### Code and checks
 
-UI: `ui/modules/SnippetsView.tsx` and `SnippetsView.css`; contract: `ui/contracts/snippets.ts`.
-Module and registry: `src/Automator.Application/Automation/SnippetsModule.cs` and `src/Automator.Application/Launcher/LauncherTabRegistry.cs`.
+UI: `ui/modules/SnippetsView.tsx` and `SnippetsView.css`; launch panel routing in `ui/App.tsx`; contract: `ui/contracts/snippets.ts`.
+Module and registry: `src/Automator.Application/Automation/SnippetsModule.cs`, `src/Automator.Application/Launcher/LauncherTabRegistry.cs`, and the state merge in `src/Automator.Backend/BackendServer.cs`.
 Tests: `tests/snippets-contract.test.mjs`, the Application specifications, and `tests/electron/tab-happy-path-visibility.test.cjs`.
 
 Update this guide, the sibling README and TESTS, and the root tab index when copy behavior, validation limits, storage, or the slot change.
 
 ## Test cases
 
-This file documents the snippet settings contract, module registration, and the Electron save-and-copy flow. Test titles match their node:test descriptions or registered specification names.
+This file documents the snippet settings and state contracts, module registration, the published launch-panel shortcuts, and the Electron save-and-copy and launch-panel flows. Test titles match their node:test descriptions or registered specification names.
 
 Run the focused contract cases with:
 
@@ -142,6 +146,23 @@ Run the full contract suite with npm.cmd run test:contracts. The Application spe
 
 **Expected result:** Each read returns an empty list rather than a partly valid one.
 
+#### rebuilds copyable snippets from the module state, joining chunked text
+
+**Steps**
+
+1. Read a module state holding one single-piece snippet and one whose text is split into two pieces, plus an unrelated status entry.
+2. Read an undefined state and a state with no snippet entries.
+
+**Expected result:** Each snippet is rebuilt with its name, lower-case shortcut, and the pieces joined in order; empty states give no snippets.
+
+#### skips state snippets that are incomplete, invalid, or repeat a shortcut without hiding the others
+
+**Steps**
+
+1. Read a state containing one valid snippet and entries with a missing text piece, invalid JSON, an invalid or empty shortcut, control characters, blank text, too many pieces, a repeated shortcut, and an invalid key.
+
+**Expected result:** Only the valid snippet is returned.
+
 ### Application specification — tests/Automator.Application.Specs/Program.cs
 
 #### snippets module keeps its text in module settings and registers no actions
@@ -153,6 +174,16 @@ Run the full contract suite with npm.cmd run test:contracts. The Application spe
 3. Try to dispatch an action to the module.
 
 **Expected result:** Snippets is registered in slot 9 as `snippets` with no actions or capabilities, defaults to an empty list, stores and returns the text unchanged, and rejects every action dispatch. The related registry case **tab registry publishes nine stable slots and their actions** checks that slot 9 is Snippets and that Codex is not registered.
+
+#### snippets module publishes copyable shortcuts in state-sized chunks and skips invalid entries
+
+**Steps**
+
+1. Build the published state entries from settings holding snippets with a shortcut, a text that straddles a 2000-character boundary with a surrogate pair, a 4000-character text, and entries without a shortcut, with a repeated shortcut, with an invalid key, with blank text, and with a control character.
+2. Check every value's length, the published keys, and the rejoined text.
+3. Build entries from missing, non-array, and malformed settings.
+
+**Expected result:** Only valid snippets with a unique shortcut are published, every value is at most 2048 characters, text is chunked without splitting a surrogate pair and rejoins exactly, and malformed settings publish nothing instead of throwing.
 
 ### Electron happy path — tests/electron/tab-happy-path-visibility.test.cjs
 
@@ -169,6 +200,17 @@ Run the full contract suite with npm.cmd run test:contracts. The Application spe
 **Expected result:** The Copy and Save buttons are visible, inside their bounds, and uncovered. Both ways of copying put the saved text on the clipboard (with Windows line endings), no notice repeats the text, and the settings store the name, shortcut, and text.
 
 Run after npm.cmd run build:desktop with node --experimental-strip-types --test --test-concurrency=1 tests/electron/tab-happy-path-visibility.test.cjs.
+
+#### Snippets copy from the launch panel, close the launcher, and never open their tab
+
+**Steps**
+
+1. Start an isolated host whose saved Snippets preferences hold a short snippet, a snippet over 2500 characters, and one without a shortcut.
+2. Set the clipboard to a placeholder, then type the short snippet's shortcut in the Quick Actions search and press Enter.
+3. Read the clipboard, the launcher's visibility, and the selected tab. Check that no Snippets view was rendered.
+4. Repeat from a fresh host with the long snippet's shortcut.
+
+**Expected result:** The matching option is listed under Snippets. The exact text (including the long snippet's line break) is on the clipboard, the launcher closes, Launcher stays the selected tab, and the Snippets view never opens.
 
 ### Shared numbered-tab icon coverage
 

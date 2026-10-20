@@ -27,6 +27,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("tab registry publishes nine stable slots and their actions", TabRegistryPublishesVersionedSlots),
     ("website shortcut actions validate settings and launch saved groups in order", WebsiteLauncherValidatesAndLaunchesGroups),
     ("snippets module keeps its text in module settings and registers no actions", SnippetsModuleKeepsTextInModuleSettings),
+    ("snippets module publishes copyable shortcuts in state-sized chunks and skips invalid entries", SnippetsModulePublishesShortcutsInStateSizedChunks),
     ("bundled module registry validates and dispatches versioned actions", BundledModuleRegistryDispatches),
     ("bundled modules receive cancellation and module settings migrate", BundledModuleLifecycleAndSettings),
     ("module settings reads return defaults or saved values and reject stale or inactive requests", ModuleSettingsReadsAreScopedAndVersioned),
@@ -409,6 +410,46 @@ static async Task SnippetsModuleKeepsTextInModuleSettings()
     using var input = JsonDocument.Parse("{}");
     await Check.ThrowsAsync<InvalidOperationException>(() => registry.DispatchAsync(module.Id, "copy", 1, 1,
         input.RootElement, module.Id, context, updated, CancellationToken.None));
+}
+
+static Task SnippetsModulePublishesShortcutsInStateSizedChunks()
+{
+    // 2001 characters ending in a surrogate pair that straddles the 2000-character chunk boundary.
+    var straddling = new string('a', SnippetsModule.MaximumStateValueLength - 1) + "\U0001F600" + "tail";
+    var longText = new string('b', SnippetsModule.MaximumValueLength);
+    var settings = JsonSerializer.SerializeToElement(new
+    {
+        snippets = new object[]
+        {
+            new { id = "plan", name = "Plan command", alias = "Plan", value = "/plan" },
+            new { id = "emoji", name = "Emoji", alias = "emoji", value = straddling },
+            new { id = "long", name = "Long text", alias = "long", value = longText },
+            new { id = "nokey", name = "No shortcut", alias = "", value = "never published" },
+            new { id = "dup", name = "Duplicate", alias = "PLAN", value = "second owner of the shortcut" },
+            new { id = "bad id", name = "Bad id", alias = "badid", value = "x" },
+            new { id = "blank", name = "Blank text", alias = "blank", value = "  \n " },
+            new { id = "ctrl", name = "Control", alias = "ctrl", value = "bell\u0007" },
+        }
+    });
+    var values = SnippetsModule.CreateShortcutStateValues(settings);
+
+    // Every value must fit the renderer's 2048-character limit.
+    Check.True(values.Values.All(value => value.Length <= 2048));
+    Check.Equal("{\"name\":\"Plan command\",\"alias\":\"plan\",\"chunks\":1}", values["meta/plan"]);
+    Check.Equal("/plan", values["text/plan/0"]);
+    Check.True(values.Keys.Where(key => key.StartsWith("meta/", StringComparison.Ordinal)).Order().SequenceEqual(["meta/emoji", "meta/long", "meta/plan"]));
+
+    var emoji = string.Concat(Enumerable.Range(0, 2).Select(index => values[$"text/emoji/{index}"]));
+    Check.Equal(straddling, emoji);
+    Check.False(char.IsHighSurrogate(values["text/emoji/0"][^1]));
+    Check.Equal(longText, string.Concat(Enumerable.Range(0, 2).Select(index => values[$"text/long/{index}"])));
+    Check.False(values.ContainsKey("text/long/2"));
+
+    // Malformed or missing preferences publish nothing instead of failing the launcher state.
+    Check.Equal(0, SnippetsModule.CreateShortcutStateValues(JsonDocument.Parse("{}").RootElement).Count);
+    Check.Equal(0, SnippetsModule.CreateShortcutStateValues(JsonDocument.Parse("{\"snippets\":\"x\"}").RootElement).Count);
+    Check.Equal(0, SnippetsModule.CreateShortcutStateValues(JsonDocument.Parse("{\"snippets\":[1,null,{\"id\":5}]}").RootElement).Count);
+    return Task.CompletedTask;
 }
 
 static Task CapabilityRegistryRejectsUnknownCapabilitiesAndVersions()

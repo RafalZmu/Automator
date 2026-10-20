@@ -8,8 +8,15 @@ const { waitForPageCondition } = require('./wait-for-page.cjs');
 
 const workspace = path.resolve(__dirname, '../..');
 
-async function launchHost(name) {
+async function launchHost(name, { moduleSettings } = {}) {
   const dataDirectory = path.join(workspace, 'artifacts', 'test-data', 'tab-visibility', name, randomUUID());
+  if (moduleSettings) {
+    // Seed the isolated backend settings so the host starts with these module preferences already saved.
+    await fs.mkdir(path.join(dataDirectory, 'backend'), { recursive: true });
+    await fs.writeFile(path.join(dataDirectory, 'backend', 'settings.json'), JSON.stringify({
+      SchemaVersion: 2, Hotkey: 'RightControl', Theme: 'Light', StartWithWindows: false, Bindings: [], ModuleSettings: moduleSettings,
+    }));
+  }
   const app = await electron.launch({
     args: [path.join(workspace, 'dist-electron', 'main', 'main.cjs')], cwd: workspace,
     env: { ...process.env, AUTOMATOR_TEST_MODE: '1', AUTOMATOR_TEST_TRAY: '1',
@@ -466,4 +473,42 @@ test('Snippets save and copy happy path keeps its buttons within visible bounds 
       { name: 'Plan command', alias: 'plan', value: '/plan\nsecond line' },
     ]);
   } finally { await app.close(); }
+});
+
+test('Snippets copy from the launch panel, close the launcher, and never open their tab', async () => {
+  const longText = `${'x'.repeat(2500)}\nend`;
+  const snippets = [
+    { id: 'plan', name: 'Plan command', alias: 'plan', value: '/plan' },
+    { id: 'long', name: 'Long text', alias: 'longtext', value: longText },
+    { id: 'unlisted', name: 'No shortcut', alias: '', value: 'copy button only' },
+  ];
+  for (const { alias, expected } of [{ alias: 'plan', expected: '/plan' }, { alias: 'longtext', expected: longText }]) {
+    const { app, page } = await launchHost(`snippets-launch-panel-${alias}`, {
+      moduleSettings: [{ ModuleId: 'snippets', SchemaVersion: 1, Value: { snippets } }],
+    });
+    try {
+      await app.evaluate(({ clipboard }) => clipboard.writeText('cleared'));
+      const search = page.getByPlaceholder('Search apps, profiles, and actions…');
+      await search.fill(alias);
+      // The shortcut is listed by its name and alias, never by its text.
+      await page.getByRole('option', { name: /Snippets · copy to clipboard/ }).waitFor({ state: 'visible' });
+      await search.press('Enter');
+
+      const deadline = Date.now() + 5_000;
+      let clipboard = '';
+      while (Date.now() < deadline) {
+        clipboard = (await app.evaluate(({ clipboard: board }) => board.readText())).replace(/\r\n/g, '\n');
+        if (clipboard === expected) break;
+        await page.waitForTimeout(50);
+      }
+      assert.equal(clipboard, expected, `${alias} must copy its exact text`);
+      await waitForPageCondition(page, async () => {
+        const [initial, diagnostics] = await Promise.all([window.automator.getInitialState(), window.automator.getWindowDiagnostics()]);
+        return initial.state?.visible === false && diagnostics?.visible === false;
+      }, `the launcher to close after copying ${alias}`);
+      const state = (await page.evaluate(() => window.automator.getInitialState())).state;
+      assert.equal(state.selectedTab, 1, 'the launch panel must not switch to the Snippets tab');
+      assert.equal(await page.getByRole('region', { name: 'Snippets', exact: true }).count(), 0, 'the Snippets view must never have opened');
+    } finally { await app.close(); }
+  }
 });

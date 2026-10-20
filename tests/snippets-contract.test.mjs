@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_SNIPPETS, MAX_SNIPPET_VALUE_LENGTH, parseSnippetsSettings, readSnippetsSettings, validateSnippetsSettings } from '../ui/contracts/snippets.ts';
+import { MAX_SNIPPETS, MAX_SNIPPET_VALUE_LENGTH, parseSnippetsSettings, readSnippetShortcuts, readSnippetsSettings, validateSnippetsSettings } from '../ui/contracts/snippets.ts';
 
 const plan = { id: 'plan', name: 'Plan command', alias: 'plan', value: '/plan' };
 const nip = { id: 'nip', name: 'Company NIP', alias: 'nip2', value: '5260001246' };
@@ -56,4 +56,37 @@ test('reads an invalid saved list as empty instead of exposing partial data', ()
   assert.deepEqual(readSnippetsSettings({ snippets: [plan, { ...nip, value: '' }] }), { snippets: [] });
   assert.deepEqual(readSnippetsSettings({}), { snippets: [] });
   assert.deepEqual(readSnippetsSettings(undefined), { snippets: [] });
+});
+
+const meta = (name, alias, chunks) => JSON.stringify({ name, alias, chunks });
+
+test('rebuilds copyable snippets from the module state, joining chunked text', () => {
+  const longText = `${'a'.repeat(2000)}${'b'.repeat(1500)}`;
+  const shortcuts = readSnippetShortcuts({
+    status: 'ready',
+    'meta/plan': meta('Plan command', 'plan', 1), 'text/plan/0': '/plan',
+    'meta/long': meta('Long text', 'LONG', 2), 'text/long/0': 'a'.repeat(2000), 'text/long/1': 'b'.repeat(1500),
+  });
+  assert.deepEqual(shortcuts, [
+    { id: 'plan', name: 'Plan command', alias: 'plan', value: '/plan' },
+    { id: 'long', name: 'Long text', alias: 'long', value: longText },
+  ]);
+  assert.deepEqual(readSnippetShortcuts(undefined), []);
+  assert.deepEqual(readSnippetShortcuts({ status: 'ready' }), []);
+});
+
+test('skips state snippets that are incomplete, invalid, or repeat a shortcut without hiding the others', () => {
+  const shortcuts = readSnippetShortcuts({
+    'meta/good': meta('Good', 'good', 1), 'text/good/0': 'text',
+    'meta/missing': meta('Missing chunk', 'missing', 2), 'text/missing/0': 'only the first half',
+    'meta/not-json': 'not json', 'text/not-json/0': 'x',
+    'meta/bad alias': meta('Bad alias', 'bad alias', 1), 'text/bad alias/0': 'x',
+    'meta/noalias': meta('No alias', '', 1), 'text/noalias/0': 'x',
+    'meta/control': meta('Control', 'control', 1), 'text/control/0': 'bell\u0007',
+    'meta/blank': meta('Blank', 'blank', 1), 'text/blank/0': '   ',
+    'meta/toomany': meta('Too many chunks', 'toomany', 99), 'text/toomany/0': 'x',
+    'meta/dup': meta('Duplicate', 'GOOD', 1), 'text/dup/0': 'other',
+    'meta/Bad Key': meta('Bad key', 'badkey', 1), 'text/Bad Key/0': 'x',
+  });
+  assert.deepEqual(shortcuts.map((shortcut) => shortcut.id), ['good']);
 });
