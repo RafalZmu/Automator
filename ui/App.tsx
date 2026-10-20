@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import * as Tabs from '@radix-ui/react-tabs';
 import {
   Activity, AlertCircle, AppWindow, ArrowDownToLine, ArrowUpFromLine, Bell, Braces, CalendarClock, Check,
-  ChevronRight, CircleDot, Clock, FolderOpen, Globe, Keyboard, MousePointerClick, Moon, Plus, Search,
+  ChevronRight, CircleDot, ClipboardCopy, Clock, FolderOpen, Globe, Keyboard, MousePointerClick, Moon, Plus, Search,
   Settings2, Sparkles, Sun, Terminal, Workflow, X,
 } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
@@ -33,7 +33,7 @@ import { AgentAccessSettings } from './AgentAccessSettings';
 type Binding = BackendUiState['bindings'][number];
 type SettingsDraft = Pick<BackendUiState, 'hotkey' | 'theme' | 'startWithWindows' | 'bindings'>;
 
-const numberedTabIcons = [AppWindow, Terminal, Braces, MousePointerClick, Workflow, CalendarClock, Clock, Globe] as const;
+const numberedTabIcons = [AppWindow, Terminal, Braces, MousePointerClick, Workflow, CalendarClock, Clock, Globe, ClipboardCopy] as const;
 
 const quickActionBootstrap: readonly { scope: string; id: string; label: string; keywords: readonly string[]; category: string }[] = [
   { scope: 'script-runner', id: 'new-script-profile', label: 'Create script profile', keywords: ['python', 'powershell', 'bash', 'new'], category: 'Script Runner · action' },

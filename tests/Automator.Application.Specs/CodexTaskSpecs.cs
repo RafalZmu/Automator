@@ -51,8 +51,10 @@ public static class CodexTaskSpecs
     {
         var service = new FakeCodexTaskService();
         var capabilities = new AutomationCapabilityRegistry(codexTaskServiceFactory: id => id == "codex" ? service : null);
+        // Codex is not registered in LauncherTabRegistry while slot 9 belongs to Snippets, so no slot reaches the capability.
         var registry = LauncherTabRegistry.CreateAutomationRegistry(capabilities, dataDirectory: Path.GetTempPath());
-        var codex = registry.Modules.Single(module => module.Id == "codex");
+        Check.False(registry.Modules.Any(module => module.Id == "codex"));
+        var codex = new CodexTaskModule().Definition;
         Check.True(codex.Capabilities.Any(capability => capability.Id == AutomationCapabilityIds.CodexTaskBuilder));
         await using var context = capabilities.CreateContext(new AutomationModuleDescriptor("codex", codex.Capabilities));
         Check.True(context.CodexTasks is not null);

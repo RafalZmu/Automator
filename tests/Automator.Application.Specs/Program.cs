@@ -26,6 +26,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("concurrent state changes publish revisions in serialized order", ConcurrentCommandsKeepRevisionOrder),
     ("tab registry publishes nine stable slots and their actions", TabRegistryPublishesVersionedSlots),
     ("website shortcut actions validate settings and launch saved groups in order", WebsiteLauncherValidatesAndLaunchesGroups),
+    ("snippets module keeps its text in module settings and registers no actions", SnippetsModuleKeepsTextInModuleSettings),
     ("bundled module registry validates and dispatches versioned actions", BundledModuleRegistryDispatches),
     ("bundled modules receive cancellation and module settings migrate", BundledModuleLifecycleAndSettings),
     ("module settings reads return defaults or saved values and reject stale or inactive requests", ModuleSettingsReadsAreScopedAndVersioned),
@@ -327,9 +328,12 @@ static Task TabRegistryPublishesVersionedSlots()
     Check.Equal("website-launcher", tabs[7].Id);
     Check.Equal("website-launcher", tabs[7].Kind);
     Check.True(tabs[7].Actions.Any(action => action.Id == "launchRow"));
-    Check.Equal("codex", tabs[8].Id);
-    Check.Equal("codex", tabs[8].Kind);
-    Check.True(tabs[8].Actions.Any(action => action.Id == "generateDraft"));
+    Check.Equal("snippets", tabs[8].Id);
+    Check.Equal("snippets", tabs[8].Kind);
+    Check.Equal("Snippets", tabs[8].Title);
+    Check.Equal(0, tabs[8].Actions.Count);
+    Check.Equal(0, tabs[8].Capabilities.Count);
+    Check.False(tabs.Any(tab => tab.Id == "codex"));
     Check.True(tabs.Take(2).SelectMany(tab => tab.Capabilities).Any(capability => capability.Id == AutomationCapabilityIds.LibraryStorage));
     Check.Equal(9, LauncherTabRegistry.States.Count);
     Check.True(LauncherTabRegistry.States.All(state => state.Version == LauncherTabRegistry.Version));
@@ -380,6 +384,31 @@ static async Task WebsiteLauncherValidatesAndLaunchesGroups()
     var rejected = await module.ExecuteAsync("launchRow", input.RootElement, invalid, services, CancellationToken.None);
     Check.Equal(AutomationStatus.Error, rejected.Status);
     Check.Equal(2, launcher.Groups.Count);
+}
+
+static async Task SnippetsModuleKeepsTextInModuleSettings()
+{
+    var module = new SnippetsModule();
+    Check.Equal(9, module.Definition.Slot);
+    Check.Equal("snippets", module.Definition.ViewKind);
+    Check.Equal(0, module.Definition.Actions.Count);
+    Check.Equal(0, module.Definition.Capabilities.Count);
+    Check.Equal("{\"snippets\":[]}", module.CreateDefaultSettings().GetRawText());
+    Check.Throws<InvalidOperationException>(() => module.MigrateSettings(0, module.CreateDefaultSettings()));
+
+    var registry = LauncherTabRegistry.CreateAutomationRegistry(new AutomationCapabilityRegistry());
+    Check.Equal("{\"snippets\":[]}", registry.GetSettings(SnippetsModule.IdValue, []).GetRawText());
+    using var saved = JsonDocument.Parse("{\"snippets\":[{\"id\":\"plan\",\"name\":\"Plan command\",\"alias\":\"plan\",\"value\":\"/plan\\nsecond line\"}]}");
+    var updated = registry.CreateUpdatedModuleSettings(SnippetsModule.IdValue, 1, 1, saved.RootElement, SnippetsModule.IdValue, []);
+    var stored = registry.GetSettings(SnippetsModule.IdValue, updated).GetProperty("snippets")[0];
+    Check.Equal("plan", stored.GetProperty("alias").GetString());
+    Check.Equal("/plan\nsecond line", stored.GetProperty("value").GetString());
+
+    // Settings are written through the settings route, so no module action can ever be dispatched to Snippets.
+    await using var context = new AutomationCapabilityRegistry().CreateContext(new AutomationModuleDescriptor(module.Id, []));
+    using var input = JsonDocument.Parse("{}");
+    await Check.ThrowsAsync<InvalidOperationException>(() => registry.DispatchAsync(module.Id, "copy", 1, 1,
+        input.RootElement, module.Id, context, updated, CancellationToken.None));
 }
 
 static Task CapabilityRegistryRejectsUnknownCapabilitiesAndVersions()
@@ -541,9 +570,11 @@ static Task ProductionModuleViewsMatchContract()
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "bundled-tab-view-kinds.json")));
     var supportedKinds = document.RootElement.GetProperty("kinds").EnumerateArray()
         .Select(item => item.GetString()!).ToHashSet(StringComparer.Ordinal);
-    Check.True(LauncherTabRegistry.Tabs.Where(tab => tab.Id != "codex").All(tab => supportedKinds.Contains(tab.Kind)));
-    Check.Equal("codex", LauncherTabRegistry.Tabs.Single(tab => tab.Id == "codex").Kind);
-    Check.Equal(10, supportedKinds.Count);
+    Check.True(LauncherTabRegistry.Tabs.All(tab => supportedKinds.Contains(tab.Kind)));
+    Check.Equal("snippets", LauncherTabRegistry.Tabs.Single(tab => tab.Id == "snippets").Kind);
+    // The unbound Codex view kind stays declared so its renderer view can be bound to a slot again.
+    Check.True(supportedKinds.Contains(new CodexTaskModule().Definition.ViewKind));
+    Check.Equal(11, supportedKinds.Count);
     return Task.CompletedTask;
 }
 

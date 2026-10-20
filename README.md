@@ -52,7 +52,8 @@ The app keeps its compact numbered launcher tabs and also provides a larger Work
 | Slot 6 — Scheduler | [Agent guide](docs/tabs/scheduler/AGENTS.md) · [Functionality and code](docs/tabs/scheduler/README.md) | [Test steps](docs/tabs/scheduler/TESTS.md) |
 | Slot 7 — Work Time | [Agent guide](docs/tabs/work-time/AGENTS.md) · [Functionality and code](docs/tabs/work-time/README.md) | [Test steps](docs/tabs/work-time/TESTS.md) |
 | Slot 8 — Website Launcher | [Agent guide](docs/tabs/website-launcher/AGENTS.md) · [Functionality and code](docs/tabs/website-launcher/README.md) | [Test steps](docs/tabs/website-launcher/TESTS.md) |
-| Slot 9 — Codex | [Agent guide](docs/tabs/codex/AGENTS.md) · [Functionality and code](docs/tabs/codex/README.md) | [Test steps](docs/tabs/codex/TESTS.md) |
+| Slot 9 — Snippets | [Agent guide](docs/tabs/snippets/AGENTS.md) · [Functionality and code](docs/tabs/snippets/README.md) | [Test steps](docs/tabs/snippets/TESTS.md) |
+| Codex (not bound to a slot) | [Agent guide](docs/tabs/codex/AGENTS.md) · [Functionality and code](docs/tabs/codex/README.md) | [Test steps](docs/tabs/codex/TESTS.md) |
 | Global action search | [Agent guide](docs/sections/global-action-search/AGENTS.md) · [Functionality and code](docs/sections/global-action-search/README.md) | — |
 | Options | [Agent guide](docs/sections/options/AGENTS.md) · [Functionality and code](docs/sections/options/README.md) | — |
 | Activity and notifications | [Agent guide](docs/sections/activity-center/AGENTS.md) · [Functionality and code](docs/sections/activity-center/README.md) | — |
@@ -60,14 +61,14 @@ The app keeps its compact numbered launcher tabs and also provides a larger Work
 | Agent access (MCP) | [Agent guide](docs/sections/agent-access/AGENTS.md) · [Functionality and code](docs/sections/agent-access/README.md) | — |
 | E2E test catalog | [Agent guide](docs/sections/e2e-catalog/AGENTS.md) · [Functionality and code](docs/sections/e2e-catalog/README.md) | [Open the catalog](docs/e2e/index.html) |
 
-Slot 9 is the Codex task builder.
+Slot 9 is Snippets. The Codex task builder code is kept in the repository but is not bound to a slot.
 
 Agents can also read the same guides as an [Open Knowledge Format bundle](docs/okf/index.md). It is generated from the files above with `npm run okf:build`.
 
 ## Controls and tab behavior
 
 - Tap **Right Ctrl** to open or close the panel. Opening selects slot 1.
-- Press **1–9** to select a workspace tab. While a text field in the launcher has focus, digits and `/` type into it instead. Each numbered tab shows a purpose icon beside its number. Slot 1 is the app launcher; slots 2–8 are Script Runner, API, Browser Automation, Workflows, Scheduler, Work Time, and Website Launcher; slot 9 is Codex.
+- Press **1–9** to select a workspace tab. While a text field in the launcher has focus, digits and `/` type into it instead. Each numbered tab shows a purpose icon beside its number. Slot 1 is the app launcher; slots 2–8 are Script Runner, API, Browser Automation, Workflows, Scheduler, Work Time, and Website Launcher; slot 9 is Snippets.
 - Opening the compact launcher shows Global Action Search as its home surface. It searches registered actions across tabs; a unique match runs, and choosing a tab-specific action switches to that tab. This home surface is not a numbered tab.
 - Press **/** in slot 1 to open the app catalog. The app under the pointer when the panel opens is pinned first.
 - Choose a listed app or browse for an EXE/shortcut, then assign a unique letters-only alias.
@@ -81,7 +82,8 @@ Agents can also read the same guides as an [Open Knowledge Format bundle](docs/o
 - Scheduler creates interval, daily, and weekly local-time schedules for saved scripts or workflows and includes an upcoming agenda/calendar.
 - Work Time records elapsed intervals, then saves a description and tags. Its history can be filtered, edited, summarized, and exported.
 - Website Launcher saves named shortcuts with ordered browser groups and website tabs. Type a row's letters-only alias in its tab, or append `w` to the alias in Global Action Search to launch it through the Windows default browser.
-- Codex uses the installed local Codex CLI and its own sign-in to draft Python scripts, Playwright tasks, or Workflows. It shows a plan and inspectable source, runs approved drafts through existing Automator paths, and offers saving after a successful run. Scope is consent context; generated code runs with the signed-in Windows user's permissions. Playwright tasks can be called from Workflows and scheduled through a containing Workflow.
+- Snippets saves named pieces of text with an optional letters-and-digits shortcut. Type a snippet's shortcut in its tab search and press Enter, or press the Copy button next to it, to put the text on the clipboard. Snippets are stored as plain text in `settings.json`, so keep passwords and other secrets out of them.
+- The Codex task builder is currently not reachable because slot 9 is Snippets. When it is bound to a slot again, Codex uses the installed local Codex CLI and its own sign-in to draft Python scripts, Playwright tasks, or Workflows. It shows a plan and inspectable source, runs approved drafts through existing Automator paths, and offers saving after a successful run. Scope is consent context; generated code runs with the signed-in Windows user's permissions. Playwright tasks can be called from Workflows and scheduled through a containing Workflow.
 - The Workspace window provides more room for editing modules, reviewing run activity, and opening notification summaries.
 
 Script profiles execute as the current Windows user and are not sandboxed. Only configure scripts and interpreters you trust. Bash uses a user-configured executable such as Git Bash.

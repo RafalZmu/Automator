@@ -35,10 +35,8 @@ const tabs: BackendUiState['tabs'] = [
     searchEnabled: true, contractVersion: 1, settingsVersion: 1,
     actions: [{ id: 'launchRow', version: 1, command: null, requiredCapabilities: [{ id: 'website.launch', version: 1 }] }],
     capabilities: [{ id: 'website.launch', version: 1 }] },
-  { slot: 9, id: 'codex', title: 'Codex', iconKey: 'sparkles', kind: 'codex' as const,
-    searchEnabled: false, contractVersion: 1, settingsVersion: 1,
-    actions: ['getStatus', 'generateDraft', 'getDraft', 'listDrafts', 'runDraft', 'saveDraft', 'approveChanges', 'exportDraft'].map((id) => ({ id, version: 1, command: null, requiredCapabilities: [{ id: 'codex.task-builder', version: 1 }] })),
-    capabilities: [{ id: 'codex.task-builder', version: 1 }] },
+  { slot: 9, id: 'snippets', title: 'Snippets', iconKey: 'clipboard', kind: 'snippets' as const,
+    searchEnabled: true, contractVersion: 1, settingsVersion: 1, actions: [], capabilities: [] },
 ];
 
 const emptyBinding = (id: string, name: string, targetPath: string, alias: string): BackendUiState['bindings'][number] => ({
@@ -210,7 +208,7 @@ class BrowserPreviewBridge implements AutomatorBridge {
     const tab = tabs.find((candidate) => candidate.id === request.moduleId);
     if (!tab || tab.contractVersion !== request.contractVersion || tab.settingsVersion !== request.settingsVersion)
       throw new Error('The module settings request is stale or unregistered.');
-    return { ...request, value: {} };
+    return { ...request, value: tab.id === 'snippets' ? { snippets: [] } : {} };
   }
   async getGlobalVariables(): Promise<GlobalVariableSnapshot> { return structuredClone(this.globalVariables); }
   async setGlobalVariables(values: GlobalVariableSnapshot['values']): Promise<GlobalVariableSnapshot> {

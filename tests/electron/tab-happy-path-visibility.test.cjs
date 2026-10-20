@@ -150,6 +150,7 @@ test('numbered tabs show an identifying icon in the launcher and Workspace', asy
     { name: 'Scheduler', slot: 6 },
     { name: 'Work Time', slot: 7 },
     { name: 'Website Launcher', slot: 8 },
+    { name: 'Snippets', slot: 9 },
   ];
   try {
     await assertTabIcons(page, tabs);
@@ -418,5 +419,51 @@ test('Website Launcher save happy path keeps shortcut group and website buttons 
     }));
     assert.equal(saved.value.rows[0].name, 'Edited visibility websites');
     assert.equal(saved.value.rows[0].groups[0].websites[0].url, 'https://example.com/visibility');
+  } finally { await app.close(); }
+});
+
+test('Snippets save and copy happy path keeps its buttons within visible bounds and fills the clipboard', async () => {
+  const { app, page } = await launchHost('snippets');
+  const clearClipboard = () => app.evaluate(({ clipboard }) => clipboard.writeText('cleared'));
+  const waitForClipboard = async (expected) => {
+    const deadline = Date.now() + 5_000;
+    let actual = '';
+    while (Date.now() < deadline) {
+      // Windows stores clipboard line breaks as CRLF, which is what pasting apps expect.
+      actual = (await app.evaluate(({ clipboard }) => clipboard.readText())).replace(/\r\n/g, '\n');
+      if (actual === expected) return;
+      await page.waitForTimeout(50);
+    }
+    assert.equal(actual, expected);
+  };
+  try {
+    await selectTab(page, 'Snippets', 9);
+    await clickButton(page, page, 'Add snippet');
+    await page.getByLabel('Name', { exact: true }).fill('Plan command');
+    await page.getByLabel('Shortcut', { exact: true }).fill('plan');
+    await page.getByLabel('Text to copy', { exact: true }).fill('/plan\nsecond line');
+    await clickButton(page, page, 'Save');
+    await page.getByRole('status').filter({ hasText: 'Snippets saved.' }).waitFor({ state: 'visible' });
+
+    // The Copy button copies the text exactly as written.
+    await clearClipboard();
+    await clickButton(page, page, 'Copy Plan command');
+    await waitForClipboard('/plan\nsecond line');
+    await page.getByRole('status').filter({ hasText: 'Copied Plan command to the clipboard.' }).waitFor({ state: 'visible' });
+
+    // Typing the shortcut in the tab search copies it too, and the notice never repeats the text itself.
+    await clearClipboard();
+    const search = page.getByPlaceholder('Search actions in this tab…');
+    await search.fill('plan');
+    await search.press('Enter');
+    await waitForClipboard('/plan\nsecond line');
+    assert.equal(await page.getByRole('status').filter({ hasText: 'second line' }).count(), 0);
+
+    const saved = await page.evaluate(() => window.automator.getModuleSettings({
+      contractVersion: 1, moduleId: 'snippets', settingsVersion: 1,
+    }));
+    assert.deepEqual(saved.value.snippets.map(({ name, alias, value }) => ({ name, alias, value })), [
+      { name: 'Plan command', alias: 'plan', value: '/plan\nsecond line' },
+    ]);
   } finally { await app.close(); }
 });
