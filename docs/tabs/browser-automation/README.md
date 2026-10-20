@@ -9,6 +9,8 @@ When the configured managed project is first created, Automator creates a tests 
 
 While editing a test's tags, tags already used on any test in the project are offered as clickable suggestions under the input (filtered by what you are typing; picking one adds it to the comma-separated list). The code button on each test row loads that test's source (from its declaration line to its closing bracket, at most 200 lines) from the host through `readTestSource` and shows it inline; select it again to hide it. The view is read-only.
 
+The **UI mode** button in the explorer toolbar (also "Open Playwright tests in UI mode" in the action search) runs `playwright test --ui` for the selected project, which opens Playwright's own interactive window. It stays busy until that window is closed (or its 1-hour limit passes), and other runs are disabled meanwhile. A UI mode session is not a recorded run: it has no run history entry or per-test outcomes.
+
 Runs started from the Playwright Test Explorer are listed in Run Activity without a saved profile identifier.
 
 ## Running state and run history
@@ -32,6 +34,7 @@ A test that passed only after a failed attempt is **Flaky**, and its error is fr
 ## Code map
 
 - Side panel: `ui/modules/BrowserAutomationView.tsx` uses the shared `ui/components/SideHistoryPanel.tsx` (also used by Script Runner and Scheduler) to portal the history into `#side-panel-slot` (rendered by `ui/App.tsx`, sized from the window width in `ui/styles.css`) and calls `bridge.setSidePanel`; `electron/main.ts` animates the window bounds using `computeSidePanelBounds` and `interpolateBounds` in `electron/platform.ts` (tests: tests/host-platform.test.mjs).
+- `openUiMode` (`PlaywrightTestExplorer.OpenUiModeAsync`) starts the UI mode session; it is on the detached action list in `BackendServer.IsDetachedRunAction`.
 - ui/modules/BrowserAutomationView.tsx renders project selection, discovered files/tests, tag editing, grouped runs, the running banner and the saved run history.
 - src/Automator.Infrastructure/Automation/playwright-run-reporter.cjs is the Playwright reporter that writes each run's per-test events; tests/playwright-run-reporter.test.cjs covers it.
 - ui/modules/browserRunStore.ts owns the active run for the window (memory only); tests/browser-run-store.test.mjs covers it. `listRunHistory` and `deleteRunHistory` are the backend actions behind the history; tests/Automator.Application.Specs/BrowserRunHistorySpecs.cs covers them, and tests/electron/browser-run-history.test.cjs checks the running banner across tabs, saving, restart persistence and clearing against the real host.
