@@ -890,7 +890,7 @@ export function App() {
       {!preview && !state.hookInstalled && <div className="backend-error hook-warning" role="status"><AlertCircle size={15} /><span>The global opener is unavailable. Retry the Windows hook or change its key in settings.</span><button type="button" onClick={() => void retry()} disabled={retrying}>{retrying ? 'Retrying…' : 'Retry'}</button></div>}
       {preview && !state.hookInstalled && <div className="preview-hook-note" role="status">The Windows keyboard hook is unavailable in browser preview.</div>}
 
-      <Tabs.Root className="tab-root" value={showQuickActions ? '' : String(state.selectedTab)} onValueChange={(value) => changeTab(Number(value))}>
+      <Tabs.Root className="tab-root" activationMode="manual" value={showQuickActions ? '' : String(state.selectedTab)} onValueChange={(value) => changeTab(Number(value))}>
         <Tabs.List className="tabs" aria-label="Workspace tabs">
           {state.tabs.filter((tab) => !isWorkspaceSurface || tab.slot > 1).map((tab) => {
             const TabIcon = numberedTabIcons[tab.slot - 1] ?? CircleDot;
