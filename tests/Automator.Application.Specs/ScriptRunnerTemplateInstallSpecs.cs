@@ -72,7 +72,7 @@ internal static class ScriptRunnerTemplateInstallSpecs
             Ensure(reinstalled.Status == AutomationStatus.Success && reinstalled.Data.GetProperty("profile").GetProperty("scriptPath").GetString() == path,
                 "an unmodified installed script is reused when no profile references the template");
             await File.WriteAllTextAsync(path, "user modification");
-            var modifiedCopy = await module.ExecuteAsync("installTemplate", copyInput.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
+            var modifiedCopy = await module.ExecuteAsync("installTemplate", copyInput.RootElement, module.CreateDefaultSettings(), copyContext, CancellationToken.None);
             var numberedPath = Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileNameWithoutExtension(path) + ".2.ps1");
             Ensure(modifiedCopy.Status == AutomationStatus.Success && await File.ReadAllTextAsync(path) == "user modification"
                 && modifiedCopy.Data.GetProperty("profile").GetProperty("scriptPath").GetString() == numberedPath && File.Exists(numberedPath),
