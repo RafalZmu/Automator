@@ -73,7 +73,10 @@ internal static class ScriptRunnerTemplateInstallSpecs
                 "an unmodified installed script is reused when no profile references the template");
             await File.WriteAllTextAsync(path, "user modification");
             var modifiedCopy = await module.ExecuteAsync("installTemplate", copyInput.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
-            Ensure(modifiedCopy.Status == AutomationStatus.Error && await File.ReadAllTextAsync(path) == "user modification", "a copy never reuses or overwrites a modified script");
+            var numberedPath = Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileNameWithoutExtension(path) + ".2.ps1");
+            Ensure(modifiedCopy.Status == AutomationStatus.Success && await File.ReadAllTextAsync(path) == "user modification"
+                && modifiedCopy.Data.GetProperty("profile").GetProperty("scriptPath").GetString() == numberedPath && File.Exists(numberedPath),
+                "a modified script is never reused or overwritten; the bundled script is installed beside it");
             var duplicate =await module.ExecuteAsync("installTemplate", input.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
             Ensure(duplicate.Status == AutomationStatus.Information && duplicate.Data.GetProperty("profile").GetProperty("id").GetString() == profile.GetProperty("id").GetString(), "duplicate returns saved profile");
             Ensure(await File.ReadAllTextAsync(path) == "user modification", "duplicate does not overwrite");
@@ -84,7 +87,8 @@ internal static class ScriptRunnerTemplateInstallSpecs
             await File.WriteAllTextAsync(interpreter, "restored test fixture");
             await context.Library!.DeleteAsync("profiles", profile.GetProperty("id").GetString()!, CancellationToken.None);
             var collision = await module.ExecuteAsync("installTemplate", input.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
-            Ensure(collision.Status == AutomationStatus.Error && await File.ReadAllTextAsync(path) == "user modification", "orphan asset collision requires repair");
+            Ensure(collision.Status != AutomationStatus.Error && await File.ReadAllTextAsync(path) == "user modification",
+                "orphan asset collision installs beside the user's script instead of failing");
             using var unsafeInput = JsonDocument.Parse("""{"id":"../../escape"}""");
             var unsafeResult = await module.ExecuteAsync("installTemplate", unsafeInput.RootElement, module.CreateDefaultSettings(), context, CancellationToken.None);
             Ensure(unsafeResult.Status == AutomationStatus.Error, "unknown asset rejected");
