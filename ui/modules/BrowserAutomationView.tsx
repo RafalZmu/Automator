@@ -1,5 +1,5 @@
 import { Check, ChevronDown, ChevronRight, CircleAlert, FilePlus2, Code2, FolderOpen, Loader2, LoaderCircle, MonitorPlay, Play, Plus, RefreshCw, Square, Tag, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import type { BackendUiState } from '../../contracts/rpc';
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import type { AutomationServices } from '../automationServices';
@@ -34,6 +34,12 @@ function formatDuration(milliseconds: number): string {
 function formatRunTime(value: string | number): string {
   return new Date(value).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
+
+// UI mode outlives this view (the compact window can unmount it), so its open state is kept at module level.
+let uiModeActive = false;
+const uiModeListeners = new Set<() => void>();
+const setUiModeActive = (value: boolean) => { uiModeActive = value; for (const listener of uiModeListeners) listener(); };
+const useUiModeActive = () => useSyncExternalStore((listener) => { uiModeListeners.add(listener); return () => { uiModeListeners.delete(listener); }; }, () => uiModeActive);
 
 const historyOpenKey = 'automator.playwrightRunHistoryOpen';
 
@@ -106,7 +112,7 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
   const [history, setHistory] = useState<PlaywrightRunRecord[]>([]);
   const [backendActive, setBackendActive] = useState<PlaywrightActiveRun[]>([]);
   const [shownRunId, setShownRunId] = useState<string | null>(null);
-  const [uiModeOpen, setUiModeOpen] = useState(false);
+  const uiModeOpen = useUiModeActive();
   const [profiles, setProfiles] = useState<BrowserAutomationProfile[]>([]);
   const { active: activeRun, last: lastRun } = useBrowserRun();
   const sidePanel = useHistorySidePanel(surface, historyOpenKey);
@@ -376,7 +382,7 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
       setNoticeIsError(true);
       return;
     }
-    setUiModeOpen(true);
+    setUiModeActive(true);
     setNotice('Playwright UI mode is open in its own window. Close it to run tests from here again.');
     setNoticeIsError(false);
     try {
@@ -386,13 +392,13 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
       });
       if (!mounted.current) return;
       setNotice(result.message);
-      setNoticeIsError(result.status !== 'success');
+      setNoticeIsError(result.status === 'error');
     } catch (error) {
       if (!mounted.current) return;
       setNotice(error instanceof Error ? error.message : 'Playwright UI mode failed.');
       setNoticeIsError(true);
     } finally {
-      if (mounted.current) setUiModeOpen(false);
+      setUiModeActive(false);
     }
   };
 
