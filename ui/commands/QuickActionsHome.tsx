@@ -34,8 +34,7 @@ export function QuickActionsHome({
 
   useEffect(() => {
     const trimmed = query.trim();
-    // A lone 1-9 is the native tab shortcut; if its keystroke also reaches this input, running the tab action here would race the host's own tab switch and focus.
-    if (!trimmed || /^[1-9]$/.test(trimmed) || resolution.kind !== 'unique' || !canAutoRunTabCommand(resolution.command)) return undefined;
+    if (!trimmed || resolution.kind !== 'unique' || !canAutoRunTabCommand(resolution.command)) return undefined;
     const command = resolution.command as QuickAction;
     const timer = window.setTimeout(() => { void execute(command); }, 420);
     return () => window.clearTimeout(timer);

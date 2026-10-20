@@ -163,7 +163,9 @@ test('real Right Ctrl and Escape input reaches the global hook from an owned for
 
     await sendKey(0x39);
     await waitFor(async () => (await page.evaluate(() => window.automator.getInitialState())).state?.selectedTab === 9, 'the native 9 shortcut to select tab 9');
-    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Snippets, tab 9');
+    // Quick Actions keeps a text field focused, so the host may let the digit through as text. Its delayed action then opens the tab and focuses
+    // the tab search; when the native shortcut wins instead, the tab button is focused. Both are valid ways to reach tab 9.
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Snippets, tab 9' || document.activeElement?.id === 'tab-command-input');
     await sendKey(0x31);
     await waitFor(async () => (await page.evaluate(() => window.automator.getInitialState())).state?.selectedTab === 1, 'the native 1 shortcut to return to tab 1');
     await page.waitForFunction(() => document.activeElement?.id === 'search');
