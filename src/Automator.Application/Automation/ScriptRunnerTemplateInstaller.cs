@@ -141,7 +141,7 @@ public sealed class ScriptRunnerTemplateInstaller
         var name = Path.GetFileName(actualPath);
         var prefix = $"{assetId}.v{version}.";
         if (!string.Equals(Path.GetDirectoryName(actualPath), Path.GetFullPath(_directory).TrimEnd(Path.DirectorySeparatorChar), comparison)
-            || !name.StartsWith(prefix, comparison) || !name.EndsWith(".ps1", comparison)) return false;
+            || name.Length <= prefix.Length + 4 || !name.StartsWith(prefix, comparison) || !name.EndsWith(".ps1", comparison)) return false;
         var middle = name[prefix.Length..^4];
         return middle.Length > 0 && middle.All(char.IsAsciiDigit);
     }

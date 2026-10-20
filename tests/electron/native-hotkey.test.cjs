@@ -195,7 +195,7 @@ test('real Right Ctrl and Escape input reaches the global hook from an owned for
     if (!completed && page) {
       // CI-only diagnostics: show what the renderer and the host thought when a step timed out.
       try {
-        const snapshot = await page.evaluate(async () => {
+        const snapshot = await Promise.race([delay(5000, null), page.evaluate(async () => {
           const state = (await window.automator.getInitialState()).state;
           const active = document.activeElement;
           return {
@@ -204,7 +204,7 @@ test('real Right Ctrl and Escape input reaches the global hook from an owned for
             selectedTab: state?.selectedTab, visible: state?.visible, mode: state?.mode,
             diagnostics: await window.automator.getWindowDiagnostics(),
           };
-        });
+        })]);
         console.error('native-hotkey diagnostics:', JSON.stringify(snapshot));
         const diagnosticLogDirectory = path.join(dataDirectory, 'Logs');
         const lines = (await Promise.all((await fs.readdir(diagnosticLogDirectory)).map((name) => fs.readFile(path.join(diagnosticLogDirectory, name), 'utf8')))).join('\n')
