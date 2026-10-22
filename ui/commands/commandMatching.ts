@@ -28,6 +28,19 @@ export function matchTabCommands<T extends TabCommand>(commands: readonly T[], q
   });
 }
 
+/**
+ * A query that equals a command shortcut (an alias or a tab number) selects only the commands with that shortcut,
+ * so partial text matches elsewhere, such as a timer name or a digit in a description, never compete with it.
+ */
+export function matchQuickActions<T extends TabCommand & { shortcut?: string }>(commands: readonly T[], query: string): T[] {
+  const typed = normalize(query);
+  if (typed) {
+    const exact = commands.filter((command) => !command.disabled && command.shortcut && normalize(command.shortcut) === typed);
+    if (exact.length > 0) return exact;
+  }
+  return matchTabCommands(commands, query);
+}
+
 /** Only a single match can be launched by Enter; ambiguous and empty queries need more input. */
 export function resolveTabCommand<T extends TabCommand>(matches: readonly T[]): TabCommandResolution<T> {
   if (matches.length === 0) return { kind: 'none' };

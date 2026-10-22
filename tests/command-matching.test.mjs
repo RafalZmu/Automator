@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { canAutoRunTabCommand, matchTabCommands, resolveTabCommand } from '../ui/commands/commandMatching.ts';
+import { canAutoRunTabCommand, matchQuickActions, matchTabCommands, resolveTabCommand } from '../ui/commands/commandMatching.ts';
 
 const commands = [
   { id: 'new-script', label: 'New script profile', keywords: ['create', 'script'] },
@@ -36,4 +36,27 @@ test('delayed automatic execution is limited to unique enabled actions without c
   assert.equal(canAutoRunTabCommand({ ...commands[0], disabled: true }), false);
   assert.equal(canAutoRunTabCommand({ ...commands[0], confirmationPrompt: 'Delete this profile?' }), false);
   assert.equal(canAutoRunTabCommand(undefined), false);
+});
+
+test('an exact shortcut match wins over partial text matches', () => {
+  const app = { id: 'binding:1', label: 'Notes', keywords: ['nt'], shortcut: 'nt' };
+  const timer = { id: 'timer', label: 'Start Nt timer', keywords: ['focus'] };
+  assert.deepEqual(matchQuickActions([timer, app], 'NT').map((command) => command.id), ['binding:1']);
+  assert.deepEqual(resolveTabCommand(matchQuickActions([timer, app], 'nt')), { kind: 'unique', command: app });
+  assert.deepEqual(matchQuickActions([timer, app], 'nt timer').map((command) => command.id), ['timer']);
+});
+
+test('a tab number selects its tab regardless of digits in other labels or keywords', () => {
+  const tab = { id: 'tab:api', label: 'Open API', keywords: ['tab 3'], shortcut: '3' };
+  const other = { id: 'x', label: 'Backup 3 files', keywords: ['copy 3'] };
+  assert.deepEqual(matchQuickActions([other, tab], '3').map((command) => command.id), ['tab:api']);
+  assert.deepEqual(matchQuickActions([other, tab], '4'), []);
+});
+
+test('exact shortcut matching ignores disabled actions, empty queries and shared aliases', () => {
+  const a = { id: 'a', label: 'Alpha', shortcut: 'al' };
+  const b = { id: 'b', label: 'Beta', shortcut: 'al' };
+  assert.deepEqual(matchQuickActions([{ ...a, disabled: true }], 'al'), []);
+  assert.deepEqual(matchQuickActions([a, b], '  ').map((command) => command.id), ['a', 'b']);
+  assert.deepEqual(resolveTabCommand(matchQuickActions([a, b], 'al')), { kind: 'ambiguous' });
 });
