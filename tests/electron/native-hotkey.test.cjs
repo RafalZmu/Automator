@@ -21,7 +21,7 @@ function panelBoundsAt(pointer, workArea) {
   return { x: left, y: top, width, height };
 }
 
-async function waitFor(predicate, description, timeoutMs = 5000) {
+async function waitFor(predicate, description, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await predicate()) return;

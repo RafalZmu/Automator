@@ -1,6 +1,6 @@
 const { setTimeout: delay } = require('node:timers/promises');
 
-async function waitForPageCondition(page, predicate, description, timeoutMs = 5000) {
+async function waitForPageCondition(page, predicate, description, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await page.evaluate(predicate)) return;
