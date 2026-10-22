@@ -79,7 +79,7 @@ function toProfile(draft: WorkflowDraft): { profile?: WorkflowProfile; error?: s
         };
       }),
     }));
-    const profile: WorkflowProfile = { id: draft.id.trim().toLowerCase(), name: draft.name.trim(), variables: parsedVariables.variables, variableReferences: draft.variableReferences, steps };
+    const profile: WorkflowProfile = { id: draft.id.trim().toLowerCase(), name: draft.name.trim(), variables: parsedVariables.variables, ...(draft.variableReferences ? { variableReferences: draft.variableReferences } : {}), steps };
     const validation = validateWorkflowProfile(profile);
     return validation ? { error: validation } : { profile };
   } catch {
