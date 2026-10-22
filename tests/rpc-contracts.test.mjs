@@ -228,3 +228,10 @@ test('keyboard availability notification supports revoke and regain', () => {
     params: { moduleId: 'launcher', eligible: 'true' },
   }).success, false);
 });
+
+test('module action input rejects undefined object members such as an unset workflow variableReferences', () => {
+  const base = { requestId: 'r1', contractVersion: 1, moduleId: 'workflows', actionId: 'saveWorkflow', actionVersion: 1 };
+  const profile = { id: 'workflow-abc', name: 'backup', variables: {}, steps: [] };
+  assert.equal(automationModuleActionRequestSchema.safeParse({ ...base, input: profile }).success, true);
+  assert.equal(automationModuleActionRequestSchema.safeParse({ ...base, input: { ...profile, variableReferences: undefined } }).success, false);
+});
