@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { AppWindow, ArrowDown, ArrowUp, CornerDownLeft, Search, Settings2, Sparkles } from 'lucide-react';
-import { canAutoRunTabCommand, matchTabCommands, resolveTabCommand, type TabCommand } from './commandMatching';
+import { canAutoRunTabCommand, matchQuickActions, resolveTabCommand, type TabCommand } from './commandMatching';
 
 export type QuickAction = TabCommand & {
   kind: 'binding' | 'module' | 'tab' | 'system' | 'snippet';
@@ -25,7 +25,7 @@ export function QuickActionsHome({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const matches = useMemo(() => matchTabCommands(actions, query), [actions, query]);
+  const matches = useMemo(() => matchQuickActions(actions, query), [actions, query]);
   const resolution = resolveTabCommand(matches);
 
   useEffect(() => {

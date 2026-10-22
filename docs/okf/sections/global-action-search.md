@@ -42,4 +42,6 @@ Read the root AGENTS.md first. Global Action Search is the compact launcher's ho
 - Snippets are the one case where the global surface runs an action itself: it lists the published Snippets state entries, copies the text, and closes the launcher without selecting a tab. Keep the Snippets tab's own commands out of this surface so they do not appear twice, and keep the text out of labels and keywords.
 - Add command matching and renderer integration tests when changing ranking, routing, focus, or execution timing.
 
+- An exact shortcut query (an alias or tab number) matches only commands with that shortcut (`matchQuickActions`), so partial text matches never add a second result.
+
 Code: ui/commands/QuickActionsHome.tsx, TabCommandBar.tsx, TabCommandRegistry.tsx, and commandMatching.ts; composition and routing live in ui/App.tsx.
