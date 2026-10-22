@@ -9,7 +9,7 @@ import { clearSensitiveTemplateValues } from './scriptTemplateViewModel';
 import { normalizeExplorerExtensions, prepareExplorerForm, registrationNotice, type ExplorerProfile, type ExplorerRunForm } from './explorerActionViewModel';
 
 type Props = { services: AutomationServices; profiles: ExplorerProfile[]; templates: ScriptTemplateDescriptor[]; open: boolean; onOpen: () => void; busy: boolean; onStartRun: (profile: { id: string; name: string }, input: Record<string, unknown>) => Promise<{ state: string; message: string }> };
-type MappingDraft = { id: string; profileId: string; label: string; extensions: string; fileParameterKey: string };
+type MappingDraft = { id: string; profileId: string; label: string; extensions: string; fileParameterKey: string; folders: boolean };
 function responseData(value: unknown): Record<string, unknown> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function message(error: unknown): string { return error instanceof Error ? error.message : 'The Explorer action could not be updated.'; }
 
@@ -77,7 +77,7 @@ export function ExplorerActionsPanel({ services, profiles, templates, open, onOp
     try {
       const profile = profiles.find(item => item.id === draft.profileId);
       if (!profile) throw new Error('Choose a saved profile.');
-      const action: ExplorerActionDefinition = { id: draft.id, profileId: draft.profileId, label: draft.label.trim(), extensions: normalizeExplorerExtensions(draft.extensions), ...(profile.templateOrigin ? { fileParameterKey: draft.fileParameterKey } : {}) };
+      const action: ExplorerActionDefinition = { id: draft.id, profileId: draft.profileId, label: draft.label.trim(), extensions: normalizeExplorerExtensions(draft.extensions, draft.folders), ...(draft.folders ? { folders: true } : {}), ...(profile.templateOrigin ? { fileParameterKey: draft.fileParameterKey } : {}) };
       const result = await services.modules.dispatch('saveExplorerAction', action);
       if (result.status === 'error') throw new Error(result.message);
       setDraft(null);
@@ -129,8 +129,8 @@ export function ExplorerActionsPanel({ services, profiles, templates, open, onOp
   const locked = busy || mutating || opening;
   if (!open) return null;
   return <section className="script-editor explorer-actions-panel" aria-label="File Explorer actions">
-    <div className="script-editor-heading"><strong>File Explorer actions</strong><button className="secondary-button" type="button" disabled={locked || !profiles.length} onClick={() => { setDraft({ id: `explorer-${crypto.randomUUID().replaceAll('-', '')}`, profileId: '', label: '', extensions: '', fileParameterKey: '' }); setNotice(''); }}>Add action</button></div>
-    <p>Map saved profiles to file types in the Automator submenu. On Windows 11, use Show more options. Selecting an action opens a form; it runs after you press Run.</p>
+    <div className="script-editor-heading"><strong>File Explorer actions</strong><button className="secondary-button" type="button" disabled={locked || !profiles.length} onClick={() => { setDraft({ id: `explorer-${crypto.randomUUID().replaceAll('-', '')}`, profileId: '', label: '', extensions: '', fileParameterKey: '', folders: false }); setNotice(''); }}>Add action</button></div>
+    <p>Map saved profiles to file types or folders in the Automator submenu. On Windows 11, use Show more options. Selecting an action opens a form; it runs after you press Run.</p>
     {registration && <p className="script-notice" role="status">{registration}</p>}
     {notice && <p className="script-notice" role="status">{notice}</p>}
     {opening && <p role="status">Opening selected file…</p>}
@@ -138,14 +138,15 @@ export function ExplorerActionsPanel({ services, profiles, templates, open, onOp
       <div className="script-fields">
         <label><span>Saved profile</span><select aria-label="Saved profile" required value={draft.profileId} disabled={locked} onChange={event => setDraft({ ...draft, profileId: event.target.value, fileParameterKey: defaultFileParameterKey(event.target.value) })}><option value="">Choose a profile…</option>{profiles.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label><span>Menu label</span><input required maxLength={128} value={draft.label} disabled={locked} onChange={event => setDraft({ ...draft, label: event.target.value })} /></label>
-        <label className="script-field-wide"><span>File extensions</span><input required placeholder=".fdb, .txt" value={draft.extensions} disabled={locked} onChange={event => setDraft({ ...draft, extensions: event.target.value })} /></label>
+        <label className="script-field-wide"><span>File extensions</span><input required={!draft.folders} placeholder=".fdb, .txt" value={draft.extensions} disabled={locked} onChange={event => setDraft({ ...draft, extensions: event.target.value })} /></label>
+        <label className="script-field-wide"><input type="checkbox" checked={draft.folders} disabled={locked} onChange={event => setDraft({ ...draft, folders: event.target.checked })} /> <span>Also show for folders</span></label>
         {profile?.templateOrigin ? <label className="script-field-wide"><span>Put the selected file into <small>the file you right-click is passed to this input, so pick the one that takes the file itself (for example the database, not the backup output)</small></span><select aria-label="Selected file parameter" required value={draft.fileParameterKey} disabled={locked} onChange={event => setDraft({ ...draft, fileParameterKey: event.target.value })}><option value="">Choose a file or directory input…</option>{mappingParameters.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</select></label> : <p className="script-field-wide">The saved profile must include {'{{file.path}}'} in its arguments. Each line stays one process argument.</p>}
       </div>
       <div className="script-editor-actions"><button className="secondary-button" type="button" disabled={locked} onClick={() => setDraft(null)}>Cancel mapping</button><button className="primary-button" type="submit" disabled={locked}>Save action</button></div>
     </form>}
     <div className="script-profile-list">{actions.map(item => <article className="script-profile-row" key={item.id}>
-      <div className="script-profile-copy"><strong>{item.label}</strong><span>{item.extensions.join(', ')} · {profiles.find(profile => profile.id === item.profileId)?.name ?? 'Profile no longer exists'}</span></div>
-      <button className="secondary-button" type="button" aria-label={`Edit ${item.label}`} disabled={locked} onClick={() => setDraft({ id: item.id, profileId: item.profileId, label: item.label, extensions: item.extensions.join(', '), fileParameterKey: item.fileParameterKey ?? '' })}>Edit</button>
+      <div className="script-profile-copy"><strong>{item.label}</strong><span>{[...item.extensions, ...(item.folders ? ['folders'] : [])].join(', ')} · {profiles.find(profile => profile.id === item.profileId)?.name ?? 'Profile no longer exists'}</span></div>
+      <button className="secondary-button" type="button" aria-label={`Edit ${item.label}`} disabled={locked} onClick={() => setDraft({ id: item.id, profileId: item.profileId, label: item.label, extensions: item.extensions.join(', '), fileParameterKey: item.fileParameterKey ?? '', folders: item.folders === true })}>Edit</button>
       <button className="secondary-button" type="button" aria-label={`Remove ${item.label}`} disabled={locked} onClick={() => void remove([item])}>Remove</button>
     </article>)}</div>
     {!actions.length && <p>No Explorer actions configured. Install a Library template or save a profile, then add an action.</p>}

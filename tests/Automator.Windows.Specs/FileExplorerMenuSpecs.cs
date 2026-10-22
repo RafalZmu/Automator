@@ -61,6 +61,21 @@ static class FileExplorerMenuSpecs
         Check.Equal(4, notifications);
     }
 
+    public static void RegistersAndRemovesFolderMenu()
+    {
+        var store = new RegistryStore();
+        var adapter = new WindowsAutomationFileExplorerMenu(store, () => { });
+        const string folder = @"Software\Classes\Directory\shell\Automator.ScriptRunner";
+        ExplorerActionDefinition[] actions = [new("logon", "profile", "Log on", [], Folders: true)];
+        adapter.ReconcileAsync(actions, @"C:\Automator\Automator.exe", default).GetAwaiter().GetResult();
+        Check.Equal("Automator", store.Read(folder, "MUIVerb"));
+        Check.Equal("Log on", store.Read(folder + @"\shell\logon", "MUIVerb"));
+        Check.Equal("\"C:\\Automator\\Automator.exe\" --automator-file-action \"logon\" -- \"%1\"", store.Read(folder + @"\shell\logon\command", ""));
+        adapter.ReconcileAsync([], @"C:\Automator\Automator.exe", default).GetAwaiter().GetResult();
+        Check.Equal<string?>(null, store.Read(folder, "MUIVerb"));
+        Check.False(store.Exists(folder + @"\shell\logon"));
+    }
+
     public static void DisabledHostsAndCollisionsDoNotWrite()
     {
         var store = new RegistryStore();
