@@ -312,6 +312,7 @@ input { user-select: text; }
 .script-profile-item[data-expanded="true"] .script-profile-row { border-color: transparent; background: transparent; transform: none; }
 .script-profile-item[data-expanded="true"] > .script-editor { max-height: none; margin: 0 8px 8px; padding: 10px 4px 2px; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; overflow: visible; }
 .script-run-panel { display: flex; flex-direction: column; gap: 9px; margin: 0 8px 8px; padding: 10px 4px 2px; border-top: 1px solid var(--line); }
+.script-detected-parameters { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0 0 0 16px; font-size: 12px; }
 .script-running { flex: none; display: flex; align-items: center; gap: 9px; padding: 8px 11px; border: 1px solid rgba(24,130,152,.35); border-radius: 11px; background: rgba(25,139,162,.08); }
 .script-running-spinner { flex: none; color: var(--accent); animation: script-spin 1s linear infinite; }
 .script-running-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }

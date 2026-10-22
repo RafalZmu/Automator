@@ -65,3 +65,15 @@ test('PowerShell Explorer registration creates a unique prefilled profile draft'
   assert.throws(() => createPowerShellProfileDraft('relative.ps1', 'C:\\PowerShell\\pwsh.exe', []));
   assert.throws(() => createPowerShellProfileDraft('C:\\Tools\\not-a-script.txt', 'C:\\PowerShell\\pwsh.exe', []));
 });
+
+test('detected script parameters are validated for display', async () => {
+  const { parseDetectedScriptParameters } = await import('../contracts/scriptRunner.ts');
+  const parsed = parseDetectedScriptParameters([
+    { name: 'Source', type: 'text', required: true, description: 'Folder' },
+    { name: 'Mode', type: 'choice', required: false, defaultValue: 'safe', options: ['fast', 'safe'] },
+  ]);
+  assert.equal(parsed.length, 2);
+  assert.deepEqual(parsed[1].options, ['fast', 'safe']);
+  assert.throws(() => parseDetectedScriptParameters([{ name: 'x', type: 'number', required: false }]));
+  assert.throws(() => parseDetectedScriptParameters('nope'));
+});
