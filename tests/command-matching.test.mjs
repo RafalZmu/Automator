@@ -52,3 +52,11 @@ test('a tab number selects its tab regardless of digits in other labels or keywo
   assert.deepEqual(matchQuickActions([other, tab], '3').map((command) => command.id), ['tab:api']);
   assert.deepEqual(matchQuickActions([other, tab], '4'), []);
 });
+
+test('exact shortcut matching ignores disabled actions, empty queries and shared aliases', () => {
+  const a = { id: 'a', label: 'Alpha', shortcut: 'al' };
+  const b = { id: 'b', label: 'Beta', shortcut: 'al' };
+  assert.deepEqual(matchQuickActions([{ ...a, disabled: true }], 'al'), []);
+  assert.deepEqual(matchQuickActions([a, b], '  ').map((command) => command.id), ['a', 'b']);
+  assert.deepEqual(resolveTabCommand(matchQuickActions([a, b], 'al')), { kind: 'ambiguous' });
+});
