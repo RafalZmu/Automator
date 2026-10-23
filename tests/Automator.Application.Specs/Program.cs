@@ -49,6 +49,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("Explorer mappings validate files and preserve transient values", ScriptRunnerExplorerSpecs.RunAsync),
     ("script template catalog validates descriptors and legacy profile metadata", ScriptRunnerTemplateSpecs.RunAsync),
     ("script profile inputs are typed, remembered without secrets, and approved with the profile", ScriptRunnerParameterSpecs.RunAsync),
+    ("script parameters are read from param blocks and @param header comments", ScriptRunnerParameterInspectorSpecs.RunAsync),
     ("Codex task builder validates capability, actions, CLI output and draft IDs", CodexTaskSpecs.RunAsync),
     ("API profiles save URL-only grants and profile default JSON", ApiProfilesSaveUrlOnlyAndDefaultInput),
     ("work-time log actions validate metadata and delegate to the host coordinator", FocusSessionModuleDispatchesCoordinatorActions),

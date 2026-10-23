@@ -82,6 +82,7 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
             new("listProfiles", 1, [LibraryCapability]),
             new("listTemplates", 1, [LibraryCapability]),
             new("installTemplate", 1, [LibraryCapability]),
+            new("inspectScript", 1, [LibraryCapability]),
             new("saveProfile", 1, [LibraryCapability]),
             new("deleteProfile", 1, [LibraryCapability, ExplorerMenuCapability]),
             new("runProfile", 1, [LibraryCapability, ProcessCapability]),
@@ -124,6 +125,7 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
                 "listProfiles" => await ListProfilesAsync(services, cancellationToken).ConfigureAwait(false),
                 "listTemplates" => ListTemplates(),
                 "installTemplate" => await InstallTemplateAsync(input, moduleSettings, services, cancellationToken).ConfigureAwait(false),
+                "inspectScript" => await InspectScriptAsync(input, services, cancellationToken).ConfigureAwait(false),
                 "saveProfile" => await SaveProfileAsync(input, services, cancellationToken).ConfigureAwait(false),
                 "deleteProfile" => await DeleteProfileAsync(input, services, cancellationToken).ConfigureAwait(false),
                 "runProfile" => await RunProfileAsync(input, services, cancellationToken).ConfigureAwait(false),
@@ -157,6 +159,23 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
         var (profile, installed) = await _templateInstaller.InstallAsync(ReadId(input), settings, services.Library!, cancellationToken, values, additionalCopy).ConfigureAwait(false);
         return Result(installed ? AutomationStatus.Success : AutomationStatus.Information,
             installed ? $"Installed {profile.Name}." : "This template is already installed.", new { profile, installed });
+    }
+
+    /// <summary>Reads the parameters a saved profile's script declares in its own source. Nothing is saved or run.</summary>
+    private static async Task<AutomationResult> InspectScriptAsync(
+        JsonElement input, AutomationServicesContext services, CancellationToken cancellationToken)
+    {
+        var id = ReadId(input);
+        var record = await services.Library!.GetAsync(ProfileCollection, id, cancellationToken).ConfigureAwait(false);
+        if (record is null) return Error("The selected script profile no longer exists.");
+        var profile = JsonSerializer.Deserialize<ScriptRunnerProfile>(record.Data.GetRawText(), JsonOptions)
+            ?? throw new InvalidDataException("The saved script profile is invalid.");
+        Validate(profile);
+        if (!File.Exists(profile.ScriptPath)) return Error("The script file was not found.");
+        var parameters = ScriptRunnerParameterInspector.InspectFile(profile.ScriptPath, profile.Interpreter);
+        return Result(AutomationStatus.Success,
+            parameters.Count == 0 ? "No parameters were found in the script." : $"{parameters.Count} parameter{(parameters.Count == 1 ? string.Empty : "s")} found in the script.",
+            new { profileId = profile.Id, parameters });
     }
 
     private async Task<AutomationResult> SaveProfileAsync(

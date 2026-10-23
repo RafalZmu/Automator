@@ -199,3 +199,32 @@ export function parseExplorerActions(value: unknown): ExplorerActionDefinition[]
     return { id, profileId, label, extensions: [...new Set(extensions)], fileParameterKey };
   });
 }
+
+/** A parameter read from a script's own source. Display only; it is never a saved input definition. */
+export type DetectedScriptParameter = {
+  name: string;
+  type: 'text' | 'boolean' | 'choice' | 'file' | 'directory';
+  required: boolean;
+  description?: string;
+  defaultValue?: string;
+  options?: string[];
+};
+
+export function parseDetectedScriptParameters(value: unknown): DetectedScriptParameter[] {
+  if (!Array.isArray(value) || value.length > 64) throw new Error('Detected script parameters are invalid.');
+  return value.map(raw => {
+    const item = object(raw);
+    const type = item.type;
+    if (type !== 'text' && type !== 'boolean' && type !== 'choice' && type !== 'file' && type !== 'directory') throw new Error('Detected parameter type is unsupported.');
+    if (typeof item.required !== 'boolean') throw new Error('Detected parameter required flag is invalid.');
+    const options = item.options == null ? undefined : Array.isArray(item.options) && item.options.length <= 32 ? item.options.map(option => bounded(option, 'Detected option', 128)) : (() => { throw new Error('Detected options are invalid.'); })();
+    return {
+      name: bounded(item.name, 'Detected parameter name', 128),
+      type,
+      required: item.required,
+      description: item.description == null ? undefined : bounded(item.description, 'Detected description', 512),
+      defaultValue: item.defaultValue == null ? undefined : bounded(item.defaultValue, 'Detected default', 256),
+      options,
+    };
+  });
+}

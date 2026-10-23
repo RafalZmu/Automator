@@ -22,6 +22,10 @@ Each argument row is passed as one process argument, including values containing
 
 The Codex task builder can save a successfully run Python task as a normal Script Runner profile. Codex approval metadata ties the saved task to the reviewed source and scope; changed task source or declared review details must be reviewed and reapproved before manual, Workflow, or Scheduler execution. Scope is consent context and does not limit the script's Windows-user permissions. See [Codex](../codex/README.md) for the authoring and review flow.
 
+#### Parameters read from the script
+
+A script that an agent just wrote does not need declared inputs for you to see what it accepts. Each saved (non-Library) profile row has an **info** button; it reads the script file and lists the parameters the script declares, read-only: name, type, required, default, choices, and description. Nothing is saved, run, or turned into inputs. PowerShell scripts are read from the `param()` block (`Mandatory`, `[switch]`/`[bool]`, `[ValidateSet]`, defaults) with descriptions from `.PARAMETER` comment-based help. Any script, including Python and Bash, can instead declare parameters in header comments, one per line: `# @param name (flag, required): description`, where the optional bracket holds any of `required`, `flag`, `file`, `folder`. Any line in the file that matches is listed, not only the top. Defaults of parameters whose names suggest secrets (token, key, password) are not shown. Only the first 256 KB of the file is read. To make the parameters real inputs with a Run form, declare them in the profile editor.
+
 ### Test case steps
 
 See [TESTS.md](TESTS.md) for template, profile, path-field, and Electron integration cases with their steps and expected results.
@@ -65,7 +69,8 @@ The Remove button on a profile row uses a two-step inline confirmation: the firs
 
 - `ui/modules/scriptRunStore.ts` owns running and finished runs for the window (memory only); `tests/script-run-store.test.mjs` covers it.
 - `ui/modules/ScriptRunnerView.tsx` contains profile editing, interpreter defaults, Explorer registration handoff, run/cancel, and output presentation. `scriptTemplateViewModel.ts` creates validated PowerShell profile drafts from `.ps1` Explorer requests.
-- `contracts/scriptRunner.ts` validates renderer-facing profile and result shapes.
+- `contracts/scriptRunner.ts` validates renderer-facing profile and result shapes, including detected script parameters.
+- `ScriptRunnerParameterInspector.cs` reads parameters from a script's `param()` block or `@param` header comments for the `inspectScript` action.
 - `src/Automator.Application/Automation/ScriptRunnerModule.cs` validates profiles, expands global variables in argument values, invokes the process capability, and interprets text/JSON output.
 - `ScriptRunnerExecution.cs` provides the shared process path used by interactive profiles and Codex-generated Python drafts.
 - `ScriptRunnerSavedProfileHandler.cs` lets Workflows and Scheduler run a saved script profile.

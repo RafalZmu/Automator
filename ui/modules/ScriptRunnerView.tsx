@@ -1,6 +1,6 @@
 import { GlobalVariableHints } from '../variables/GlobalVariables';
 import {
-  Braces, Check, Clock3, FileCode2, Loader2, Pencil, Play, Plus, Save, Square, Terminal, Trash2, X,
+  Braces, Check, Clock3, FileCode2, Info, Loader2, Pencil, Play, Plus, Save, Square, Terminal, Trash2, X,
 } from 'lucide-react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AutomationServices } from '../automationServices';
@@ -20,6 +20,7 @@ import { ExplorerActionsPanel } from './ExplorerActionsPanel';
 import { FileExplorerLaunchContext } from '../FileExplorerLaunchContext';
 import { ScriptParameterBuilder } from './ScriptParameterBuilder';
 import { ScriptParameterFields } from './ScriptParameterFields';
+import { parseDetectedScriptParameters, type DetectedScriptParameter } from '../../contracts/scriptRunner';
 import {
   activeScriptRun, cancelScriptRun, clearFinishedScriptRuns, describeRunError, describeRunState, startScriptRun, useScriptRuns,
 } from './scriptRunStore';
@@ -126,6 +127,8 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
   // The one profile whose inputs are open in the Run form.
   const [runTarget, setRunTarget] = useState<ScriptProfile | null>(null);
   const [runValues, setRunValues] = useState<Record<string, ScriptTemplateValue>>({});
+  // Parameters read from a script's own source for the one profile whose info panel is open. They are display only.
+  const [inspected, setInspected] = useState<{ profileId: string; parameters: DetectedScriptParameter[] | null; message: string } | null>(null);
   const moduleSettingsRef = useRef<ModuleSettingsValue>({});
   const profilesRef = useRef<ScriptProfile[]>([]);
   profilesRef.current = profiles;
@@ -294,6 +297,24 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
     setEditing(null);
     setRunTarget(profile);
     setRunValues(initialParameterValues(profileParameters(profile, templates), profile.values, profile.templateOrigin?.id));
+  };
+
+  const inspectRequestRef = useRef(0);
+  const toggleInspect = async (profile: ScriptProfile) => {
+    const request = ++inspectRequestRef.current;
+    if (inspected?.profileId === profile.id) {
+      setInspected(null);
+      return;
+    }
+    try {
+      const result = await services.modules.dispatch('inspectScript', { id: profile.id });
+      if (request !== inspectRequestRef.current) return;
+      const parameters = result.status === 'error' ? null : parseDetectedScriptParameters(result.data && typeof result.data === 'object' && 'parameters' in result.data ? result.data.parameters : []);
+      setInspected({ profileId: profile.id, parameters, message: result.message });
+    } catch (error) {
+      if (request !== inspectRequestRef.current) return;
+      setInspected({ profileId: profile.id, parameters: null, message: error instanceof Error ? error.message : 'Could not read the script.' });
+    }
   };
 
   const cancelActiveRun = () => {
@@ -632,10 +653,19 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
               <button className="icon-button script-row-action" type="button" aria-label={runningId === profile.id ? `Cancel ${profile.name}` : `Run ${profile.name}`} title={runningId === profile.id ? 'Cancel run' : inputCount ? 'Enter inputs and run' : 'Run script'} disabled={runningId !== null && runningId !== profile.id} aria-expanded={inputCount ? runTarget?.id === profile.id : undefined} onClick={() => void runProfile(profile)}>
                 {runningId === profile.id ? <Square size={14} /> : <Play size={15} />}
               </button>
+              {!profile.templateOrigin && <button className="icon-button script-row-action" type="button" aria-label={`Show parameters of ${profile.name}`} title="Show the parameters declared in the script" aria-expanded={inspected?.profileId === profile.id} onClick={() => void toggleInspect(profile)}><Info size={14} /></button>}
               <button className="icon-button script-row-action" type="button" aria-label={`Edit ${profile.name}`} title="Edit" disabled={runningId !== null} onClick={() => openEditor(profile)}><Pencil size={14} /></button>
               <InlineConfirmButton className="icon-button script-row-action" label={`Remove ${profile.name}`} confirmLabel={`Yes, remove ${profile.name}`} title="Remove" disabled={runningId !== null} onConfirm={() => deleteProfile(profile)}><Trash2 size={14} /></InlineConfirmButton>
             </article>
             {editingRowId === profile.id && renderEditor()}
+            {inspected?.profileId === profile.id && <section className="script-run-panel" aria-label={`Parameters of ${profile.name}`}>
+              <p className="script-section-help">{inspected.message} Read from the script file, not saved. Use <code>param()</code> with <code>.PARAMETER</code> help in PowerShell, or <code># @param name (flag, required): description</code> comments in any script.</p>
+              {inspected.parameters && inspected.parameters.length > 0 && <ul className="script-detected-parameters">{inspected.parameters.map((parameter) => <li key={parameter.name}>
+                <code>{parameter.name}</code> · {parameter.type}{parameter.required ? ' · required' : ''}{parameter.defaultValue ? ` · default ${parameter.defaultValue}` : ''}{parameter.options ? ` · ${parameter.options.join(' | ')}` : ''}
+                {parameter.description && <small> — {parameter.description}</small>}
+              </li>)}</ul>}
+              <div className="script-editor-actions"><button className="secondary-button" type="button" onClick={() => setInspected(null)}>Close</button></div>
+            </section>}
             {runTarget?.id === profile.id && <section className="script-run-panel" aria-label={`Run ${runTarget.name}`}>
               {runTarget.templateOrigin && <p className="script-trust-note">{trustNote}</p>}
               <div className="script-fields">
