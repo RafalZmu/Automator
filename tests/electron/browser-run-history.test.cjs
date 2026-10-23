@@ -29,8 +29,13 @@ async function launchHost(name, dataDirectory, backendDataDirectory) {
 async function openRunHistory(page) {
   const toggle = page.getByRole('button', { name: /^Run history/ });
   await toggle.waitFor({ state: 'visible' });
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
-  await page.getByRole('region', { name: 'Playwright run history' }).waitFor({ state: 'visible' });
+  // In the compact window the panel also opens itself when a finished run is loaded, so re-check the state after each click.
+  const region = page.getByRole('region', { name: 'Playwright run history' });
+  for (let attempt = 0; attempt < 3 && !(await region.isVisible()); attempt += 1) {
+    if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+    await page.waitForTimeout(500);
+  }
+  await region.waitFor({ state: 'visible' });
 }
 
 async function openBrowserAutomation(app) {
