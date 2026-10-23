@@ -485,7 +485,7 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
   // A finished run is shown in the side panel, so reveal it when the panel is hidden.
   const seenFinishedId = useRef(latestFinishedId);
   useEffect(() => {
-    if (latestFinishedId && seenFinishedId.current && latestFinishedId !== seenFinishedId.current && sidePanel.panelMode) sidePanel.setOpen(true);
+    if (latestFinishedId && latestFinishedId !== seenFinishedId.current && sidePanel.panelMode) sidePanel.setOpen(true);
     seenFinishedId.current = latestFinishedId;
   }, [latestFinishedId, sidePanel.panelMode, sidePanel.setOpen]);
   const shownRun = shownRunId === 'none' ? undefined : runs.find((run) => run.id === (shownRunId ?? latestFinishedId));

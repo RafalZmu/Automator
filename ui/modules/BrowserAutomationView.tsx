@@ -436,7 +436,7 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
   const newestRunId = history[0]?.id;
   const seenRunId = useRef(newestRunId);
   useEffect(() => {
-    if (newestRunId && seenRunId.current && newestRunId !== seenRunId.current && sidePanelMode) setHistoryOpen(true);
+    if (newestRunId && newestRunId !== seenRunId.current && sidePanelMode) setHistoryOpen(true);
     seenRunId.current = newestRunId;
   }, [newestRunId, sidePanelMode, setHistoryOpen]);
   const shownRun = shownRunId === 'none' ? undefined : history.find((item) => item.id === (shownRunId ?? history[0]?.id));
