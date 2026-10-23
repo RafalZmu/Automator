@@ -33,7 +33,7 @@ A test that passed only after a failed attempt is **Flaky**, and its error is fr
 
 ## Code map
 
-- Side panel: `ui/modules/BrowserAutomationView.tsx` uses the shared `ui/components/SideHistoryPanel.tsx` (also used by Script Runner and Scheduler) to portal the history into `#side-panel-slot` (rendered by `ui/App.tsx`, sized from the window width in `ui/styles.css`) and calls `bridge.setSidePanel`; `electron/main.ts` animates the window bounds using `computeSidePanelBounds` and `interpolateBounds` in `electron/platform.ts` (tests: tests/host-platform.test.mjs).
+- Side panel (520 px, `SIDE_PANEL_WIDTH` in `electron/platform.ts`; holds the run list and the selected run's full results, and the main panel shows no run info in the compact window): `ui/modules/BrowserAutomationView.tsx` uses the shared `ui/components/SideHistoryPanel.tsx` (also used by Script Runner and Scheduler) to portal the history into `#side-panel-slot` (rendered by `ui/App.tsx`, sized from the window width in `ui/styles.css`) and calls `bridge.setSidePanel`; `electron/main.ts` animates the window bounds using `computeSidePanelBounds` and `interpolateBounds` in `electron/platform.ts` (tests: tests/host-platform.test.mjs).
 - `openUiMode` (`PlaywrightTestExplorer.OpenUiModeAsync`) starts the UI mode session; it is on the detached action list in `BackendServer.IsDetachedRunAction`.
 - ui/modules/BrowserAutomationView.tsx renders project selection, discovered files/tests, tag editing, grouped runs, the running banner and the saved run history.
 - src/Automator.Infrastructure/Automation/playwright-run-reporter.cjs is the Playwright reporter that writes each run's per-test events; tests/playwright-run-reporter.test.cjs covers it.

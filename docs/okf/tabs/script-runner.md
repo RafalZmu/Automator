@@ -97,7 +97,7 @@ Saved scripts can be listed, inspected (typed inputs with hints and examples), r
 
 ### History side panel
 
-Run history opens as a left side panel in the compact window (the window widens to the left, same behavior as Browser Automation) via the shared `ui/components/SideHistoryPanel.tsx`; the workspace window keeps the inline section. Open state is remembered per tab on this computer.
+Run history opens as a left side panel in the compact window (the window widens to the left, same behavior as Browser Automation) via the shared `ui/components/SideHistoryPanel.tsx`; the workspace window keeps the inline section. Open state is remembered per tab on this computer. In the side panel the full run record lives in the panel (the run list plus the selected run's details, 520 px wide) and the main panel shows no run results or last-run info; the panel opens itself when a run finishes.
 
 ## Contributor rules
 
