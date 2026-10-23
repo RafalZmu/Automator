@@ -205,13 +205,21 @@ export function SchedulerView({ services, surface }: ViewProps) {
             <button className="icon-button" title="Edit" aria-label={`Edit ${schedule.name}`} disabled={!!busy || !!state?.running} onClick={() => edit(schedule)}><Pencil size={13} /></button>
             <InlineConfirmButton className="icon-button" title="Delete schedule" label={`Delete ${schedule.name}`} confirmLabel={`Yes, delete ${schedule.name}`} disabled={!!busy || !!state?.running} onConfirm={() => action('deleteSchedule', { scheduleId: schedule.id }, schedule.id)}><Trash2 size={13} /></InlineConfirmButton>
           </div>
-          <div className="scheduler-meta"><span className="scheduler-state">{state?.running ? 'Running' : schedule.enabled ? 'Enabled' : 'Paused'}</span><span><Clock3 size={10} />{state?.nextRunAtUtc && schedule.enabled ? new Date(state.nextRunAtUtc).toLocaleString() : 'No upcoming run'}</span>{last && <span>Last: {last.category} · {last.durationMilliseconds} ms</span>}{schedule.runOnceAfterRestart && <span>Catch-up enabled</span>}</div>
+          <div className="scheduler-meta"><span className="scheduler-state">{state?.running ? 'Running' : schedule.enabled ? 'Enabled' : 'Paused'}</span><span><Clock3 size={10} />{state?.nextRunAtUtc && schedule.enabled ? new Date(state.nextRunAtUtc).toLocaleString() : 'No upcoming run'}</span>{last && !sidePanel.panelMode && <span>Last: {last.category} · {last.durationMilliseconds} ms</span>}{schedule.runOnceAfterRestart && <span>Catch-up enabled</span>}</div>
         </article>;
       })}
     </div>
     {snapshot.history.length > 0 && (sidePanel.panelMode
-      ? <SideHistoryToggle panel={sidePanel} title="Run history" summary={`${snapshot.history.length} recent`} />
+      ? <SideHistoryToggle panel={sidePanel} title="Run history" />
       : <section className="scheduler-history" aria-label="Run history"><strong>Recent runs</strong>{[...snapshot.history].reverse().slice(0, 20).map((entry) => <div className="scheduler-history-row" key={entry.id}><span>{snapshot.schedules.find((item) => item.id === entry.scheduleId)?.name ?? entry.scheduleId} · {new Date(entry.startedUtc).toLocaleString()}</span><span>{entry.category} · {entry.durationMilliseconds} ms</span></div>)}</section>)}
-    {sidePanel.panelMode && snapshot.history.length > 0 && <SideHistoryContent panel={sidePanel} title="Run history">{[...snapshot.history].reverse().slice(0, 20).map((entry) => <div className="scheduler-history-row" key={entry.id}><span>{snapshot.schedules.find((item) => item.id === entry.scheduleId)?.name ?? entry.scheduleId} · {new Date(entry.startedUtc).toLocaleString()}</span><span>{entry.category} · {entry.durationMilliseconds} ms</span></div>)}</SideHistoryContent>}
+    {sidePanel.panelMode && snapshot.history.length > 0 && <SideHistoryContent panel={sidePanel} title="Run history">
+      <p className="side-panel-note">The last {snapshot.history.length} runs, newest first.</p>
+      {[...snapshot.history].reverse().map((entry) => <article className="scheduler-history-entry" key={entry.id} data-status={entry.status}>
+        <header><strong>{snapshot.schedules.find((item) => item.id === entry.scheduleId)?.name ?? entry.scheduleId}</strong><span className="scheduler-history-status">{entry.status}</span></header>
+        <span>{entry.category}</span>
+        <span>Started {new Date(entry.startedUtc).toLocaleString()}</span>
+        <span>{entry.finishedUtc ? `Finished ${new Date(entry.finishedUtc).toLocaleString()}` : 'Not finished'} · {entry.durationMilliseconds} ms</span>
+      </article>)}
+    </SideHistoryContent>}
   </section>;
 }

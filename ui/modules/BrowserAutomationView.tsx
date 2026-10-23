@@ -432,6 +432,13 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
   ];
   useRegisterTabCommands(tab.id, commands);
 
+  // A finished run is shown in the side panel, so reveal it when the panel is hidden.
+  const finishedRunId = lastRun?.id;
+  const seenRunId = useRef(finishedRunId);
+  useEffect(() => {
+    if (finishedRunId && finishedRunId !== seenRunId.current && sidePanelMode) setHistoryOpen(true);
+    seenRunId.current = finishedRunId;
+  }, [finishedRunId, sidePanelMode, setHistoryOpen]);
   const shownRun = shownRunId === 'none' ? undefined : history.find((item) => item.id === (shownRunId ?? history[0]?.id));
   const shownOutcomes = {
     attention: (shownRun?.tests ?? []).filter((test) => test.status !== 'passed' && test.status !== 'skipped')
@@ -457,6 +464,28 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
     </li>)}</ul>
     {history.length === 0 && <p className="playwright-info">No runs yet. Runs are saved here and kept after Automator restarts.</p>}
   </>;
+  const runResult = shownRun && <section className="playwright-run-result" aria-label="Playwright run results">
+      <header>
+        <span className={`script-run-state is-${shownRun.state}`}>{stateLabels[shownRun.state]}</span>
+        <div className="playwright-run-title">
+          <strong title={shownRun.target}>{shownRun.id === history[0]?.id ? 'Latest run' : 'Past run'} · {shownRun.target}</strong>
+          <small>{formatRunTime(shownRun.startedUtc)} · {formatDuration(shownRun.durationMilliseconds)}</small>
+        </div>
+        {!sidePanelMode && <button className="icon-button" aria-label="Hide run results" onClick={() => setShownRunId('none')}><X size={12} /></button>}
+      </header>
+      <RunCountChips run={shownRun} />
+      <p className="playwright-info" data-error={shownRun.state !== 'success'}>{shownRun.message}{shownRun.outputTruncated ? ' Test runner output was truncated; the run itself continued.' : ''}</p>
+      {shownOutcomes.attention.length > 0 && <div className="playwright-outcome-list">
+        {shownOutcomes.attention.map((test, index) => <OutcomeRow key={`${test.file}:${test.line}:${test.project}:${index}`} test={test} />)}
+      </div>}
+      {shownOutcomes.quiet.length > 0 && <details className="playwright-quiet">
+        <summary>{shownOutcomes.quiet.length} passed or skipped</summary>
+        <div className="playwright-outcome-list">
+          {shownOutcomes.quiet.map((test, index) => <OutcomeRow key={`${test.file}:${test.line}:${test.project}:quiet-${index}`} test={test} />)}
+        </div>
+      </details>}
+      {shownRun.tests.length === 0 && <p className="playwright-info">No per-test results were saved for this run.</p>}
+    </section>;
   return <section className="module-view playwright-view" aria-label="Playwright Test Explorer">
     <style>{styles}</style>
     <header className="playwright-heading">
@@ -521,7 +550,7 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
         </summary>
         {file.tests.map((test) => {
           const outcomeKey = `${test.file.toLowerCase()}:${test.line}:${test.titlePath.at(-1)?.toLowerCase() ?? ''}`;
-          const outcome = outcomesByLocation.get(outcomeKey);
+          const outcome = sidePanelMode ? undefined : outcomesByLocation.get(outcomeKey);
           return <article className="playwright-test" key={test.id}>
             <div className="playwright-test-main"><div className="playwright-test-copy"><div className="playwright-test-title" title={displayTestTitle(test)}>{displayTestTitle(test)}</div><div className="playwright-test-meta">{test.project ? `[${test.project}] · ` : ''}line {test.line}{outcome ? ` · ${outcome}` : ''}</div></div>
               <span className="playwright-test-actions"><button className="icon-button" type="button" title="Show test code" aria-label={`Show code for ${displayTestTitle(test)}`} aria-expanded={codeView?.testId === test.id} disabled={!!busy} onClick={() => void toggleCode(test)}><Code2 size={12} /></button><button className="icon-button" type="button" title="Edit tags" aria-label={`Edit tags for ${displayTestTitle(test)}`} disabled={!!busy} onClick={() => editTags(test)}><Tag size={12} /></button><button className="icon-button" type="button" title="Run test" aria-label={`Run ${displayTestTitle(test)}`} disabled={locked} onClick={() => void run('test', test.id, displayTestTitle(test))}><Play size={12} /></button></span>
@@ -535,31 +564,10 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
       </details>)}
     </div>
 
-    {shownRun && <section className="playwright-run-result" aria-label="Playwright run results">
-      <header>
-        <span className={`script-run-state is-${shownRun.state}`}>{stateLabels[shownRun.state]}</span>
-        <div className="playwright-run-title">
-          <strong title={shownRun.target}>{shownRun.id === history[0]?.id ? 'Latest run' : 'Past run'} · {shownRun.target}</strong>
-          <small>{formatRunTime(shownRun.startedUtc)} · {formatDuration(shownRun.durationMilliseconds)}</small>
-        </div>
-        <button className="icon-button" aria-label="Hide run results" onClick={() => setShownRunId('none')}><X size={12} /></button>
-      </header>
-      <RunCountChips run={shownRun} />
-      <p className="playwright-info" data-error={shownRun.state !== 'success'}>{shownRun.message}{shownRun.outputTruncated ? ' Test runner output was truncated; the run itself continued.' : ''}</p>
-      {shownOutcomes.attention.length > 0 && <div className="playwright-outcome-list">
-        {shownOutcomes.attention.map((test, index) => <OutcomeRow key={`${test.file}:${test.line}:${test.project}:${index}`} test={test} />)}
-      </div>}
-      {shownOutcomes.quiet.length > 0 && <details className="playwright-quiet">
-        <summary>{shownOutcomes.quiet.length} passed or skipped</summary>
-        <div className="playwright-outcome-list">
-          {shownOutcomes.quiet.map((test, index) => <OutcomeRow key={`${test.file}:${test.line}:${test.project}:quiet-${index}`} test={test} />)}
-        </div>
-      </details>}
-      {shownRun.tests.length === 0 && <p className="playwright-info">No per-test results were saved for this run.</p>}
-    </section>}
+    {!sidePanelMode && runResult}
 
     {sidePanelMode
-      ? <SideHistoryToggle panel={sidePanel} title="Run history" summary={historySummary} />
+      ? <SideHistoryToggle panel={sidePanel} title="Run history" />
       : <section className="playwright-history" data-open={historyOpen} aria-label="Playwright run history">
         <header>
           <button type="button" className="playwright-history-toggle" aria-expanded={historyOpen} aria-controls="playwright-history-body" onClick={() => setHistoryOpen((open) => !open)}>
@@ -571,6 +579,6 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
         </header>
         {historyOpen && <div className="playwright-history-body" id="playwright-history-body">{historyList}</div>}
       </section>}
-    {sidePanelMode && <SideHistoryContent panel={sidePanel} title="Playwright run history" actions={clearButton}>{historyList}</SideHistoryContent>}
+    {sidePanelMode && <SideHistoryContent panel={sidePanel} title="Playwright run history" actions={clearButton}><div className="side-panel-list">{historyList}</div>{runResult && <div className="side-panel-detail">{runResult}</div>}</SideHistoryContent>}
   </section>;
 }

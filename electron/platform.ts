@@ -41,7 +41,7 @@ export function computePanelBounds(
 }
 
 export const SIDE_PANEL_ANIMATION_MS = 220;
-export const SIDE_PANEL_WIDTH = 300;
+export const SIDE_PANEL_WIDTH = 520;
 
 /**
  * Bounds for a window that grows to the left by `panelWidth` when `open`, or shrinks back from that width.

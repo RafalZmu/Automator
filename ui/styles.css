@@ -60,10 +60,14 @@ input { user-select: text; }
 .window-shell[data-surface="launcher"] { padding-left: calc(clamp(14px, 4.6 * min(100vw, 760px) / 100, 24px) + max(0px, 100vw - 760px)); }
 .side-panel-slot { position: absolute; z-index: 2; top: 0; bottom: 0; left: 0; width: max(0px, calc(100vw - 760px)); overflow: hidden; background: rgba(255, 255, 255, .18); pointer-events: auto; }
 .side-panel-slot:empty { display: none; }
-.side-panel-inner { border-right: 1px solid var(--line); position: absolute; top: 0; right: 0; bottom: 0; width: 300px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: clamp(14px, 4.6vh, 23px) 12px 12px 14px; }
+.side-panel-inner { border-right: 1px solid var(--line); position: absolute; top: 0; right: 0; bottom: 0; width: 520px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: clamp(14px, 4.6vh, 23px) 12px 12px 14px; }
 .side-panel-inner header { flex: none; display: flex; align-items: center; gap: 8px; color: var(--ink); }
 .side-panel-inner header strong { flex: 1; font-size: 12px; font-weight: 650; }
-.side-panel-body { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.side-panel-body { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; display: flex; flex-direction: column; gap: 10px; }
+.side-panel-list { flex: none; max-height: 34%; overflow: auto; scrollbar-width: thin; }
+.side-panel-detail { flex: 1 0 auto; display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.side-panel-detail header { display: flex; align-items: center; gap: 8px; }
+.side-panel-detail pre { margin: 0; max-height: 240px; overflow: auto; }
 .side-panel-inner ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; max-height: none; }
 .history-bar { flex: none; padding: 4px 9px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255, 255, 255, .28); }
 .history-bar-toggle { width: 100%; display: flex; align-items: center; gap: 7px; padding: 4px 2px; border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
@@ -500,3 +504,9 @@ kbd { min-width: 17px; padding: 2px 4px; border: 1px solid var(--line); border-r
 
 .side-panel-note { margin: 0 0 8px; color: var(--muted); font-size: 9px; line-height: 1.45; }
 .side-panel-body .scheduler-history-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 9px; }
+
+.scheduler-history-entry { display: flex; flex-direction: column; gap: 2px; padding: 7px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 9px; }
+.scheduler-history-entry header { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink); }
+.scheduler-history-entry header strong { min-width: 0; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.scheduler-history-status { text-transform: capitalize; }
+.scheduler-history-entry[data-status="error"] .scheduler-history-status { color: var(--danger, #b42318); }

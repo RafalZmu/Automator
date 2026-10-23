@@ -482,6 +482,12 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
   };
 
   const latestFinishedId = runs.find((run) => run.finishedAt !== null)?.id;
+  // A finished run is shown in the side panel, so reveal it when the panel is hidden.
+  const seenFinishedId = useRef(latestFinishedId);
+  useEffect(() => {
+    if (latestFinishedId && latestFinishedId !== seenFinishedId.current && sidePanel.panelMode) sidePanel.setOpen(true);
+    seenFinishedId.current = latestFinishedId;
+  }, [latestFinishedId, sidePanel.panelMode, sidePanel.setOpen]);
   const shownRun = shownRunId === 'none' ? undefined : runs.find((run) => run.id === (shownRunId ?? latestFinishedId));
   const output = shownRun?.output ?? null;
   const editingRowId = editing && profiles.some((profile) => profile.id === editingOriginalId) ? editingOriginalId : null;
@@ -577,6 +583,18 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
 
   const historyClear = runs.some((run) => run.finishedAt !== null)
     ? <button className="secondary-button" type="button" onClick={() => { clearFinishedScriptRuns(); setShownRunId(null); }}>Clear history</button> : null;
+  const scriptOutput = shownRun && shownRun.finishedAt !== null && <section className="script-output" aria-label="Script output">
+      <header><div><Check size={14} /><strong>{shownRun.id === latestFinishedId ? 'Latest result' : 'Past result'}</strong><span>{shownRun.profileName} · {formatRunTime(shownRun.startedAt)} · {output?.durationMilliseconds ?? shownRun.finishedAt - shownRun.startedAt} ms</span></div>{!sidePanel.panelMode && <button className="icon-button" type="button" aria-label="Clear script output" onClick={() => setShownRunId('none')}><X size={14} /></button>}</header>
+      {shownRun.state === 'canceled' && <p className="script-output-status">The run was canceled.</p>}
+      {!output && shownRun.state !== 'canceled' && shownRun.message && <p className="script-output-status">{shownRun.message}</p>}
+      {output?.timedOut && <p className="script-output-status">The script timed out.</p>}
+      {output && output.exitCode !== null && output.exitCode !== 0 && <p className="script-output-status">Exit code {output.exitCode}</p>}
+      {output?.parseFailure && <p className="script-output-status">The output was not valid JSON.</p>}
+      {output && output.structuredOutput !== null && output.structuredOutput !== undefined && <pre>{JSON.stringify(output.structuredOutput, null, 2)}</pre>}
+      {output?.stdout && <pre>{output.stdout}{output.stdoutTruncated ? '\n… output truncated' : ''}</pre>}
+      {output?.stderr && <pre className="script-stderr">{output.stderr}{output.stderrTruncated ? '\n… output truncated' : ''}</pre>}
+      {output && !output.stdout && !output.stderr && output.structuredOutput == null && <p className="script-no-output">The script did not produce output.</p>}
+    </section>;
   return (
     <section className="module-view script-runner-view" aria-label="Script Runner">
       <div className="script-heading">
@@ -687,21 +705,10 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
         }) : !editing ? <div className="script-empty"><span className="empty-icon"><Terminal size={20} /></span><strong>No scripts yet</strong><p>Add a Python, Bash, or PowerShell script and declare its inputs, or add a ready-made script from the Library.</p><button className="secondary-button" type="button" disabled={!settingsReady} onClick={openNewEditor}><Plus size={13} /> Create a script</button></div> : null}
       </div>
 
-      {shownRun && shownRun.finishedAt !== null && <section className="script-output" aria-label="Script output">
-        <header><div><Check size={14} /><strong>{shownRun.id === latestFinishedId ? 'Latest result' : 'Past result'}</strong><span>{shownRun.profileName} · {formatRunTime(shownRun.startedAt)} · {output?.durationMilliseconds ?? shownRun.finishedAt - shownRun.startedAt} ms</span></div><button className="icon-button" type="button" aria-label="Clear script output" onClick={() => setShownRunId('none')}><X size={14} /></button></header>
-        {shownRun.state === 'canceled' && <p className="script-output-status">The run was canceled.</p>}
-        {!output && shownRun.state !== 'canceled' && shownRun.message && <p className="script-output-status">{shownRun.message}</p>}
-        {output?.timedOut && <p className="script-output-status">The script timed out.</p>}
-        {output && output.exitCode !== null && output.exitCode !== 0 && <p className="script-output-status">Exit code {output.exitCode}</p>}
-        {output?.parseFailure && <p className="script-output-status">The output was not valid JSON.</p>}
-        {output && output.structuredOutput !== null && output.structuredOutput !== undefined && <pre>{JSON.stringify(output.structuredOutput, null, 2)}</pre>}
-        {output?.stdout && <pre>{output.stdout}{output.stdoutTruncated ? '\n… output truncated' : ''}</pre>}
-        {output?.stderr && <pre className="script-stderr">{output.stderr}{output.stderrTruncated ? '\n… output truncated' : ''}</pre>}
-        {output && !output.stdout && !output.stderr && output.structuredOutput == null && <p className="script-no-output">The script did not produce output.</p>}
-      </section>}
+      {!sidePanel.panelMode && scriptOutput}
 
       {runs.length > 0 && (sidePanel.panelMode
-        ? <SideHistoryToggle panel={sidePanel} title="Run history" summary={`${runs.length} in this window`} />
+        ? <SideHistoryToggle panel={sidePanel} title="Run history" />
         : <section className="script-history" aria-label="Run history">
         <header><strong>Run history</strong><small>Kept in this window until Automator restarts. Run activity keeps a permanent record of when each run happened, without its output.</small>
           {runs.some((run) => run.finishedAt !== null) && <button className="secondary-button" type="button" onClick={() => { clearFinishedScriptRuns(); setShownRunId(null); }}>Clear history</button>}</header>
@@ -715,15 +722,16 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
         </li>)}</ul>
       </section>)}
       {sidePanel.panelMode && runs.length > 0 && <SideHistoryContent panel={sidePanel} title="Run history" actions={historyClear}>
-        <p className="side-panel-note">Kept in this window until Automator restarts. Run activity keeps a permanent record of when each run happened, without its output.</p>
-                <ul>{runs.map((run) => <li key={run.id}>
+        <div className="side-panel-list"><p className="side-panel-note">Kept in this window until Automator restarts. Run activity keeps a permanent record of when each run happened, without its output.</p>
+        <ul>{runs.map((run) => <li key={run.id}>
           <button type="button" className="script-history-item" aria-pressed={shownRun?.id === run.id} disabled={run.finishedAt === null} onClick={() => setShownRunId(run.id)}>
             <span className={`script-run-state is-${run.state}`}>{describeRunState(run.state)}</span>
             <strong>{run.profileName}</strong>
             <span>{formatRunTime(run.startedAt)}{run.finishedAt !== null ? ` · ${formatDuration(run.finishedAt - run.startedAt)}` : ''}</span>
             {describeRunError(run) && <span className="script-history-error">{describeRunError(run)}</span>}
           </button>
-        </li>)}</ul>
+        </li>)}</ul></div>
+        {scriptOutput && <div className="side-panel-detail">{scriptOutput}</div>}
       </SideHistoryContent>}
     </section>
   );
