@@ -31,9 +31,10 @@ async function openRunHistory(page) {
   await toggle.waitFor({ state: 'visible' });
   // In the compact window the panel also opens itself when a finished run is loaded, so re-check the state after each click.
   const region = page.getByRole('region', { name: 'Playwright run history' });
-  for (let attempt = 0; attempt < 3 && !(await region.isVisible()); attempt += 1) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
     if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
     await page.waitForTimeout(500);
+    if ((await toggle.getAttribute('aria-expanded')) === 'true') break;
   }
   await region.waitFor({ state: 'visible' });
 }
@@ -89,7 +90,7 @@ test('a Playwright run keeps its running state across tabs and is saved to the r
     const history = page.getByRole('region', { name: 'Playwright run history' });
     await history.waitFor({ state: 'visible', timeout: 15_000 });
     const entries = history.getByRole('button', { name: /tests\/slow\.spec\.ts/ });
-    await entries.first().waitFor({ state: 'visible', timeout: 15_000 });
+    try { await entries.first().waitFor({ state: 'visible', timeout: 15_000 }); } catch (error) { console.log('BODY', await page.locator('body').innerText()); throw error; }
     assert.equal(await entries.count(), 1);
     assert.match(await entries.first().innerText(), /Passed/);
     await page.getByRole('region', { name: 'Playwright run results' }).waitFor({ state: 'visible' });
