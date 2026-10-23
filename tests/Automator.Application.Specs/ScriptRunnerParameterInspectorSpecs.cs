@@ -52,6 +52,7 @@ internal static class ScriptRunnerParameterInspectorSpecs
     private static void NoDeclarations()
     {
         Ensure(ScriptRunnerParameterInspector.Inspect("Write-Host 'hi'", ScriptRunnerInterpreter.Powershell).Count == 0, "script without declarations");
+        Ensure(ScriptRunnerParameterInspector.Inspect("[CmdletBinding()] param([string] $A, [string] $ApiKey = 'x')", ScriptRunnerInterpreter.Powershell) is { Count: 2 } inline && inline[1].DefaultValue is null, "same-line attribute before param and no secret defaults");
         Ensure(ScriptRunnerParameterInspector.Inspect("param(\n  $Broken", ScriptRunnerInterpreter.Powershell).Count == 0, "unbalanced param block");
     }
 

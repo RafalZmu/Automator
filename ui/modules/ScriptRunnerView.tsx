@@ -299,16 +299,20 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
     setRunValues(initialParameterValues(profileParameters(profile, templates), profile.values, profile.templateOrigin?.id));
   };
 
+  const inspectRequestRef = useRef(0);
   const toggleInspect = async (profile: ScriptProfile) => {
+    const request = ++inspectRequestRef.current;
     if (inspected?.profileId === profile.id) {
       setInspected(null);
       return;
     }
     try {
       const result = await services.modules.dispatch('inspectScript', { id: profile.id });
+      if (request !== inspectRequestRef.current) return;
       const parameters = result.status === 'error' ? null : parseDetectedScriptParameters(result.data && typeof result.data === 'object' && 'parameters' in result.data ? result.data.parameters : []);
       setInspected({ profileId: profile.id, parameters, message: result.message });
     } catch (error) {
+      if (request !== inspectRequestRef.current) return;
       setInspected({ profileId: profile.id, parameters: null, message: error instanceof Error ? error.message : 'Could not read the script.' });
     }
   };

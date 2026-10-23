@@ -20,12 +20,13 @@ public static class ScriptRunnerParameterInspector
 {
     public const int MaximumSourceBytes = 256 * 1024;
     public const int MaximumParameters = 64;
-    private static readonly Regex ParamStart = new(@"(?im)^[ \t]*param[ \t\r\n]*\(", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex ParamStart = new(@"(?im)^[ \t]*(?:\[[^\r\n\]]*\][ \t]*)*param[ \t\r\n]*\(", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex SecretName = new("(?i)token|secret|passw|key|credential", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex VariableName = new(@"^\s*\$([A-Za-z_][A-Za-z0-9_]*)", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex MandatoryTrue = new(@"(?i)\bMandatory\b(?!\s*=\s*\$false)", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex ValidateSet = new(@"(?is)ValidateSet\s*\((.*?)\)\s*\]", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex QuotedItem = new(@"'((?:[^']|'')*)'|""([^""]*)""", RegexOptions.CultureInvariant | RegexOptions.Compiled);
-    private static readonly Regex HelpParameter = new(@"(?ims)^[ \t]*\.PARAMETER[ \t]+(\S+)[ \t]*\r?\n(.*?)(?=^[ \t]*\.[A-Z]+\b|#>|\z)", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex HelpParameter = new(@"(?ims)^[ \t]*#?[ \t]*\.PARAMETER[ \t]+(\S+)[ \t]*\r?\n(.*?)(?=^[ \t]*\.[A-Z]+\b|#>|\z)", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex HeaderParam = new(@"^[ \t]*(?:#|//)[ \t]*@param[ \t]+([A-Za-z_][A-Za-z0-9_-]*)[ \t]*(?:\(([^)]*)\))?[ \t]*(?:[:\-][ \t]*)?(.*)$", RegexOptions.CultureInvariant | RegexOptions.Compiled | RegexOptions.Multiline);
 
     /// <summary>Returns the parameters declared in the script at <paramref name="scriptPath"/>. An unreadable or oversized file yields none.</summary>
@@ -102,7 +103,7 @@ public static class ScriptRunnerParameterInspector
             var kind = options is not null ? "choice"
                 : type is not null && (type.Equals("switch", StringComparison.OrdinalIgnoreCase) || type.Equals("bool", StringComparison.OrdinalIgnoreCase)) ? "boolean"
                 : "text";
-            if (kind == "boolean") defaultValue = null;
+            if (kind == "boolean" || SecretName.IsMatch(name.Groups[1].Value)) defaultValue = null;
             help.TryGetValue(name.Groups[1].Value, out var description);
             result.Add(new DetectedScriptParameter(name.Groups[1].Value, kind, MandatoryTrue.IsMatch(attributeText), description, defaultValue, options));
             if (result.Count >= MaximumParameters) break;
