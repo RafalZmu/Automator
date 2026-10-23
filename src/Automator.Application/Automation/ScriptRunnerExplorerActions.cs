@@ -6,7 +6,8 @@ using Automator.Core.Plugins;
 namespace Automator.Application.Automation;
 
 public sealed record ExplorerActionDefinition(string Id, string ProfileId, string Label, IReadOnlyList<string> Extensions,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FileParameterKey = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FileParameterKey = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Folders = false);
 
 public sealed partial class ScriptRunnerModule
 {
@@ -76,8 +77,9 @@ public sealed partial class ScriptRunnerModule
             throw new InvalidDataException("Explorer action and profile IDs must be valid keys.");
         if (string.IsNullOrWhiteSpace(action.Label) || action.Label.Length > 128 || action.Label.Any(char.IsControl))
             throw new InvalidDataException("Menu label is required and must be at most 128 characters.");
-        if (action.Extensions is null || action.Extensions.Count is < 1 or > 32 || action.Extensions.Any(value => value is null || !ExtensionPattern.IsMatch(value.ToLowerInvariant())))
-            throw new InvalidDataException("Use one or more file extensions such as .fdb.");
+        if (action.Extensions is null || action.Extensions.Count > 32 || (action.Extensions.Count == 0 && !action.Folders)
+            || action.Extensions.Any(value => value is null || !ExtensionPattern.IsMatch(value.ToLowerInvariant())))
+            throw new InvalidDataException("Use one or more file extensions such as .fdb, or enable folders.");
     }
 
     private void ValidateExplorerProfile(ExplorerActionDefinition action, ScriptRunnerProfile profile)
@@ -103,12 +105,12 @@ public sealed partial class ScriptRunnerModule
         var profile = await GetExplorerProfileAsync(action, services, token);
         ValidateExplorerProfile(action, profile);
         if (!input.TryGetProperty("filePath", out var pathValue) || pathValue.ValueKind != JsonValueKind.String)
-            throw new InvalidDataException("A selected file path is required.");
+            throw new InvalidDataException("A selected file or folder path is required.");
         var path = pathValue.GetString()!;
-        if (path.Length > 4096 || !Path.IsPathFullyQualified(path) || !File.Exists(path))
-            throw new InvalidDataException("The selected file must be an existing absolute file path.");
+        if (path.Length > 4096 || !Path.IsPathFullyQualified(path) || !(File.Exists(path) || (action.Folders && Directory.Exists(path))))
+            throw new InvalidDataException(action.Folders ? "The selected item must be an existing absolute file or folder path." : "The selected file must be an existing absolute file path.");
         path = Path.GetFullPath(path);
-        if (!action.Extensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
+        if (!Directory.Exists(path) && !action.Extensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
             throw new InvalidDataException("The selected file extension does not match this Explorer action.");
         if (profile.TemplateOrigin is not null)
         {

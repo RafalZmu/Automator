@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { parseExplorerActions } from '../contracts/scriptRunner.ts';
 import { normalizeExplorerExtensions, prepareExplorerForm, registrationNotice } from '../ui/modules/explorerActionViewModel.ts';
 const profile = { id: 'profile', name: 'Backup', arguments: ['--source', '{{file.path}}', '--output={{file.path}}.zip'] };
 const action = { id: 'backup', profileId: 'profile', label: 'Backup', extensions: ['.fdb'] };
@@ -35,4 +36,15 @@ test('Explorer registration warnings retain saved mappings and describe disabled
   assert.match(registrationNotice({ state: 'disabled', message: 'Installed build only.' }), /Installed build only/);
   assert.match(registrationNotice({ state: 'error', message: 'Try again.' }), /Try again/);
   assert.equal(registrationNotice({ state: 'updated' }), '');
+});
+
+test('Explorer folder actions allow an empty extension list and skip the extension match', () => {
+  assert.deepEqual(normalizeExplorerExtensions('', true), []);
+  assert.throws(() => normalizeExplorerExtensions('', false));
+  const folderAction = { id: 'folder', profileId: 'profile', label: 'Folder', extensions: [], folders: true };
+  const form = prepareExplorerForm({ actionId: 'folder', filePath: 'C:\\Dane\\Projekt' }, [folderAction], [profile], []);
+  assert.deepEqual(form.arguments, ['--source', 'C:\\Dane\\Projekt', '--output=C:\\Dane\\Projekt.zip']);
+  assert.throws(() => prepareExplorerForm({ actionId: 'backup', filePath: 'C:\\Dane\\Projekt' }, [action], [profile], []));
+  assert.deepEqual(parseExplorerActions([folderAction])[0].folders, true);
+  assert.throws(() => parseExplorerActions([{ ...folderAction, folders: undefined }]));
 });

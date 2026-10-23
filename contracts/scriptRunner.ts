@@ -169,6 +169,7 @@ export type ExplorerActionDefinition = {
   label: string;
   extensions: string[];
   fileParameterKey?: string;
+  folders?: boolean;
 };
 
 export type ExplorerActionRunInput = {
@@ -189,14 +190,16 @@ export function parseExplorerActions(value: unknown): ExplorerActionDefinition[]
     ids.add(id);
     const label = bounded(item.label, 'Menu label', 128);
     if (/[\x00-\x1f\x7f]/.test(label)) throw new Error('Menu label is invalid.');
-    if (!Array.isArray(item.extensions) || item.extensions.length < 1 || item.extensions.length > 32) throw new Error('File extensions are invalid.');
+    if (item.folders != null && typeof item.folders !== 'boolean') throw new Error('Folder option is invalid.');
+    const folders = item.folders === true;
+    if (!Array.isArray(item.extensions) || item.extensions.length > 32 || (item.extensions.length < 1 && !folders)) throw new Error('File extensions are invalid.');
     const extensions = item.extensions.map(value => {
       if (typeof value !== 'string' || !/^\.[a-z0-9][a-z0-9_-]{0,31}$/i.test(value)) throw new Error('File extension is invalid.');
       return value.toLowerCase();
     });
     const fileParameterKey = item.fileParameterKey == null ? undefined : bounded(item.fileParameterKey, 'File parameter key', 64);
     if (fileParameterKey && !parameterKeyPattern.test(fileParameterKey)) throw new Error('File parameter key is invalid.');
-    return { id, profileId, label, extensions: [...new Set(extensions)], fileParameterKey };
+    return { id, profileId, label, extensions: [...new Set(extensions)], fileParameterKey, ...(folders ? { folders } : {}) };
   });
 }
 

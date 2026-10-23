@@ -3,9 +3,9 @@ import type { ExplorerActionDefinition, ScriptTemplateDescriptor, ScriptTemplate
 import { initialParameterValues } from './scriptTemplateViewModel.ts';
 export type ExplorerProfile = { id: string; name: string; arguments: string[]; templateOrigin?: { id: string; version: number } | null; values?: Record<string, ScriptTemplateValue> | null };
 export type ExplorerRunForm = { request: FileExplorerLaunchRequest; action: ExplorerActionDefinition; profile: ExplorerProfile; arguments: string[]; template?: ScriptTemplateDescriptor; values: Record<string, ScriptTemplateValue> };
-export function normalizeExplorerExtensions(value: string): string[] {
+export function normalizeExplorerExtensions(value: string, allowEmpty = false): string[] {
   const extensions = value.trim().split(/[\s,;]+/).filter(Boolean).map(item => `.${item.replace(/^\./, '').toLowerCase()}`);
-  if (!extensions.length || extensions.length > 32 || extensions.some(item => !/^\.[a-z0-9][a-z0-9_-]{0,31}$/.test(item))) throw new Error('Enter file extensions such as .fdb, .txt.');
+  if ((!extensions.length && !allowEmpty) || extensions.length > 32 || extensions.some(item => !/^\.[a-z0-9][a-z0-9_-]{0,31}$/.test(item))) throw new Error('Enter file extensions such as .fdb, .txt, or enable folders.');
   return [...new Set(extensions)];
 }
 export function registrationNotice(value: unknown): string {
@@ -19,7 +19,8 @@ export function prepareExplorerForm(request: FileExplorerLaunchRequest, actions:
   if (!profile) throw new Error('The selected script profile no longer exists.');
   if (!/^(?:[a-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+[\\/])/i.test(request.filePath) || /[\x00-\x1f]/.test(request.filePath)) throw new Error('The selected file must have an absolute Windows path.');
   const extension = /\.[^\\/.]+$/.exec(request.filePath)?.[0].toLowerCase();
-  if (!extension || !action.extensions.includes(extension)) throw new Error('The selected file extension does not match this Explorer action.');
+  // A folder has no extension the renderer can trust; the backend confirms it is a directory before running.
+  if (!action.folders && (!extension || !action.extensions.includes(extension))) throw new Error('The selected file extension does not match this Explorer action.');
   let template: ScriptTemplateDescriptor | undefined;
   let values: Record<string, ScriptTemplateValue> = {};
   if (profile.templateOrigin) {

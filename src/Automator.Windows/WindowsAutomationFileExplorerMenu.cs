@@ -20,6 +20,8 @@ public interface IFileExplorerRegistryStore
 public sealed class WindowsAutomationFileExplorerMenu : IAutomationFileExplorerMenu
 {
     private const string Root = @"Software\Classes\SystemFileAssociations";
+    private const string FolderRoot = @"Software\Classes\Directory\shell";
+    private const string FolderGroup = "Directory";
     private const string MenuKey = "Automator.ScriptRunner";
     private const string RegisterPowerShellChildKey = "@register-powershell-script";
     private const string OwnerName = "AutomatorOwner";
@@ -54,8 +56,9 @@ public sealed class WindowsAutomationFileExplorerMenu : IAutomationFileExplorerM
         foreach (var entry in entries) ScriptRunnerModule.ValidateExplorerAction(entry);
         if (entries.Select(entry => entry.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() != entries.Count)
             throw new ArgumentException("Explorer action IDs must be unique.", nameof(entries));
-        var groups = entries.SelectMany(entry => entry.Extensions.Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(extension => (Extension: extension.ToLowerInvariant(), Entry: entry)))
+        var groups = entries.Where(entry => entry.Folders).Select(entry => (Extension: FolderGroup, Entry: entry))
+            .Concat(entries.SelectMany(entry => entry.Extensions.Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(extension => (Extension: extension.ToLowerInvariant(), Entry: entry))))
             .GroupBy(item => item.Extension, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Select(item => item.Entry).OrderBy(entry => entry.Id, StringComparer.Ordinal).ToArray(), StringComparer.OrdinalIgnoreCase);
         groups.TryAdd(".ps1", []);
@@ -81,7 +84,7 @@ public sealed class WindowsAutomationFileExplorerMenu : IAutomationFileExplorerM
             var changed = false;
             try
             {
-                foreach (var extension in _store.SubKeys(Root))
+                foreach (var extension in _store.SubKeys(Root).Where(key => !key.Equals(FolderGroup, StringComparison.OrdinalIgnoreCase)).Append(FolderGroup))
                 {
                     var parent = Parent(extension);
                     if (!Owned(parent)) continue;
@@ -89,7 +92,7 @@ public sealed class WindowsAutomationFileExplorerMenu : IAutomationFileExplorerM
                     {
                         foreach (var child in _store.SubKeys(parent + @"\shell")) RemoveAction(parent + @"\shell\" + child, ref changed);
                         foreach (var name in new[] { "MUIVerb", "SubCommands", "MultiSelectModel" }) RemoveValue(parent, name, ref changed);
-                        Prune(parent + @"\shell", ref changed);
+                        if (extension != FolderGroup) Prune(parent + @"\shell", ref changed);
                         ReleaseEmptyOwnedKey(parent, ref changed);
                         continue;
                     }
@@ -131,7 +134,10 @@ public sealed class WindowsAutomationFileExplorerMenu : IAutomationFileExplorerM
         return Task.CompletedTask;
     }
 
-    private static string Parent(string extension) => Root + "\\" + extension + @"\shell\" + MenuKey;
+    // Folders have no extension; "Directory" cannot collide with extension keys, which always start with a dot.
+    private static string Parent(string extension) => extension == FolderGroup
+        ? FolderRoot + "\\" + MenuKey
+        : Root + "\\" + extension + @"\shell\" + MenuKey;
     private bool Owned(string path) => _store.Read(path, OwnerName) == OwnerValue;
     private void RequireOwnedOrAbsent(string path)
     {
@@ -184,8 +190,9 @@ public sealed class WindowsAutomationFileExplorerMenu : IAutomationFileExplorerM
     {
         private static void ValidatePath(string path)
         {
-            if (path != Root && !path.StartsWith(Root + "\\", StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException("Explorer menu registry path is outside SystemFileAssociations.", nameof(path));
+            if (path != Root && !path.StartsWith(Root + "\\", StringComparison.OrdinalIgnoreCase)
+                && !path.StartsWith(FolderRoot + "\\" + MenuKey, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Explorer menu registry path is outside the Automator Explorer menu keys.", nameof(path));
         }
         public string[] SubKeys(string path) { ValidatePath(path); using var key = Registry.CurrentUser.OpenSubKey(path); return key?.GetSubKeyNames() ?? []; }
         public string[] ValueNames(string path) { ValidatePath(path); using var key = Registry.CurrentUser.OpenSubKey(path); return key?.GetValueNames() ?? []; }
