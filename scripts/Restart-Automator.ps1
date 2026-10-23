@@ -245,9 +245,16 @@ foreach ($rootProcess in $rootProcesses) {
 while ($queue.Count -gt 0) {
     $parentId = $queue.Dequeue()
     $processOrder.Add($parentId)
+    $parentInfo = $processSnapshot | Where-Object { [uint32]$_.ProcessId -eq $parentId } | Select-Object -First 1
+    $parentIsWinUi = $null -ne $parentInfo -and [string]$parentInfo.Name -eq 'Automator.App.exe'
     foreach ($child in $processSnapshot) {
         $childId = [uint32]$child.ProcessId
-        if ([uint32]$child.ParentProcessId -eq $parentId -and $processIds.Add($childId)) {
+        if ([uint32]$child.ParentProcessId -ne $parentId) { continue }
+        # Applications Automator launched (TeamViewer, editors, ...) are its children too but are not Automator:
+        # only follow children that live in the workspace, plus the WebView2 helpers of the retained WinUI host.
+        $ownedChild = (Test-PathInsideWorkspace ([string]$child.ExecutablePath)) -or
+            ($parentIsWinUi -and [string]$child.Name -eq 'msedgewebview2.exe')
+        if ($ownedChild -and $processIds.Add($childId)) {
             $queue.Enqueue($childId)
         }
     }
