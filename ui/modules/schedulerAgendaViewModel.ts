@@ -1,4 +1,4 @@
-import type { SchedulerSnapshot, ScheduleTargetKind } from '../contracts/scheduler';
+import { scheduleCatalog, scheduleTargetLabels, type SchedulerSnapshot, type ScheduleTargetKind } from '../contracts/scheduler.ts';
 
 export type UpcomingScheduleEntry = {
   scheduleId: string;
@@ -40,8 +40,8 @@ function localTimeLabel(date: Date): string {
 }
 
 function scheduleTargetLabel(snapshot: SchedulerSnapshot, targetKind: ScheduleTargetKind, profileId: string): string {
-  const targetType = targetKind === 'workflow' ? 'Workflow' : 'Script profile';
-  const catalog = targetKind === 'workflow' ? snapshot.workflows : snapshot.scripts;
+  const targetType = scheduleTargetLabels[targetKind].option;
+  const catalog = scheduleCatalog(snapshot, targetKind);
   const profile = catalog.find((item) => item.profileId === profileId);
   return `${targetType} · ${profile?.name ?? `Missing ${targetType.toLowerCase()}: ${profileId}`}`;
 }

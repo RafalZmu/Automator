@@ -108,15 +108,38 @@ public sealed class AutomationSchedulerCoordinator : IAutomationSchedulerCoordin
         var schedules = await ReadSchedulesAsync(cancellationToken).ConfigureAwait(false);
         var histories = await ReadHistoryAsync(cancellationToken).ConfigureAwait(false);
         var workflows = await ReadWorkflowCatalogAsync(cancellationToken).ConfigureAwait(false);
-        var scripts = _savedProfiles is null
-            ? Array.Empty<AutomationSavedProfileSummary>()
-            : await _savedProfiles.ListProfilesAsync("script-runner", cancellationToken).ConfigureAwait(false);
+        var scripts = await ReadSavedProfileCatalogAsync(AutomationScheduleTargetKind.ScriptProfile, cancellationToken).ConfigureAwait(false);
+        var browserProfiles = await ReadSavedProfileCatalogAsync(AutomationScheduleTargetKind.BrowserProfile, cancellationToken).ConfigureAwait(false);
+        var playwrightTasks = await ReadSavedProfileCatalogAsync(AutomationScheduleTargetKind.PlaywrightTask, cancellationToken).ConfigureAwait(false);
         var now = _clock.GetUtcNow();
         var states = schedules.Select(schedule => new AutomationScheduleState(schedule.Id,
             schedule.Enabled ? AutomationScheduleRecurrenceCalculator.NextOccurrenceUtc(schedule, now) : null,
             _running.ContainsKey(schedule.Id))).ToArray();
         return new AutomationSchedulerSnapshot(schedules, histories, !IsDisposed,
-            Array.AsReadOnly(states), workflows, scripts);
+            Array.AsReadOnly(states), workflows, scripts, browserProfiles, playwrightTasks);
+    }
+
+    private static string? SavedProfileModule(AutomationScheduleTargetKind kind) => kind switch
+    {
+        AutomationScheduleTargetKind.ScriptProfile => "script-runner",
+        AutomationScheduleTargetKind.BrowserProfile => BrowserAutomationModule.IdValue,
+        AutomationScheduleTargetKind.PlaywrightTask => PlaywrightTaskSavedProfileHandler.Module,
+        _ => null,
+    };
+
+    private static string TargetLabel(AutomationScheduleTargetKind kind) => kind switch
+    {
+        AutomationScheduleTargetKind.BrowserProfile => "browser automation profile",
+        AutomationScheduleTargetKind.PlaywrightTask => "Playwright task",
+        _ => "script profile",
+    };
+
+    private async Task<IReadOnlyList<AutomationSavedProfileSummary>> ReadSavedProfileCatalogAsync(
+        AutomationScheduleTargetKind kind, CancellationToken cancellationToken)
+    {
+        if (_savedProfiles is null || SavedProfileModule(kind) is not { } module) return Array.Empty<AutomationSavedProfileSummary>();
+        try { return await _savedProfiles.ListProfilesAsync(module, cancellationToken).ConfigureAwait(false); }
+        catch (InvalidOperationException) { return Array.Empty<AutomationSavedProfileSummary>(); }
     }
 
     public async Task SaveAsync(AutomationScheduleDefinition schedule, CancellationToken cancellationToken)
@@ -131,14 +154,12 @@ public sealed class AutomationSchedulerCoordinator : IAutomationSchedulerCoordin
             var catalog = schedule.TargetKind switch
             {
                 AutomationScheduleTargetKind.Workflow => await ReadWorkflowCatalogAsync(cancellationToken).ConfigureAwait(false),
-                AutomationScheduleTargetKind.ScriptProfile when _savedProfiles is not null => await _savedProfiles.ListProfilesAsync("script-runner", cancellationToken).ConfigureAwait(false),
-                AutomationScheduleTargetKind.ScriptProfile => Array.Empty<AutomationSavedProfileSummary>(),
-                _ => Array.Empty<AutomationSavedProfileSummary>(),
+                _ => await ReadSavedProfileCatalogAsync(schedule.TargetKind, cancellationToken).ConfigureAwait(false),
             };
             if (!catalog.Any(profile => profile.ProfileId == schedule.EffectiveProfileId))
                 throw new InvalidDataException(schedule.TargetKind == AutomationScheduleTargetKind.Workflow
                     ? "The selected saved workflow does not exist."
-                    : "The selected saved script profile does not exist.");
+                    : $"The selected saved {TargetLabel(schedule.TargetKind)} does not exist.");
 
             if (_running.ContainsKey(schedule.Id)) throw new InvalidOperationException("A running schedule cannot be edited.");
             var existing = await ReadScheduleAsync(schedule.Id, cancellationToken).ConfigureAwait(false);
@@ -326,8 +347,8 @@ public sealed class AutomationSchedulerCoordinator : IAutomationSchedulerCoordin
                 summary = schedule.TargetKind switch
                 {
                     AutomationScheduleTargetKind.Workflow => await _workflows.RunScheduledAsync(schedule.EffectiveProfileId, id, cancellationToken).ConfigureAwait(false),
-                    AutomationScheduleTargetKind.ScriptProfile when _savedProfiles is not null =>
-                        (await _savedProfiles.RunAsync("script-runner", schedule.EffectiveProfileId, null,
+                    var kind when kind != AutomationScheduleTargetKind.Workflow && SavedProfileModule(kind) is { } module && _savedProfiles is not null =>
+                        (await _savedProfiles.RunAsync(module, schedule.EffectiveProfileId, null,
                             new AutomationExecutionMetadata(AutomationExecutionOrigin.Scheduled, id), cancellationToken).ConfigureAwait(false)).Summary,
                     _ => throw new InvalidOperationException("The saved script profile executor is unavailable."),
                 };
