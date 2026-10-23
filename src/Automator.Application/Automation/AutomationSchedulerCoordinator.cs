@@ -139,7 +139,7 @@ public sealed class AutomationSchedulerCoordinator : IAutomationSchedulerCoordin
     {
         if (_savedProfiles is null || SavedProfileModule(kind) is not { } module) return Array.Empty<AutomationSavedProfileSummary>();
         try { return await _savedProfiles.ListProfilesAsync(module, cancellationToken).ConfigureAwait(false); }
-        catch (InvalidOperationException) { return Array.Empty<AutomationSavedProfileSummary>(); }
+        catch (Exception exception) when (exception is not OperationCanceledException) { return Array.Empty<AutomationSavedProfileSummary>(); }
     }
 
     public async Task SaveAsync(AutomationScheduleDefinition schedule, CancellationToken cancellationToken)
@@ -350,7 +350,7 @@ public sealed class AutomationSchedulerCoordinator : IAutomationSchedulerCoordin
                     var kind when kind != AutomationScheduleTargetKind.Workflow && SavedProfileModule(kind) is { } module && _savedProfiles is not null =>
                         (await _savedProfiles.RunAsync(module, schedule.EffectiveProfileId, null,
                             new AutomationExecutionMetadata(AutomationExecutionOrigin.Scheduled, id), cancellationToken).ConfigureAwait(false)).Summary,
-                    _ => throw new InvalidOperationException("The saved script profile executor is unavailable."),
+                    _ => throw new InvalidOperationException("The saved profile executor is unavailable."),
                 };
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
