@@ -433,12 +433,12 @@ export function BrowserAutomationView({ tab, services, surface }: ViewProps) {
   useRegisterTabCommands(tab.id, commands);
 
   // A finished run is shown in the side panel, so reveal it when the panel is hidden.
-  const newestRunId = history[0]?.id;
-  const seenRunId = useRef(newestRunId);
+  const finishedRunId = lastRun?.id;
+  const seenRunId = useRef(finishedRunId);
   useEffect(() => {
-    if (newestRunId && newestRunId !== seenRunId.current && sidePanelMode) setHistoryOpen(true);
-    seenRunId.current = newestRunId;
-  }, [newestRunId, sidePanelMode, setHistoryOpen]);
+    if (finishedRunId && finishedRunId !== seenRunId.current && sidePanelMode) setHistoryOpen(true);
+    seenRunId.current = finishedRunId;
+  }, [finishedRunId, sidePanelMode, setHistoryOpen]);
   const shownRun = shownRunId === 'none' ? undefined : history.find((item) => item.id === (shownRunId ?? history[0]?.id));
   const shownOutcomes = {
     attention: (shownRun?.tests ?? []).filter((test) => test.status !== 'passed' && test.status !== 'skipped')
