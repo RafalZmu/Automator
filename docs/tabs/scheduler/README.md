@@ -1,6 +1,6 @@
 # Scheduler — slot 6
 
-Scheduler creates interval, daily, and weekly schedules in local time. A schedule targets a saved Script Runner profile or a saved Workflow. Users can enable/disable it, run it now, edit its recurrence, and choose whether one missed run should execute after Automator restarts. By default, missed runs are skipped.
+Scheduler creates interval, daily, and weekly schedules in local time. A schedule targets a saved Workflow, Script Runner profile, Browser Automation profile, or Codex-generated Playwright task. Users can enable/disable it, run it now, edit its recurrence, and choose whether one missed run should execute after Automator restarts. By default, missed runs are skipped.
 
 The tab shows schedule history and an upcoming agenda/calendar. The agenda uses the next-run values supplied by the host scheduler. Scheduling continues while Automator remains in the tray and pauses after a full exit.
 
@@ -19,7 +19,7 @@ The Delete button on a schedule uses a two-step inline confirmation: the first c
 
 Schedule a saved profile by ID so interpreter and profile validation stay owned by the source module.
 
-To schedule a Codex-generated Playwright task, place its saved `playwright-task` profile in a saved Workflow, then schedule that Workflow. Scheduler has no direct Playwright target. The task's current approval revision is checked when the Workflow runs.
+A Codex-generated Playwright task (`playwright-task` profile) can be scheduled directly or through a Workflow. A Browser Automation profile is scheduled directly and runs its start-URL navigation with no input. The task's current approval revision is checked at run time. The snapshot carries one catalog per target kind (`workflows`, `scripts`, `browserProfiles`, `playwrightTasks`).
 
 ## Test case steps
 

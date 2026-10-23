@@ -43,6 +43,17 @@ test('scheduler reader accepts script profile targets while migrating old workfl
   assert.equal(next.scripts[0].name, 'Nightly build');
 });
 
+test('scheduler reader accepts browser automation profile and Playwright task targets', () => {
+  const next = readSchedulerSnapshot({ schedules: [
+    { ...interval, id: 'site-check', targetKind: 'browserProfile', profileId: 'site-login', workflowId: '' },
+    { ...interval, id: 'nightly-task', targetKind: 'playwrightTask', profileId: 'export-orders', workflowId: '' },
+  ], history: [], running: true,
+  browserProfiles: [{ profileId: 'site-login', name: 'Site login' }], playwrightTasks: [{ profileId: 'export-orders', name: 'Export orders' }] });
+  assert.deepEqual(next.schedules.map(({ targetKind, profileId }) => [targetKind, profileId]), [['browserProfile', 'site-login'], ['playwrightTask', 'export-orders']]);
+  assert.equal(next.browserProfiles[0].name, 'Site login');
+  assert.equal(next.playwrightTasks[0].name, 'Export orders');
+});
+
 async function loadAgendaViewModel() {
   return import('../ui/modules/schedulerAgendaViewModel.ts').catch((error) => {
     if (error?.code === 'ERR_MODULE_NOT_FOUND' && String(error.message).includes('schedulerAgendaViewModel.ts')) return null;

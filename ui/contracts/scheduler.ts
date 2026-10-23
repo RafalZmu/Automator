@@ -5,7 +5,14 @@ export type ScheduleRecurrence = {
   daysOfWeek: string[] | null;
   intervalAnchorUtc: string | null;
 };
-export type ScheduleTargetKind = 'workflow' | 'scriptProfile';
+export type ScheduleTargetKind = 'workflow' | 'scriptProfile' | 'browserProfile' | 'playwrightTask';
+export const scheduleTargetKinds: ScheduleTargetKind[] = ['workflow', 'scriptProfile', 'browserProfile', 'playwrightTask'];
+export const scheduleTargetLabels: Record<ScheduleTargetKind, { option: string; singular: string; plural: string }> = {
+  workflow: { option: 'Workflow', singular: 'workflow', plural: 'workflows' },
+  scriptProfile: { option: 'Script profile', singular: 'script profile', plural: 'script profiles' },
+  browserProfile: { option: 'Browser automation profile', singular: 'browser automation profile', plural: 'browser automation profiles' },
+  playwrightTask: { option: 'Playwright task', singular: 'Playwright task', plural: 'Playwright tasks' },
+};
 export type ScheduleDefinition = { id: string; name: string; targetKind: ScheduleTargetKind; profileId: string; enabled: boolean; recurrence: ScheduleRecurrence; runOnceAfterRestart: boolean };
 export type ScheduleHistory = { id: string; scheduleId: string; startedUtc: string; finishedUtc: string | null; status: 'success' | 'information' | 'warning' | 'error'; category: string; durationMilliseconds: number };
 export type SchedulerSnapshot = {
@@ -13,7 +20,12 @@ export type SchedulerSnapshot = {
   states: { scheduleId: string; nextRunAtUtc: string | null; running: boolean }[];
   workflows: { profileId: string; name: string }[];
   scripts: { profileId: string; name: string }[];
+  browserProfiles: { profileId: string; name: string }[];
+  playwrightTasks: { profileId: string; name: string }[];
 };
+export function scheduleCatalog(snapshot: SchedulerSnapshot, kind: ScheduleTargetKind) {
+  return kind === 'workflow' ? snapshot.workflows : kind === 'scriptProfile' ? snapshot.scripts : kind === 'browserProfile' ? snapshot.browserProfiles : snapshot.playwrightTasks;
+}
 export const scheduleWeekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const idPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 function record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value); }
@@ -21,7 +33,7 @@ function date(value: unknown): value is string { return typeof value === 'string
 
 export function validateSchedule(schedule: ScheduleDefinition): string[] {
   const errors: string[] = [];
-  if (!idPattern.test(schedule.id) || !idPattern.test(schedule.profileId) || !['workflow', 'scriptProfile'].includes(schedule.targetKind)) errors.push('Select a saved workflow or script profile and use a short lowercase schedule key.');
+  if (!idPattern.test(schedule.id) || !idPattern.test(schedule.profileId) || !scheduleTargetKinds.includes(schedule.targetKind)) errors.push('Select a saved workflow, script, browser or Playwright profile and use a short lowercase schedule key.');
   if (!schedule.name.trim() || schedule.name.trim().length > 128 || /[\x00-\x1f\x7f]/.test(schedule.name)) errors.push('Name is required and must be at most 128 characters.');
   const recurrence = schedule.recurrence;
   if (recurrence.kind === 'interval') {
@@ -43,9 +55,9 @@ export function readSchedulerSnapshot(value: unknown): SchedulerSnapshot | null 
   const schedules = value.schedules.slice(0, 256).flatMap((item) => {
     if (!record(item) || typeof item.id !== 'string' || typeof item.name !== 'string'
         || typeof item.enabled !== 'boolean' || typeof item.runOnceAfterRestart !== 'boolean' || !record(item.recurrence)) return [];
-    const targetKind: ScheduleTargetKind = item.targetKind === 'scriptProfile' ? 'scriptProfile' : 'workflow';
+    const targetKind: ScheduleTargetKind = scheduleTargetKinds.find((kind) => kind === item.targetKind) ?? 'workflow';
     const profileId = typeof item.profileId === 'string' ? item.profileId : typeof item.workflowId === 'string' ? item.workflowId : '';
-    if (typeof item.targetKind === 'string' && !['workflow', 'scriptProfile'].includes(item.targetKind)) return [];
+    if (typeof item.targetKind === 'string' && !scheduleTargetKinds.includes(item.targetKind as ScheduleTargetKind)) return [];
     const r = item.recurrence;
     if (!['interval', 'daily', 'weekly'].includes(String(r.kind))) return [];
     const recurrence: ScheduleRecurrence = {
@@ -70,10 +82,13 @@ export function readSchedulerSnapshot(value: unknown): SchedulerSnapshot | null 
   const workflows = Array.isArray(value.workflows) ? value.workflows.flatMap((item) => record(item) && typeof item.profileId === 'string'
       && idPattern.test(item.profileId) && typeof item.name === 'string' && item.name.length <= 128
     ? [{ profileId: item.profileId, name: item.name }] : []) : [];
-  const scripts = Array.isArray(value.scripts) ? value.scripts.flatMap((item) => record(item) && typeof item.profileId === 'string'
+  const readCatalog = (list: unknown) => Array.isArray(list) ? list.flatMap((item) => record(item) && typeof item.profileId === 'string'
       && idPattern.test(item.profileId) && typeof item.name === 'string' && item.name.length <= 128
     ? [{ profileId: item.profileId, name: item.name }] : []) : [];
-  return { schedules, history, states, workflows, scripts, running: value.running };
+  const scripts = readCatalog(value.scripts);
+  const browserProfiles = readCatalog(value.browserProfiles);
+  const playwrightTasks = readCatalog(value.playwrightTasks);
+  return { schedules, history, states, workflows, scripts, browserProfiles, playwrightTasks, running: value.running };
 }
 
 export function describeRecurrence(recurrence: ScheduleRecurrence): string {

@@ -5,11 +5,13 @@ import type { AutomationModuleActionRequest, BackendUiState } from '../../contra
 import { useRegisterTabCommands } from '../commands/TabCommandRegistry';
 import { InlineConfirmButton } from '../components/InlineConfirmButton';
 import { SideHistoryContent, SideHistoryToggle, useHistorySidePanel } from '../components/SideHistoryPanel';
-import { describeRecurrence, readSchedulerSnapshot, scheduleWeekdays, validateSchedule, type ScheduleDefinition, type ScheduleRecurrence, type ScheduleTargetKind, type SchedulerSnapshot } from '../contracts/scheduler';
+import { describeRecurrence, readSchedulerSnapshot, scheduleCatalog, scheduleTargetKinds, scheduleTargetLabels, scheduleWeekdays, validateSchedule, type ScheduleDefinition, type ScheduleRecurrence, type ScheduleTargetKind, type SchedulerSnapshot } from '../contracts/scheduler';
 import { buildCalendarMonth, buildUpcomingScheduleEntries } from './schedulerAgendaViewModel';
 
 type ViewProps = { surface?: 'launcher' | 'workspace'; tab: BackendUiState['tabs'][number]; moduleState: BackendUiState['moduleStates'][number] | undefined; services: AutomationServices };
-const emptySnapshot: SchedulerSnapshot = { schedules: [], history: [], states: [], workflows: [], scripts: [], running: false };
+const emptySnapshot: SchedulerSnapshot = { schedules: [], history: [], states: [], workflows: [], scripts: [], browserProfiles: [], playwrightTasks: [], running: false };
+const firstTarget = (snapshot: SchedulerSnapshot) => { const kind = scheduleTargetKinds.find((item) => scheduleCatalog(snapshot, item).length > 0) ?? 'workflow'; return { kind, profileId: scheduleCatalog(snapshot, kind)[0]?.profileId }; };
+const hasTargets = (snapshot: SchedulerSnapshot) => scheduleTargetKinds.some((kind) => scheduleCatalog(snapshot, kind).length > 0);
 function blankSchedule(targetKind: ScheduleTargetKind = 'workflow', profileId = ''): ScheduleDefinition {
   return { id: `schedule-${Date.now().toString(36)}`, name: '', targetKind, profileId, enabled: true, runOnceAfterRestart: false,
     recurrence: { kind: 'interval', intervalMinutes: 60, localTime: null, daysOfWeek: null, intervalAnchorUtc: null } };
@@ -83,8 +85,8 @@ export function SchedulerView({ services, surface }: ViewProps) {
     event.preventDefault();
     if (!draft) return;
     const issues = validateSchedule(draft);
-    const catalog = draft.targetKind === 'workflow' ? snapshot.workflows : snapshot.scripts;
-    if (!catalog.some((profile) => profile.profileId === draft.profileId)) issues.push(`Select an existing saved ${draft.targetKind === 'workflow' ? 'workflow' : 'script profile'}.`);
+    const catalog = scheduleCatalog(snapshot, draft.targetKind);
+    if (!catalog.some((profile) => profile.profileId === draft.profileId)) issues.push(`Select an existing saved ${scheduleTargetLabels[draft.targetKind].singular}.`);
     setErrors(issues);
     if (!issues.length && await action('saveSchedule', { ...draft, workflowId: draft.targetKind === 'workflow' ? draft.profileId : '', name: draft.name.trim() }, draft.id)) setDraft(null);
   };
@@ -107,14 +109,13 @@ export function SchedulerView({ services, surface }: ViewProps) {
   </ol>;
   const commands = useMemo(() => [
     { id: 'scheduler:refresh', label: 'Refresh schedules', keywords: ['reload', 'update'], run: refresh },
-    { id: 'scheduler:new', label: 'Create schedule', keywords: ['new', 'workflow', 'script'], disabled: !!busy || (snapshot.workflows.length === 0 && snapshot.scripts.length === 0), run: () => {
+    { id: 'scheduler:new', label: 'Create schedule', keywords: ['new', 'workflow', 'script', 'browser', 'playwright'], disabled: !!busy || !hasTargets(snapshot), run: () => {
       setErrors([]);
-      const targetKind: ScheduleTargetKind = snapshot.workflows.length ? 'workflow' : 'scriptProfile';
-      const profileId = targetKind === 'workflow' ? snapshot.workflows[0]?.profileId : snapshot.scripts[0]?.profileId;
-      setDraft(blankSchedule(targetKind, profileId));
+      const first = firstTarget(snapshot);
+      setDraft(blankSchedule(first.kind, first.profileId));
     } },
     ...snapshot.schedules.map((schedule) => {
-      const catalog = schedule.targetKind === 'workflow' ? snapshot.workflows : snapshot.scripts;
+      const catalog = scheduleCatalog(snapshot, schedule.targetKind);
       const profile = catalog.find((item) => item.profileId === schedule.profileId);
       const state = snapshot.states.find((item) => item.scheduleId === schedule.id);
       return { id: `scheduler:run:${schedule.id}`, label: `Run ${schedule.name} now`, keywords: [schedule.profileId, profile?.name ?? '', schedule.targetKind],
@@ -127,8 +128,8 @@ export function SchedulerView({ services, surface }: ViewProps) {
   return <section className="module-view script-runner-view scheduler-view" aria-label="Scheduler">
     <style>{styles}</style>
     <header className="script-heading scheduler-heading">
-      <div className="script-heading-title"><CalendarClock size={19} /><div><h1>Scheduler</h1><p>Saved workflows and scripts, on your local clock</p></div></div>
-      <button className="secondary-button" disabled={!!busy || (snapshot.workflows.length === 0 && snapshot.scripts.length === 0)} onClick={() => { setErrors([]); const targetKind = snapshot.workflows.length ? 'workflow' : 'scriptProfile'; const profileId = targetKind === 'workflow' ? snapshot.workflows[0]?.profileId : snapshot.scripts[0]?.profileId; setDraft(blankSchedule(targetKind, profileId)); }}><Plus size={13} /> New</button>
+      <div className="script-heading-title"><CalendarClock size={19} /><div><h1>Scheduler</h1><p>Saved workflows, scripts, and browser automation, on your local clock</p></div></div>
+      <button className="secondary-button" disabled={!!busy || !hasTargets(snapshot)} onClick={() => { setErrors([]); const first = firstTarget(snapshot); setDraft(blankSchedule(first.kind, first.profileId)); }}><Plus size={13} /> New</button>
     </header>
     <p className="scheduler-help">Runs while Automator is in the tray. Missed runs are skipped unless catch-up is enabled. Full exit stops scheduling.</p>
     {snapshotLoaded && <p role="status" className="scheduler-notice">{snapshot.running
@@ -175,10 +176,10 @@ export function SchedulerView({ services, surface }: ViewProps) {
       <div className="script-editor-heading"><CalendarClock size={14} /><strong>Schedule</strong><button className="icon-button" type="button" aria-label="Close editor" disabled={!!busy} onClick={() => setDraft(null)}><X size={13} /></button></div>
       <div className="script-fields">
         <label><span>Name</span><input required maxLength={128} value={draft.name} onChange={(event) => change({ name: event.target.value })} /></label>
-        <label><span>Run</span><select value={draft.targetKind} onChange={(event) => { const targetKind = event.target.value as ScheduleTargetKind; const catalog = targetKind === 'workflow' ? snapshot.workflows : snapshot.scripts; change({ targetKind, profileId: catalog[0]?.profileId ?? '' }); }}><option value="workflow">Workflow</option><option value="scriptProfile">Script profile</option></select></label>
-        <label><span>{draft.targetKind === 'workflow' ? 'Workflow profile' : 'Script profile'}</span><select value={draft.profileId} onChange={(event) => change({ profileId: event.target.value })}>
-          {(draft.targetKind === 'workflow' ? snapshot.workflows : snapshot.scripts).length === 0 && <option value="">No saved {draft.targetKind === 'workflow' ? 'workflows' : 'script profiles'}</option>}
-          {(draft.targetKind === 'workflow' ? snapshot.workflows : snapshot.scripts).map((profile) => <option key={profile.profileId} value={profile.profileId}>{profile.name}</option>)}
+        <label><span>Run</span><select value={draft.targetKind} onChange={(event) => { const targetKind = event.target.value as ScheduleTargetKind; change({ targetKind, profileId: scheduleCatalog(snapshot, targetKind)[0]?.profileId ?? '' }); }}>{scheduleTargetKinds.map((kind) => <option key={kind} value={kind}>{scheduleTargetLabels[kind].option}</option>)}</select></label>
+        <label><span>{scheduleTargetLabels[draft.targetKind].option}</span><select value={draft.profileId} onChange={(event) => change({ profileId: event.target.value })}>
+          {scheduleCatalog(snapshot, draft.targetKind).length === 0 && <option value="">No saved {scheduleTargetLabels[draft.targetKind].plural}</option>}
+          {scheduleCatalog(snapshot, draft.targetKind).map((profile) => <option key={profile.profileId} value={profile.profileId}>{profile.name}</option>)}
         </select></label>
         <label><span>Recurrence</span><select value={draft.recurrence.kind} onChange={(event) => change({ recurrence: switchRecurrence(event.target.value as ScheduleRecurrence['kind']) })}><option value="interval">Interval</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label>
         {draft.recurrence.kind === 'interval' ? <label><span>Interval in minutes</span><input type="number" min={1} max={525600} required value={draft.recurrence.intervalMinutes ?? 60} onChange={(event) => recurrence({ intervalMinutes: Number(event.target.value) })} /></label>
@@ -191,12 +192,12 @@ export function SchedulerView({ services, surface }: ViewProps) {
       <div className="script-editor-actions"><button className="secondary-button" type="button" disabled={!!busy} onClick={() => setDraft(null)}>Cancel</button><button className="primary-button" disabled={!!busy}><Save size={12} /> Save</button></div>
     </form>}
     <div className="scheduler-list">
-      {snapshotLoaded && snapshot.schedules.length === 0 && !draft && <div className="script-empty"><CalendarClock className="empty-icon" size={30} /><strong>No schedules yet</strong><p>{snapshot.workflows.length || snapshot.scripts.length ? 'Create a schedule to run a saved workflow or script automatically.' : 'Save a workflow in tab 5 or a script profile in tab 2, then return to schedule it.'}</p></div>}
+      {snapshotLoaded && snapshot.schedules.length === 0 && !draft && <div className="script-empty"><CalendarClock className="empty-icon" size={30} /><strong>No schedules yet</strong><p>{hasTargets(snapshot) ? 'Create a schedule to run a saved workflow, script, browser profile, or Playwright task automatically.' : 'Save a workflow, script profile, browser automation profile, or Playwright task, then return to schedule it.'}</p></div>}
       {snapshot.schedules.map((schedule) => {
         const state = snapshot.states.find((item) => item.scheduleId === schedule.id);
-        const targetCatalog = schedule.targetKind === 'workflow' ? snapshot.workflows : snapshot.scripts;
+        const targetCatalog = scheduleCatalog(snapshot, schedule.targetKind);
         const targetProfile = targetCatalog.find((item) => item.profileId === schedule.profileId);
-        const targetLabel = schedule.targetKind === 'workflow' ? 'workflow' : 'script profile';
+        const targetLabel = scheduleTargetLabels[schedule.targetKind].singular;
         const last = [...snapshot.history].reverse().find((item) => item.scheduleId === schedule.id);
         return <article className="scheduler-card" key={schedule.id}>
           <div className="scheduler-card-top"><CalendarClock size={17} /><div className="scheduler-copy"><strong>{schedule.name}</strong><small className={targetProfile ? '' : 'scheduler-missing'}>{targetProfile?.name ?? `Missing ${targetLabel}: ${schedule.profileId}`} · {describeRecurrence(schedule.recurrence)}</small></div>
