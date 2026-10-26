@@ -366,6 +366,92 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
             : Result(AutomationStatus.Error, $"Playwright UI mode exited with code {process.ExitCode}.", new { timedOut = false, exitCode = process.ExitCode, durationMilliseconds = process.DurationMilliseconds });
     }
 
+    private static (string Root, DateTimeOffset At, IReadOnlyList<PlaywrightTestIdentity> Tests)? _scheduleTargetCache;
+    private static readonly TimeSpan ScheduleDiscoveryTimeout = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan ScheduleDiscoveryCacheLifetime = TimeSpan.FromMinutes(2);
+    private const int MaximumScheduleTargets = 1000;
+
+    /// <summary>
+    /// Tags and individual tests of the active project as Scheduler targets. Tags come from saved metadata; tests need a
+    /// (briefly cached, time-bounded) `playwright test --list`, and are simply omitted when discovery is unavailable.
+    /// </summary>
+    public async Task<IReadOnlyList<AutomationSavedProfileSummary>> ListScheduleTargetsAsync(CancellationToken cancellationToken)
+    {
+        var root = await GetProjectRootAsync(cancellationToken).ConfigureAwait(false);
+        if (root is null || !Directory.Exists(root)) return Array.Empty<AutomationSavedProfileSummary>();
+        var records = await ReadTagRecordsAsync(root, cancellationToken).ConfigureAwait(false);
+        var targets = new List<AutomationSavedProfileSummary>();
+        var knownIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var group in records.SelectMany(record => record.Tags.Select(tag => (Tag: tag, record.Identity.Id)))
+            .GroupBy(item => item.Tag, StringComparer.OrdinalIgnoreCase).OrderBy(group => group.Key, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var id = TagProfileId(group.Key);
+            if (!knownIds.Add(id)) continue;
+            var count = group.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count();
+            targets.Add(new AutomationSavedProfileSummary(id, $"Tag: {group.Key} ({count} test{(count == 1 ? string.Empty : "s")})"));
+        }
+
+        var tests = await TryDiscoverForSchedulingAsync(root, cancellationToken).ConfigureAwait(false);
+        foreach (var test in tests.OrderBy(test => test.File, StringComparer.CurrentCultureIgnoreCase).ThenBy(test => test.Line))
+        {
+            if (targets.Count >= MaximumScheduleTargets) break;
+            var name = $"Test: {string.Join(" › ", test.TitlePath)} ({test.File})";
+            name = new string(name.Where(character => !char.IsControl(character)).ToArray());
+            if (name.Length > 128) name = name[..(char.IsHighSurrogate(name[126]) ? 126 : 127)] + "…";
+            targets.Add(new AutomationSavedProfileSummary(TestProfileId(test.Id), name));
+        }
+        return targets;
+    }
+
+    /// <summary>Runs one scheduler target previously listed by <see cref="ListScheduleTargetsAsync"/>.</summary>
+    public async Task<AutomationResult> RunScheduleTargetAsync(string profileId, CancellationToken cancellationToken)
+    {
+        if (profileId.StartsWith("test-", StringComparison.Ordinal))
+            return await RunAsync(JsonSerializer.SerializeToElement(new { kind = "test", testId = profileId["test-".Length..] }), cancellationToken).ConfigureAwait(false);
+        if (profileId.StartsWith("tag-", StringComparison.Ordinal))
+        {
+            var root = await RequireProjectRootAsync(cancellationToken).ConfigureAwait(false);
+            var tag = (await ReadTagRecordsAsync(root, cancellationToken).ConfigureAwait(false)).SelectMany(record => record.Tags)
+                .FirstOrDefault(candidate => string.Equals(TagProfileId(candidate), profileId, StringComparison.Ordinal))
+                ?? throw new InvalidDataException("The scheduled Playwright tag no longer exists.");
+            return await RunAsync(JsonSerializer.SerializeToElement(new { kind = "tag", tag }), cancellationToken).ConfigureAwait(false);
+        }
+        throw new InvalidDataException("The selected Playwright test target is invalid.");
+    }
+
+    private static string TestProfileId(string testId) => "test-" + testId;
+
+    private static string TagProfileId(string tag)
+    {
+        // The hash keeps distinct tags such as "Smoke Test" and "smoke-test" apart after slugging; tags compare case-insensitively.
+        var slug = Regex.Replace(tag.ToLowerInvariant(), "[^a-z0-9._-]+", "-", RegexOptions.CultureInvariant).Trim('-');
+        if (slug.Length > 40) slug = slug[..40];
+        return $"tag-{(slug.Length > 0 ? slug + "-" : string.Empty)}{HashId("tag|" + tag.ToLowerInvariant())[..8]}";
+    }
+
+    private async Task<IReadOnlyList<PlaywrightTestIdentity>> TryDiscoverForSchedulingAsync(string root, CancellationToken cancellationToken)
+    {
+        if (_scheduleTargetCache is { } cached && SamePath(cached.Root, root)
+            && DateTimeOffset.UtcNow - cached.At < ScheduleDiscoveryCacheLifetime) return cached.Tests;
+        var runner = ResolveRunner(root);
+        if (!runner.Available) return Array.Empty<PlaywrightTestIdentity>();
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(ScheduleDiscoveryTimeout);
+        try
+        {
+            var discovered = await DiscoverTestsAsync(root, runner, limit.Token).ConfigureAwait(false);
+            _scheduleTargetCache = (root, DateTimeOffset.UtcNow, discovered.Tests);
+            return discovered.Tests;
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested
+            && exception is OperationCanceledException or InvalidDataException or IOException)
+        {
+            // Remember the failure for 30 seconds so the Scheduler's frequent refresh does not respawn discovery each time.
+            _scheduleTargetCache = (root, DateTimeOffset.UtcNow - ScheduleDiscoveryCacheLifetime + TimeSpan.FromSeconds(30), Array.Empty<PlaywrightTestIdentity>());
+            return Array.Empty<PlaywrightTestIdentity>();
+        }
+    }
+
     public async Task<AutomationResult> RunAsync(JsonElement input, CancellationToken cancellationToken)
     {
         var root = await RequireProjectRootAsync(cancellationToken).ConfigureAwait(false);

@@ -111,12 +111,13 @@ public sealed class AutomationSchedulerCoordinator : IAutomationSchedulerCoordin
         var scripts = await ReadSavedProfileCatalogAsync(AutomationScheduleTargetKind.ScriptProfile, cancellationToken).ConfigureAwait(false);
         var browserProfiles = await ReadSavedProfileCatalogAsync(AutomationScheduleTargetKind.BrowserProfile, cancellationToken).ConfigureAwait(false);
         var playwrightTasks = await ReadSavedProfileCatalogAsync(AutomationScheduleTargetKind.PlaywrightTask, cancellationToken).ConfigureAwait(false);
+        var playwrightTests = await ReadSavedProfileCatalogAsync(AutomationScheduleTargetKind.PlaywrightTest, cancellationToken).ConfigureAwait(false);
         var now = _clock.GetUtcNow();
         var states = schedules.Select(schedule => new AutomationScheduleState(schedule.Id,
             schedule.Enabled ? AutomationScheduleRecurrenceCalculator.NextOccurrenceUtc(schedule, now) : null,
             _running.ContainsKey(schedule.Id))).ToArray();
         return new AutomationSchedulerSnapshot(schedules, histories, !IsDisposed,
-            Array.AsReadOnly(states), workflows, scripts, browserProfiles, playwrightTasks);
+            Array.AsReadOnly(states), workflows, scripts, browserProfiles, playwrightTasks, playwrightTests);
     }
 
     private static string? SavedProfileModule(AutomationScheduleTargetKind kind) => kind switch
@@ -124,6 +125,7 @@ public sealed class AutomationSchedulerCoordinator : IAutomationSchedulerCoordin
         AutomationScheduleTargetKind.ScriptProfile => "script-runner",
         AutomationScheduleTargetKind.BrowserProfile => BrowserAutomationModule.IdValue,
         AutomationScheduleTargetKind.PlaywrightTask => PlaywrightTaskSavedProfileHandler.Module,
+        AutomationScheduleTargetKind.PlaywrightTest => PlaywrightTestsSavedProfileHandler.Module,
         _ => null,
     };
 
@@ -131,6 +133,7 @@ public sealed class AutomationSchedulerCoordinator : IAutomationSchedulerCoordin
     {
         AutomationScheduleTargetKind.BrowserProfile => "browser automation profile",
         AutomationScheduleTargetKind.PlaywrightTask => "Playwright task",
+        AutomationScheduleTargetKind.PlaywrightTest => "Playwright test or tag",
         _ => "script profile",
     };
 

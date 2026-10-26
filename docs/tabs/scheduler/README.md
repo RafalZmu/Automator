@@ -19,7 +19,7 @@ The Delete button on a schedule uses a two-step inline confirmation: the first c
 
 Schedule a saved profile by ID so interpreter and profile validation stay owned by the source module.
 
-A Codex-generated Playwright task (`playwright-task` profile) can be scheduled directly or through a Workflow. A Browser Automation profile is scheduled directly and runs its start-URL navigation with no input. The task's current approval revision is checked at run time. The snapshot carries one catalog per target kind (`workflows`, `scripts`, `browserProfiles`, `playwrightTasks`).
+A Codex-generated Playwright task (`playwright-task` profile) can be scheduled directly or through a Workflow. Browser Automation Playwright tags and individual tests can be scheduled directly (`playwright-tests` module; ids `tag-<slug>-<hash>` and `test-<id>`); the tag list comes from saved tags and the test list from a cached, time-bounded `playwright test --list`. A Browser Automation profile is scheduled directly and runs its start-URL navigation with no input. The task's current approval revision is checked at run time. The snapshot carries one catalog per target kind (`workflows`, `scripts`, `browserProfiles`, `playwrightTasks`, `playwrightTests`).
 
 ## Test case steps
 

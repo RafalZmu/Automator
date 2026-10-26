@@ -54,6 +54,15 @@ test('scheduler reader accepts browser automation profile and Playwright task ta
   assert.equal(next.playwrightTasks[0].name, 'Export orders');
 });
 
+test('scheduler reader accepts Playwright test and tag targets', () => {
+  const next = readSchedulerSnapshot({ schedules: [
+    { ...interval, id: 'smoke-tag', targetKind: 'playwrightTest', profileId: 'tag-smoke', workflowId: '' },
+  ], history: [], running: true,
+  playwrightTests: [{ profileId: 'tag-smoke', name: 'Tag: smoke (3 tests)' }, { profileId: 'test-0123456789abcdef', name: 'Test: Login (login.spec.ts)' }] });
+  assert.deepEqual(next.schedules.map(({ targetKind, profileId }) => [targetKind, profileId]), [['playwrightTest', 'tag-smoke']]);
+  assert.deepEqual(next.playwrightTests.map((item) => item.profileId), ['tag-smoke', 'test-0123456789abcdef']);
+});
+
 async function loadAgendaViewModel() {
   return import('../ui/modules/schedulerAgendaViewModel.ts').catch((error) => {
     if (error?.code === 'ERR_MODULE_NOT_FOUND' && String(error.message).includes('schedulerAgendaViewModel.ts')) return null;

@@ -15,6 +15,7 @@ public enum AutomationScheduleTargetKind
     ScriptProfile,
     BrowserProfile,
     PlaywrightTask,
+    PlaywrightTest,
 }
 
 public sealed record AutomationScheduleRecurrence(
@@ -61,7 +62,8 @@ public sealed record AutomationSchedulerSnapshot(
     IReadOnlyList<AutomationSavedProfileSummary>? Workflows = null,
     IReadOnlyList<AutomationSavedProfileSummary>? Scripts = null,
     IReadOnlyList<AutomationSavedProfileSummary>? BrowserProfiles = null,
-    IReadOnlyList<AutomationSavedProfileSummary>? PlaywrightTasks = null);
+    IReadOnlyList<AutomationSavedProfileSummary>? PlaywrightTasks = null,
+    IReadOnlyList<AutomationSavedProfileSummary>? PlaywrightTests = null);
 
 public interface IAutomationSchedulerCoordinator
 {

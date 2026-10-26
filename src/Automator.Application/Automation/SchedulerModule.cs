@@ -41,7 +41,8 @@ public sealed class SchedulerModule : ILauncherTabModuleProvider
                         schedules = snapshot.Schedules.Take(256), history = snapshot.History.TakeLast(100),
                         running = snapshot.Running, states = (snapshot.States ?? []).Take(256), workflows = (snapshot.Workflows ?? []).Take(256),
                         scripts = (snapshot.Scripts ?? []).Take(256),
-                        browserProfiles = (snapshot.BrowserProfiles ?? []).Take(256), playwrightTasks = (snapshot.PlaywrightTasks ?? []).Take(256)
+                        browserProfiles = (snapshot.BrowserProfiles ?? []).Take(256), playwrightTasks = (snapshot.PlaywrightTasks ?? []).Take(256),
+                        playwrightTests = (snapshot.PlaywrightTests ?? []).Take(1000)
                     });
                 case "saveSchedule":
                     var schedule = JsonSerializer.Deserialize<AutomationScheduleDefinition>(input.GetRawText(), JsonOptions)
@@ -78,7 +79,7 @@ public sealed class SchedulerModule : ILauncherTabModuleProvider
             throw new InvalidDataException("The schedule key or target kind is invalid.");
         var profileId = schedule.ProfileId ?? schedule.WorkflowId;
         if (string.IsNullOrWhiteSpace(profileId) || !IdPattern.IsMatch(profileId))
-            throw new InvalidDataException("Select a saved workflow, script, browser or Playwright profile with a short lowercase key.");
+            throw new InvalidDataException("Select a saved workflow, script, browser, Playwright task, or Playwright test or tag with a short lowercase key.");
         var name = schedule.Name?.Trim();
         if (string.IsNullOrEmpty(name) || name.Length > 128 || name.Any(char.IsControl))
             throw new InvalidDataException("A schedule name of up to 128 characters is required.");
