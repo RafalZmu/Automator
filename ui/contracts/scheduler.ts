@@ -5,13 +5,14 @@ export type ScheduleRecurrence = {
   daysOfWeek: string[] | null;
   intervalAnchorUtc: string | null;
 };
-export type ScheduleTargetKind = 'workflow' | 'scriptProfile' | 'browserProfile' | 'playwrightTask';
-export const scheduleTargetKinds: ScheduleTargetKind[] = ['workflow', 'scriptProfile', 'browserProfile', 'playwrightTask'];
+export type ScheduleTargetKind = 'workflow' | 'scriptProfile' | 'browserProfile' | 'playwrightTask' | 'playwrightTest';
+export const scheduleTargetKinds: ScheduleTargetKind[] = ['workflow', 'scriptProfile', 'browserProfile', 'playwrightTask', 'playwrightTest'];
 export const scheduleTargetLabels: Record<ScheduleTargetKind, { option: string; singular: string; plural: string }> = {
   workflow: { option: 'Workflow', singular: 'workflow', plural: 'workflows' },
   scriptProfile: { option: 'Script profile', singular: 'script profile', plural: 'script profiles' },
   browserProfile: { option: 'Browser automation profile', singular: 'browser automation profile', plural: 'browser automation profiles' },
   playwrightTask: { option: 'Playwright task', singular: 'Playwright task', plural: 'Playwright tasks' },
+  playwrightTest: { option: 'Playwright test or tag', singular: 'Playwright test or tag', plural: 'Playwright tests or tags' },
 };
 export type ScheduleDefinition = { id: string; name: string; targetKind: ScheduleTargetKind; profileId: string; enabled: boolean; recurrence: ScheduleRecurrence; runOnceAfterRestart: boolean };
 export type ScheduleHistory = { id: string; scheduleId: string; startedUtc: string; finishedUtc: string | null; status: 'success' | 'information' | 'warning' | 'error'; category: string; durationMilliseconds: number };
@@ -22,9 +23,10 @@ export type SchedulerSnapshot = {
   scripts: { profileId: string; name: string }[];
   browserProfiles: { profileId: string; name: string }[];
   playwrightTasks: { profileId: string; name: string }[];
+  playwrightTests: { profileId: string; name: string }[];
 };
 export function scheduleCatalog(snapshot: SchedulerSnapshot, kind: ScheduleTargetKind) {
-  return kind === 'workflow' ? snapshot.workflows : kind === 'scriptProfile' ? snapshot.scripts : kind === 'browserProfile' ? snapshot.browserProfiles : snapshot.playwrightTasks;
+  return kind === 'workflow' ? snapshot.workflows : kind === 'scriptProfile' ? snapshot.scripts : kind === 'browserProfile' ? snapshot.browserProfiles : kind === 'playwrightTask' ? snapshot.playwrightTasks : snapshot.playwrightTests;
 }
 export const scheduleWeekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const idPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -88,7 +90,8 @@ export function readSchedulerSnapshot(value: unknown): SchedulerSnapshot | null 
   const scripts = readCatalog(value.scripts);
   const browserProfiles = readCatalog(value.browserProfiles);
   const playwrightTasks = readCatalog(value.playwrightTasks);
-  return { schedules, history, states, workflows, scripts, browserProfiles, playwrightTasks, running: value.running };
+  const playwrightTests = readCatalog(value.playwrightTests);
+  return { schedules, history, states, workflows, scripts, browserProfiles, playwrightTasks, playwrightTests, running: value.running };
 }
 
 export function describeRecurrence(recurrence: ScheduleRecurrence): string {

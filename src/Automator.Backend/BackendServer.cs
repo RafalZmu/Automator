@@ -933,6 +933,7 @@ public sealed class BackendServer : IAsyncDisposable
             new ApiSavedProfileHandler(apiProfileRunner, libraryStore),
             new BrowserSavedProfileHandler(libraryStore, browserService, _variableService),
             new PlaywrightTaskSavedProfileHandler(libraryStore, processService),
+            new PlaywrightTestsSavedProfileHandler(libraryStore, processService),
         ]);
         var workflowEngine = new AutomationWorkflowEngine(libraryStore, savedProfileExecutor, _variableService);
         var schedulerCoordinator = _schedulerCoordinator = new AutomationSchedulerCoordinator(libraryStore, workflowEngine,

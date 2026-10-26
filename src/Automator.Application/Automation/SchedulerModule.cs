@@ -41,7 +41,8 @@ public sealed class SchedulerModule : ILauncherTabModuleProvider
                         schedules = snapshot.Schedules.Take(256), history = snapshot.History.TakeLast(100),
                         running = snapshot.Running, states = (snapshot.States ?? []).Take(256), workflows = (snapshot.Workflows ?? []).Take(256),
                         scripts = (snapshot.Scripts ?? []).Take(256),
-                        browserProfiles = (snapshot.BrowserProfiles ?? []).Take(256), playwrightTasks = (snapshot.PlaywrightTasks ?? []).Take(256)
+                        browserProfiles = (snapshot.BrowserProfiles ?? []).Take(256), playwrightTasks = (snapshot.PlaywrightTasks ?? []).Take(256),
+                        playwrightTests = (snapshot.PlaywrightTests ?? []).Take(1000)
                     });
                 case "saveSchedule":
                     var schedule = JsonSerializer.Deserialize<AutomationScheduleDefinition>(input.GetRawText(), JsonOptions)

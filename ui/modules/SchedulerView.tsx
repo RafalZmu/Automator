@@ -9,7 +9,7 @@ import { describeRecurrence, readSchedulerSnapshot, scheduleCatalog, scheduleTar
 import { buildCalendarMonth, buildUpcomingScheduleEntries } from './schedulerAgendaViewModel';
 
 type ViewProps = { surface?: 'launcher' | 'workspace'; tab: BackendUiState['tabs'][number]; moduleState: BackendUiState['moduleStates'][number] | undefined; services: AutomationServices };
-const emptySnapshot: SchedulerSnapshot = { schedules: [], history: [], states: [], workflows: [], scripts: [], browserProfiles: [], playwrightTasks: [], running: false };
+const emptySnapshot: SchedulerSnapshot = { schedules: [], history: [], states: [], workflows: [], scripts: [], browserProfiles: [], playwrightTasks: [], playwrightTests: [], running: false };
 const firstTarget = (snapshot: SchedulerSnapshot) => { const kind = scheduleTargetKinds.find((item) => scheduleCatalog(snapshot, item).length > 0) ?? 'workflow'; return { kind, profileId: scheduleCatalog(snapshot, kind)[0]?.profileId }; };
 const hasTargets = (snapshot: SchedulerSnapshot) => scheduleTargetKinds.some((kind) => scheduleCatalog(snapshot, kind).length > 0);
 function blankSchedule(targetKind: ScheduleTargetKind = 'workflow', profileId = ''): ScheduleDefinition {
