@@ -79,7 +79,7 @@ public sealed class SchedulerModule : ILauncherTabModuleProvider
             throw new InvalidDataException("The schedule key or target kind is invalid.");
         var profileId = schedule.ProfileId ?? schedule.WorkflowId;
         if (string.IsNullOrWhiteSpace(profileId) || !IdPattern.IsMatch(profileId))
-            throw new InvalidDataException("Select a saved workflow, script, browser or Playwright profile with a short lowercase key.");
+            throw new InvalidDataException("Select a saved workflow, script, browser, Playwright task, or Playwright test or tag with a short lowercase key.");
         var name = schedule.Name?.Trim();
         if (string.IsNullOrEmpty(name) || name.Length > 128 || name.Any(char.IsControl))
             throw new InvalidDataException("A schedule name of up to 128 characters is required.");

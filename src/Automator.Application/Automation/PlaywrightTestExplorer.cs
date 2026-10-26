@@ -397,7 +397,7 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
             if (targets.Count >= MaximumScheduleTargets) break;
             var name = $"Test: {string.Join(" › ", test.TitlePath)} ({test.File})";
             name = new string(name.Where(character => !char.IsControl(character)).ToArray());
-            if (name.Length > 128) name = name[..127] + "…";
+            if (name.Length > 128) name = name[..(char.IsHighSurrogate(name[126]) ? 126 : 127)] + "…";
             targets.Add(new AutomationSavedProfileSummary(TestProfileId(test.Id), name));
         }
         return targets;
@@ -423,8 +423,10 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
 
     private static string TagProfileId(string tag)
     {
+        // The hash keeps distinct tags such as "Smoke Test" and "smoke-test" apart after slugging; tags compare case-insensitively.
         var slug = Regex.Replace(tag.ToLowerInvariant(), "[^a-z0-9._-]+", "-", RegexOptions.CultureInvariant).Trim('-');
-        return "tag-" + (slug.Length > 0 ? slug : "tag");
+        if (slug.Length > 40) slug = slug[..40];
+        return $"tag-{(slug.Length > 0 ? slug + "-" : string.Empty)}{HashId("tag|" + tag.ToLowerInvariant())[..8]}";
     }
 
     private async Task<IReadOnlyList<PlaywrightTestIdentity>> TryDiscoverForSchedulingAsync(string root, CancellationToken cancellationToken)
@@ -444,6 +446,8 @@ internal sealed class PlaywrightTestExplorer(IAutomationLibrary library, IAutoma
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested
             && exception is OperationCanceledException or InvalidDataException or IOException)
         {
+            // Remember the failure for 30 seconds so the Scheduler's frequent refresh does not respawn discovery each time.
+            _scheduleTargetCache = (root, DateTimeOffset.UtcNow - ScheduleDiscoveryCacheLifetime + TimeSpan.FromSeconds(30), Array.Empty<PlaywrightTestIdentity>());
             return Array.Empty<PlaywrightTestIdentity>();
         }
     }

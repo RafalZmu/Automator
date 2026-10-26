@@ -35,7 +35,7 @@ function date(value: unknown): value is string { return typeof value === 'string
 
 export function validateSchedule(schedule: ScheduleDefinition): string[] {
   const errors: string[] = [];
-  if (!idPattern.test(schedule.id) || !idPattern.test(schedule.profileId) || !scheduleTargetKinds.includes(schedule.targetKind)) errors.push('Select a saved workflow, script, browser or Playwright profile and use a short lowercase schedule key.');
+  if (!idPattern.test(schedule.id) || !idPattern.test(schedule.profileId) || !scheduleTargetKinds.includes(schedule.targetKind)) errors.push('Select a saved workflow, script, browser, Playwright task, or Playwright test or tag and use a short lowercase schedule key.');
   if (!schedule.name.trim() || schedule.name.trim().length > 128 || /[\x00-\x1f\x7f]/.test(schedule.name)) errors.push('Name is required and must be at most 128 characters.');
   const recurrence = schedule.recurrence;
   if (recurrence.kind === 'interval') {
