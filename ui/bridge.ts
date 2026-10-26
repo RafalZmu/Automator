@@ -160,8 +160,10 @@ class BrowserPreviewBridge implements AutomatorBridge {
   async openLogFolder() { return false; }
   async retryBackend() { return this.getInitialState(); }
   private taskToasts = true;
-  async getNotificationPrefs() { return { taskToasts: this.taskToasts }; }
-  async setTaskToasts(enabled: boolean) { this.taskToasts = enabled; return { taskToasts: enabled }; }
+  private timerOverlay = true;
+  async getNotificationPrefs() { return { taskToasts: this.taskToasts, timerOverlay: this.timerOverlay }; }
+  async setTaskToasts(enabled: boolean) { this.taskToasts = enabled; return { taskToasts: enabled, timerOverlay: this.timerOverlay }; }
+  async setTimerOverlay(enabled: boolean) { this.timerOverlay = enabled; return { taskToasts: this.taskToasts, timerOverlay: enabled }; }
   private mcp: McpStatus = { enabled: true, state: 'listening', port: 47821, url: 'http://127.0.0.1:47821/mcp', error: null };
   async getMcpStatus() { return { ...this.mcp }; }
   async setMcpEnabled(enabled: boolean) {

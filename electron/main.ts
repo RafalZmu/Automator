@@ -35,6 +35,7 @@ import { getScriptRunnerPathPickerSpec } from './scriptRunnerPathPicker';
 import { getCodexScopePathPickerSpec } from './codexScopePathPicker';
 import { authorizeCodexExport, extensionForCodexFormat, writeCodexSourceCreateNew } from './codexExport';
 import { mcpSetEnabledSchema, mcpSetPortSchema } from '../contracts/mcp';
+import { computeOverlayBounds, overlayHtml, readOverlayTimers, timerOverlayItems, OVERLAY_POLL_MS } from './screenOverlay';
 import { createMcpBackend } from './mcp/backendBridge';
 import { McpController } from './mcp/controller';
 import type { TokenProtector } from './mcp/config';
@@ -552,7 +553,7 @@ function requireMcp(): McpController {
 
 
 const notificationPrefsPath = path.join(localData, 'notifications.json');
-let notificationPrefs: NotificationPrefs = { taskToasts: true };
+let notificationPrefs: NotificationPrefs = { taskToasts: true, timerOverlay: true };
 const toastTracker = createToastTracker();
 const toastWindows: BrowserWindow[] = [];
 
@@ -607,6 +608,73 @@ async function seedTaskToasts(): Promise<void> {
     const parsed = runActivitySnapshotSchema.safeParse(await backend?.request('activity/list', {}));
     if (parsed.success) toastTracker.next(parsed.data.entries);
   } catch { /* The first change event seeds instead. */ }
+}
+
+// Screen overlay: click-through text in the bottom-right corner. It shows the running Work Time timer and hides when none runs.
+const overlayBackend = createMcpBackend({
+  getBackend: () => backend,
+  getState: () => currentState,
+  unavailableReason: () => (quitRequested ? 'Automator is shutting down.' : backend && backendStatus === 'ready' ? null : 'The Automator backend is not ready.'),
+  newRequestId: () => `overlay-${randomUUID()}`,
+});
+let overlayWindow: BrowserWindow | undefined;
+let overlayReady = false;
+let overlayTimers: ReturnType<typeof readOverlayTimers> = [];
+let overlayPollTimer: NodeJS.Timeout | undefined;
+let overlayTickTimer: NodeJS.Timeout | undefined;
+let overlayLastText = '';
+
+function hideScreenOverlay(): void {
+  if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.destroy();
+  overlayWindow = undefined; overlayReady = false; overlayLastText = '';
+}
+
+function renderScreenOverlay(): void {
+  if (quitRequested || !notificationPrefs.timerOverlay) return hideScreenOverlay();
+  const lines = timerOverlayItems(overlayTimers, Date.now()).map((item) => item.text);
+  if (lines.length === 0) return hideScreenOverlay();
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    const created = new BrowserWindow({
+      ...computeOverlayBounds(screen.getPrimaryDisplay().workArea, lines.length), show: false, frame: false, transparent: true,
+      resizable: false, movable: false, focusable: false, skipTaskbar: true, alwaysOnTop: true, hasShadow: false, fullscreenable: false,
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, webviewTag: false, spellcheck: false },
+    });
+    overlayWindow = created; overlayReady = false; overlayLastText = '';
+    created.setIgnoreMouseEvents(true);
+    created.setAlwaysOnTop(true, 'screen-saver');
+    created.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    created.webContents.on('will-navigate', (event) => event.preventDefault());
+    created.on('closed', () => { if (overlayWindow === created) { overlayWindow = undefined; overlayReady = false; } });
+    void created.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(overlayHtml(nativeTheme.shouldUseDarkColors))}`)
+      .then(() => { overlayReady = true; renderScreenOverlay(); })
+      .catch(() => writeLog('Overlay.LoadFailed', 'The screen overlay could not be displayed.'));
+    return;
+  }
+  if (!overlayReady) return;
+  const text = JSON.stringify(lines);
+  overlayWindow.setBounds(computeOverlayBounds(screen.getPrimaryDisplay().workArea, lines.length), false);
+  if (text !== overlayLastText) {
+    overlayLastText = text;
+    void overlayWindow.webContents.executeJavaScript(`window.setItems(${text})`).catch(() => undefined);
+  }
+  if (!overlayWindow.isVisible()) overlayWindow.showInactive();
+}
+
+/** Reads the current timers from the backend, then redraws. Safe to call at any time. */
+async function refreshScreenOverlay(): Promise<void> {
+  if (quitRequested || !notificationPrefs.timerOverlay) return hideScreenOverlay();
+  try {
+    const result = await overlayBackend.call('focus-sessions', 'getSnapshot', {});
+    overlayTimers = result.status === 'error' ? [] : readOverlayTimers(result.data);
+  } catch { overlayTimers = []; }
+  renderScreenOverlay();
+}
+
+function startScreenOverlay(): void {
+  void refreshScreenOverlay();
+  overlayPollTimer = setInterval(() => void refreshScreenOverlay(), OVERLAY_POLL_MS);
+  overlayTickTimer = setInterval(renderScreenOverlay, 1_000);
+  overlayPollTimer.unref(); overlayTickTimer.unref();
 }
 
 function createTray(): boolean {
@@ -969,8 +1037,16 @@ function registerIpc(): void {
   ipcMain.handle('automator:set-task-toasts', (event, enabled: unknown) => {
     assertMainFrame(event);
     if (typeof enabled !== 'boolean') throw new Error('Task finished popups must be on or off.');
-    notificationPrefs = { taskToasts: enabled };
+    notificationPrefs = { ...notificationPrefs, taskToasts: enabled };
     saveNotificationPrefs(notificationPrefsPath, notificationPrefs);
+    return { ...notificationPrefs };
+  });
+  ipcMain.handle('automator:set-timer-overlay', (event, enabled: unknown) => {
+    assertMainFrame(event);
+    if (typeof enabled !== 'boolean') throw new Error('The timer overlay must be on or off.');
+    notificationPrefs = { ...notificationPrefs, timerOverlay: enabled };
+    saveNotificationPrefs(notificationPrefsPath, notificationPrefs);
+    void refreshScreenOverlay();
     return { ...notificationPrefs };
   });
   ipcMain.handle('automator:mcp-get-status', (event) => { assertMainFrame(event); return requireMcp().status(); });
@@ -1553,6 +1629,7 @@ async function initializeApp(): Promise<void> {
     writeLog('App.InitializationFailed', 'Backend startup failed; the recovery window will remain available.', { error: backendFailure });
   }
   if (quitRequested) return;
+  if (!testMode) startScreenOverlay();
   await startMcp();
   if (quitRequested) return;
   if (!testMode || process.env.AUTOMATOR_TEST_TRAY === '1') trayIconReady = createTray();

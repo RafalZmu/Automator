@@ -115,11 +115,12 @@ function SettingsDialog({
   const [importReport, setImportReport] = useState<SettingsImportResult | null>(null);
   const [variableEditorRevision, setVariableEditorRevision] = useState(0);
   const [taskToasts, setTaskToasts] = useState(true);
+  const [timerOverlay, setTimerOverlay] = useState(true);
 
   useEffect(() => {
     if (!open) return;
     let current = true;
-    bridge.getNotificationPrefs().then((prefs) => { if (current) setTaskToasts(prefs.taskToasts); }).catch(() => undefined);
+    bridge.getNotificationPrefs().then((prefs) => { if (current) { setTaskToasts(prefs.taskToasts); setTimerOverlay(prefs.timerOverlay); } }).catch(() => undefined);
     return () => { current = false; };
   }, [open, bridge]);
 
@@ -235,6 +236,14 @@ function SettingsDialog({
                   const enabled = event.target.checked;
                   setTaskToasts(enabled);
                   bridge.setTaskToasts(enabled).then((prefs) => setTaskToasts(prefs.taskToasts)).catch((error) => { setTaskToasts(!enabled); reportError(errorMessage(error)); });
+                }} />
+              </label>
+              <label className="setting-row switch-row" htmlFor="timer-overlay-switch">
+                <span className="setting-copy"><strong>Timer overlay</strong><span>Show the running Work Time timer as small, click-through text in the bottom-right corner of the screen. Hidden while no timer runs. Applies immediately.</span></span>
+                <input id="timer-overlay-switch" type="checkbox" checked={timerOverlay} onChange={(event) => {
+                  const enabled = event.target.checked;
+                  setTimerOverlay(enabled);
+                  bridge.setTimerOverlay(enabled).then((prefs) => setTimerOverlay(prefs.timerOverlay)).catch((error) => { setTimerOverlay(!enabled); reportError(errorMessage(error)); });
                 }} />
               </label>
             </section>
