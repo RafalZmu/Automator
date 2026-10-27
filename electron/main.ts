@@ -625,6 +625,7 @@ let overlayTickTimer: NodeJS.Timeout | undefined;
 let overlayLastText = '';
 let overlayLastFailure = '';
 let overlayLoggedFailure = '';
+let overlayLoggedSummary = '';
 
 /** The overlay follows the mouse pointer to the display being used, so it is not stranded on another monitor. */
 function overlayWorkArea() {
@@ -677,6 +678,12 @@ async function refreshScreenOverlay(): Promise<void> {
   try {
     const result = await overlayBackend.call('focus-sessions', 'getSnapshot', {});
     overlayTimers = result.status === 'error' ? [] : readOverlayTimers(result.data);
+    const rawTimers = (result.data as { timers?: unknown } | null)?.timers;
+    const summary = `${result.status}:${Array.isArray(rawTimers) ? rawTimers.length : 'none'}:${overlayTimers.length}:${overlayTimers.filter((timer) => timer.status === 'running').length}`;
+    if (summary !== overlayLoggedSummary) {
+      overlayLoggedSummary = summary;
+      writeLog('Overlay.TimersRead', 'The timer overlay read Work Time.', { status: result.status, message: result.message, timersInSnapshot: Array.isArray(rawTimers) ? rawTimers.length : null, timersAccepted: overlayTimers.length, running: overlayTimers.filter((timer) => timer.status === 'running').length });
+    }
     overlayLastFailure = result.status === 'error' ? result.message : '';
   } catch (error) {
     overlayTimers = [];

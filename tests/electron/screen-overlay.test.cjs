@@ -84,12 +84,21 @@ test('a running Work Time timer shows a visible, click-through overlay that disa
   const { app, page, dataDirectory } = await launchHost();
   try {
     assert.equal(await readOverlay(app), null, 'no overlay while no timer runs');
+    const overlayLog = async () => {
+      const logs = path.join(dataDirectory, 'Logs');
+      const lines = [];
+      for (const name of await fs.readdir(logs).catch(() => [])) {
+        for (const line of (await fs.readFile(path.join(logs, name), 'utf8')).split('\n')) if (/Overlay\./.test(line)) lines.push(line.slice(0, 400));
+      }
+      return lines.join('\n');
+    };
 
     const started = await workTimeAction(page, 'start', { description: 'Overlay e2e' });
     const timer = started.data.timers.find((candidate) => candidate.status === 'running');
     assert.ok(timer, 'the timer is running');
 
-    const overlay = await waitFor(() => readOverlay(app), (value) => value?.visible && /Overlay e2e/.test(value.text), 'the overlay never became visible with the timer text');
+    const overlay = await waitFor(() => readOverlay(app), (value) => value?.visible && /Overlay e2e/.test(value.text), 'the overlay never became visible with the timer text')
+      .catch(async (error) => { error.message += `\nHost overlay log:\n${await overlayLog()}\nstarted: ${JSON.stringify(started.data.timers)}`; throw error; });
     assert.match(overlay.text, /^\d+:\d\d:\d\d\s+Overlay e2e$/);
     assert.equal(overlay.alwaysOnTop, true);
     assert.equal(overlay.focusable, false, 'the overlay must not take focus');
