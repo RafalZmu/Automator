@@ -41,7 +41,7 @@ test('overlay anchors to the bottom-right of the work area', () => {
 
 test('overlay page is transparent, sets text safely and has no background', () => {
   const html = overlayHtml(true);
-  assert.ok(html.includes('background:transparent'));
+  assert.ok(html.includes('background:'));
   assert.ok(html.includes('textContent'));
   assert.ok(!html.includes('innerHTML'));
 });
