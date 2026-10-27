@@ -44,10 +44,10 @@ test('toast html escapes task names and carries no script', () => {
 test('notification preferences default on and persist the toggle', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'prefs-'));
   const file = path.join(dir, 'notifications.json');
-  assert.deepEqual(loadNotificationPrefs(file), { taskToasts: true });
-  saveNotificationPrefs(file, { taskToasts: false });
-  assert.deepEqual(loadNotificationPrefs(file), { taskToasts: false });
+  assert.deepEqual(loadNotificationPrefs(file), { taskToasts: true, timerOverlay: true });
+  saveNotificationPrefs(file, { taskToasts: false, timerOverlay: false });
+  assert.deepEqual(loadNotificationPrefs(file), { taskToasts: false, timerOverlay: false });
   fs.writeFileSync(file, '{bad');
-  assert.deepEqual(loadNotificationPrefs(file), { taskToasts: true });
+  assert.deepEqual(loadNotificationPrefs(file), { taskToasts: true, timerOverlay: true });
   fs.rmSync(dir, { recursive: true, force: true });
 });
