@@ -5,6 +5,8 @@ export const OVERLAY_MARGIN = 12;
 export const OVERLAY_MAX_ITEMS = 6;
 export const OVERLAY_POLL_MS = 3_000;
 export const OVERLAY_OPACITY = 0.65;
+/** Temporary: opaque white panel so the overlay is easy to spot while testing. Set to false to restore the transparent look. */
+export const OVERLAY_TEST_BACKGROUND = true;
 const MAX_DESCRIPTION_LENGTH = 40;
 
 export type OverlayItem = { id: string; text: string };
@@ -56,6 +58,7 @@ export function overlayHtml(dark: boolean): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"><style>
 html,body{margin:0;height:100%;overflow:hidden;background:transparent;user-select:none;cursor:default}
 body{display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-end;font:600 13px/${OVERLAY_LINE_HEIGHT}px 'Segoe UI',system-ui,sans-serif;color:${text};opacity:${OVERLAY_OPACITY};text-shadow:0 0 3px ${shadow},0 0 1px ${shadow}}
+${OVERLAY_TEST_BACKGROUND ? 'body{background:#fff;color:#101418;opacity:1;text-shadow:none}' : ''}
 div{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 </style></head><body><script>window.setItems=function(items){document.body.replaceChildren.apply(document.body,items.map(function(item){var line=document.createElement('div');line.textContent=item;return line;}));};</script></body></html>`;
 }
