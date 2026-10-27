@@ -35,7 +35,7 @@ import { getScriptRunnerPathPickerSpec } from './scriptRunnerPathPicker';
 import { getCodexScopePathPickerSpec } from './codexScopePathPicker';
 import { authorizeCodexExport, extensionForCodexFormat, writeCodexSourceCreateNew } from './codexExport';
 import { mcpSetEnabledSchema, mcpSetPortSchema } from '../contracts/mcp';
-import { computeOverlayBounds, overlayHtml, readOverlayTimers, timerOverlayItems, OVERLAY_POLL_MS } from './screenOverlay';
+import { computeOverlayBounds, overlayHtml, overlayItemsScript, readOverlayTimers, timerOverlayItems, OVERLAY_POLL_MS } from './screenOverlay';
 import { createMcpBackend } from './mcp/backendBridge';
 import { McpController } from './mcp/controller';
 import type { TokenProtector } from './mcp/config';
@@ -625,6 +625,7 @@ let overlayTickTimer: NodeJS.Timeout | undefined;
 let overlayLastText = '';
 let overlayLastFailure = '';
 let overlayLoggedFailure = '';
+let overlayLoggedSummary = '';
 
 /** The overlay follows the mouse pointer to the display being used, so it is not stranded on another monitor. */
 function overlayWorkArea() {
@@ -662,8 +663,9 @@ function renderScreenOverlay(): void {
   const text = JSON.stringify(lines);
   overlayWindow.setBounds(computeOverlayBounds(overlayWorkArea()), false);
   if (text !== overlayLastText) {
-    overlayLastText = text;
-    void overlayWindow.webContents.executeJavaScript(`window.setItems(${text})`).catch(() => undefined);
+    const target = overlayWindow;
+    void target.webContents.executeJavaScript(overlayItemsScript(lines)).then(() => { if (overlayWindow === target) overlayLastText = text; })
+      .catch((error) => writeLog('Overlay.DrawFailed', 'The timer overlay could not draw its text.', { error: String(error) }));
   }
   if (!overlayWindow.isVisible()) {
     overlayWindow.showInactive();
@@ -677,6 +679,12 @@ async function refreshScreenOverlay(): Promise<void> {
   try {
     const result = await overlayBackend.call('focus-sessions', 'getSnapshot', {});
     overlayTimers = result.status === 'error' ? [] : readOverlayTimers(result.data);
+    const rawTimers = (result.data as { timers?: unknown } | null)?.timers;
+    const summary = `${result.status}:${Array.isArray(rawTimers) ? rawTimers.length : 'none'}:${overlayTimers.length}:${overlayTimers.filter((timer) => timer.status === 'running').length}`;
+    if (summary !== overlayLoggedSummary) {
+      overlayLoggedSummary = summary;
+      writeLog('Overlay.TimersRead', 'The timer overlay read Work Time.', { status: result.status, message: result.message, timersInSnapshot: Array.isArray(rawTimers) ? rawTimers.length : null, timersAccepted: overlayTimers.length, running: overlayTimers.filter((timer) => timer.status === 'running').length });
+    }
     overlayLastFailure = result.status === 'error' ? result.message : '';
   } catch (error) {
     overlayTimers = [];

@@ -52,13 +52,18 @@ export function computeOverlayBounds(workArea: { x: number; y: number; width: nu
   };
 }
 
-/** Page for the overlay window. Text is only ever set through textContent, so item text cannot inject markup. */
+/** Page for the overlay window. It has no script of its own; the host fills it with `overlayItemsScript`. */
 export function overlayHtml(dark: boolean): string {
   const [text, shadow] = OVERLAY_TEST_BACKGROUND ? ['#000000', 'transparent'] : dark ? ['#ffffff', 'rgba(0,0,0,.8)'] : ['#101418', 'rgba(255,255,255,.8)'];
   const [background, opacity] = OVERLAY_TEST_BACKGROUND ? ['#ffffff', 1] : ['transparent', OVERLAY_OPACITY];
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"><style>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Automator timer overlay</title><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><style>
 html,body{margin:0;height:100%;overflow:hidden;background:${background};user-select:none;cursor:default}
 body{display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-end;font:600 13px/${OVERLAY_LINE_HEIGHT}px 'Segoe UI',system-ui,sans-serif;color:${text};opacity:${opacity};text-shadow:0 0 3px ${shadow},0 0 1px ${shadow}}
 div{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
-</style></head><body><script>window.setItems=function(items){document.body.replaceChildren.apply(document.body,items.map(function(item){var line=document.createElement('div');line.textContent=item;return line;}));};</script></body></html>`;
+</style></head><body></body></html>`;
+}
+
+/** Script the host runs in the overlay page to replace its lines. Text goes in through textContent, so it cannot inject markup. */
+export function overlayItemsScript(lines: readonly string[]): string {
+  return `(function(lines){document.body.replaceChildren.apply(document.body,lines.map(function(text){var line=document.createElement('div');line.textContent=text;return line;}));return document.body.innerText;})(${JSON.stringify(lines)})`;
 }
