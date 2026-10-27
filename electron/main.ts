@@ -645,8 +645,9 @@ function renderScreenOverlay(): void {
     created.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     created.webContents.on('will-navigate', (event) => event.preventDefault());
     created.on('closed', () => { if (overlayWindow === created) { overlayWindow = undefined; overlayReady = false; } });
+    created.webContents.on('render-process-gone', () => { if (overlayWindow === created) hideScreenOverlay(); });
     void created.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(overlayHtml(nativeTheme.shouldUseDarkColors))}`)
-      .then(() => { overlayReady = true; renderScreenOverlay(); })
+      .then(() => { if (overlayWindow !== created) return; overlayReady = true; renderScreenOverlay(); })
       .catch(() => writeLog('Overlay.LoadFailed', 'The screen overlay could not be displayed.'));
     return;
   }
