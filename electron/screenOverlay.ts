@@ -39,9 +39,9 @@ export function timerOverlayItems(timers: readonly OverlayTimer[], now: number):
   });
 }
 
-/** Bottom-right of the work area, sized to the number of lines. */
-export function computeOverlayBounds(workArea: { x: number; y: number; width: number; height: number }, lineCount: number) {
-  const height = Math.max(1, lineCount) * OVERLAY_LINE_HEIGHT;
+/** Bottom-right of the work area. The window always has room for every line, so it never resizes; the page bottom-aligns the text. */
+export function computeOverlayBounds(workArea: { x: number; y: number; width: number; height: number }) {
+  const height = OVERLAY_MAX_ITEMS * OVERLAY_LINE_HEIGHT;
   return {
     x: workArea.x + workArea.width - OVERLAY_WIDTH - OVERLAY_MARGIN,
     y: workArea.y + workArea.height - height - OVERLAY_MARGIN,
