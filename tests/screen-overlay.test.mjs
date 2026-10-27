@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { computeOverlayBounds, formatOverlayDuration, overlayHtml, readOverlayTimers, timerOverlayItems, OVERLAY_LINE_HEIGHT, OVERLAY_MAX_ITEMS, OVERLAY_WIDTH } from '../electron/screenOverlay.ts';
+import { computeOverlayBounds, overlayItemsScript, formatOverlayDuration, overlayHtml, readOverlayTimers, timerOverlayItems, OVERLAY_LINE_HEIGHT, OVERLAY_MAX_ITEMS, OVERLAY_WIDTH } from '../electron/screenOverlay.ts';
 
 const timer = (extra = {}) => ({ id: 't1', description: 'Write report', status: 'running', elapsedMilliseconds: 61_000, sampledUtc: '2026-10-26T10:00:00Z', ...extra });
 const at = (iso) => Date.parse(iso);
@@ -42,6 +42,8 @@ test('overlay anchors to the bottom-right of the work area', () => {
 test('overlay page is transparent, sets text safely and has no background', () => {
   const html = overlayHtml(true);
   assert.ok(html.includes('background:'));
-  assert.ok(html.includes('textContent'));
-  assert.ok(!html.includes('innerHTML'));
+  assert.ok(!html.includes('<script'));
+  const script = overlayItemsScript(['</div><img src=x onerror=1>']);
+  assert.ok(script.includes('textContent'));
+  assert.ok(!script.includes('innerHTML'));
 });

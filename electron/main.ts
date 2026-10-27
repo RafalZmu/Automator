@@ -35,7 +35,7 @@ import { getScriptRunnerPathPickerSpec } from './scriptRunnerPathPicker';
 import { getCodexScopePathPickerSpec } from './codexScopePathPicker';
 import { authorizeCodexExport, extensionForCodexFormat, writeCodexSourceCreateNew } from './codexExport';
 import { mcpSetEnabledSchema, mcpSetPortSchema } from '../contracts/mcp';
-import { computeOverlayBounds, overlayHtml, readOverlayTimers, timerOverlayItems, OVERLAY_POLL_MS } from './screenOverlay';
+import { computeOverlayBounds, overlayHtml, overlayItemsScript, readOverlayTimers, timerOverlayItems, OVERLAY_POLL_MS } from './screenOverlay';
 import { createMcpBackend } from './mcp/backendBridge';
 import { McpController } from './mcp/controller';
 import type { TokenProtector } from './mcp/config';
@@ -663,8 +663,9 @@ function renderScreenOverlay(): void {
   const text = JSON.stringify(lines);
   overlayWindow.setBounds(computeOverlayBounds(overlayWorkArea()), false);
   if (text !== overlayLastText) {
-    overlayLastText = text;
-    void overlayWindow.webContents.executeJavaScript(`window.setItems(${text})`).catch(() => undefined);
+    const target = overlayWindow;
+    void target.webContents.executeJavaScript(overlayItemsScript(lines)).then(() => { if (overlayWindow === target) overlayLastText = text; })
+      .catch((error) => writeLog('Overlay.DrawFailed', 'The timer overlay could not draw its text.', { error: String(error) }));
   }
   if (!overlayWindow.isVisible()) {
     overlayWindow.showInactive();
