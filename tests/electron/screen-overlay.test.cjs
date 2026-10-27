@@ -50,10 +50,12 @@ async function workTimeAction(page, actionId, input) {
 /** Describes the overlay window as the host sees it, or null when no window hosts the overlay page. */
 async function readOverlay(app) {
   return app.evaluate(async ({ BrowserWindow, screen }) => {
+    const seen = [];
     for (const window of BrowserWindow.getAllWindows()) {
-      if (window.isDestroyed() || !window.webContents.getURL().startsWith('data:text/html')) continue;
-      const hosted = await window.webContents.executeJavaScript('typeof window.setItems === "function"').catch(() => false);
-      if (!hosted) continue;
+      if (window.isDestroyed()) continue;
+      const url = window.webContents.getURL();
+      seen.push({ title: window.getTitle(), url: url.slice(0, 40), visible: window.isVisible(), bounds: window.getBounds() });
+      if (window.getTitle() !== 'Automator timer overlay') continue;
       const image = await window.webContents.capturePage();
       return {
         visible: window.isVisible(),
@@ -63,9 +65,10 @@ async function readOverlay(app) {
         workAreas: screen.getAllDisplays().map((display) => display.workArea),
         text: await window.webContents.executeJavaScript('document.body.innerText'),
         pixels: image.toPNG().toString('base64'),
+        seen,
       };
     }
-    return null;
+    return { absent: true, seen };
   });
 }
 
@@ -83,7 +86,7 @@ async function waitFor(read, accept, what, timeoutMs = 20_000) {
 test('a running Work Time timer shows a visible, click-through overlay that disappears when the timer pauses', async () => {
   const { app, page, dataDirectory } = await launchHost();
   try {
-    assert.equal(await readOverlay(app), null, 'no overlay while no timer runs');
+    assert.equal((await readOverlay(app)).absent, true, 'no overlay while no timer runs');
     const overlayLog = async () => {
       const logs = path.join(dataDirectory, 'Logs');
       const lines = [];
@@ -97,7 +100,7 @@ test('a running Work Time timer shows a visible, click-through overlay that disa
     const timer = started.data.timers.find((candidate) => candidate.status === 'running');
     assert.ok(timer, 'the timer is running');
 
-    const overlay = await waitFor(() => readOverlay(app), (value) => value?.visible && /Overlay e2e/.test(value.text), 'the overlay never became visible with the timer text')
+    const overlay = await waitFor(() => readOverlay(app), (value) => !value.absent && value.visible && /Overlay e2e/.test(value.text), 'the overlay never became visible with the timer text')
       .catch(async (error) => { error.message += `\nHost overlay log:\n${await overlayLog()}\nstarted: ${JSON.stringify(started.data.timers)}`; throw error; });
     assert.match(overlay.text, /^\d+:\d\d:\d\d\s+Overlay e2e$/);
     assert.equal(overlay.alwaysOnTop, true);
@@ -111,7 +114,7 @@ test('a running Work Time timer shows a visible, click-through overlay that disa
     assert.ok((await fs.stat(screenshot)).size > 200, 'the overlay rendered a non-empty image');
 
     await workTimeAction(page, 'pause', { id: timer.id });
-    await waitFor(() => readOverlay(app), (value) => value === null, 'the overlay stayed after the timer paused');
+    await waitFor(() => readOverlay(app), (value) => value.absent, 'the overlay stayed after the timer paused');
   } finally {
     await app.close().catch(() => undefined);
   }
