@@ -626,6 +626,11 @@ let overlayLastText = '';
 let overlayLastFailure = '';
 let overlayLoggedFailure = '';
 
+/** The overlay follows the mouse pointer to the display being used, so it is not stranded on another monitor. */
+function overlayWorkArea() {
+  return screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+}
+
 function hideScreenOverlay(): void {
   if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.destroy();
   overlayWindow = undefined; overlayReady = false; overlayLastText = '';
@@ -637,7 +642,7 @@ function renderScreenOverlay(): void {
   if (lines.length === 0) return hideScreenOverlay();
   if (!overlayWindow || overlayWindow.isDestroyed()) {
     const created = new BrowserWindow({
-      ...computeOverlayBounds(screen.getPrimaryDisplay().workArea), show: false, frame: false, transparent: true,
+      ...computeOverlayBounds(overlayWorkArea()), show: false, frame: false, transparent: true,
       resizable: false, movable: false, focusable: false, skipTaskbar: true, alwaysOnTop: true, hasShadow: false, fullscreenable: false,
       webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, webviewTag: false, spellcheck: false },
     });
@@ -655,7 +660,7 @@ function renderScreenOverlay(): void {
   }
   if (!overlayReady) return;
   const text = JSON.stringify(lines);
-  overlayWindow.setBounds(computeOverlayBounds(screen.getPrimaryDisplay().workArea), false);
+  overlayWindow.setBounds(computeOverlayBounds(overlayWorkArea()), false);
   if (text !== overlayLastText) {
     overlayLastText = text;
     void overlayWindow.webContents.executeJavaScript(`window.setItems(${text})`).catch(() => undefined);
