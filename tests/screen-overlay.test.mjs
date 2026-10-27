@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { computeOverlayBounds, formatOverlayDuration, overlayHtml, readOverlayTimers, timerOverlayItems, OVERLAY_LINE_HEIGHT, OVERLAY_WIDTH } from '../electron/screenOverlay.ts';
+import { computeOverlayBounds, formatOverlayDuration, overlayHtml, readOverlayTimers, timerOverlayItems, OVERLAY_LINE_HEIGHT, OVERLAY_MAX_ITEMS, OVERLAY_WIDTH } from '../electron/screenOverlay.ts';
 
 const timer = (extra = {}) => ({ id: 't1', description: 'Write report', status: 'running', elapsedMilliseconds: 61_000, sampledUtc: '2026-10-26T10:00:00Z', ...extra });
 const at = (iso) => Date.parse(iso);
@@ -32,9 +32,9 @@ test('malformed snapshots are ignored', () => {
 });
 
 test('overlay anchors to the bottom-right of the work area', () => {
-  const bounds = computeOverlayBounds({ x: 0, y: 0, width: 1920, height: 1040 }, 2);
+  const bounds = computeOverlayBounds({ x: 0, y: 0, width: 1920, height: 1040 });
   assert.equal(bounds.width, OVERLAY_WIDTH);
-  assert.equal(bounds.height, 2 * OVERLAY_LINE_HEIGHT);
+  assert.equal(bounds.height, OVERLAY_MAX_ITEMS * OVERLAY_LINE_HEIGHT);
   assert.equal(bounds.x + bounds.width, 1920 - 12);
   assert.equal(bounds.y + bounds.height, 1040 - 12);
 });

@@ -623,6 +623,8 @@ let overlayTimers: ReturnType<typeof readOverlayTimers> = [];
 let overlayPollTimer: NodeJS.Timeout | undefined;
 let overlayTickTimer: NodeJS.Timeout | undefined;
 let overlayLastText = '';
+let overlayLastFailure = '';
+let overlayLoggedFailure = '';
 
 function hideScreenOverlay(): void {
   if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.destroy();
@@ -635,7 +637,7 @@ function renderScreenOverlay(): void {
   if (lines.length === 0) return hideScreenOverlay();
   if (!overlayWindow || overlayWindow.isDestroyed()) {
     const created = new BrowserWindow({
-      ...computeOverlayBounds(screen.getPrimaryDisplay().workArea, lines.length), show: false, frame: false, transparent: true,
+      ...computeOverlayBounds(screen.getPrimaryDisplay().workArea), show: false, frame: false, transparent: true,
       resizable: false, movable: false, focusable: false, skipTaskbar: true, alwaysOnTop: true, hasShadow: false, fullscreenable: false,
       webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, webviewTag: false, spellcheck: false },
     });
@@ -653,12 +655,15 @@ function renderScreenOverlay(): void {
   }
   if (!overlayReady) return;
   const text = JSON.stringify(lines);
-  overlayWindow.setBounds(computeOverlayBounds(screen.getPrimaryDisplay().workArea, lines.length), false);
+  overlayWindow.setBounds(computeOverlayBounds(screen.getPrimaryDisplay().workArea), false);
   if (text !== overlayLastText) {
     overlayLastText = text;
     void overlayWindow.webContents.executeJavaScript(`window.setItems(${text})`).catch(() => undefined);
   }
-  if (!overlayWindow.isVisible()) overlayWindow.showInactive();
+  if (!overlayWindow.isVisible()) {
+    overlayWindow.showInactive();
+    writeLog('Overlay.Shown', 'The timer overlay is visible.', { bounds: overlayWindow.getBounds() });
+  }
 }
 
 /** Reads the current timers from the backend, then redraws. Safe to call at any time. */
@@ -667,7 +672,15 @@ async function refreshScreenOverlay(): Promise<void> {
   try {
     const result = await overlayBackend.call('focus-sessions', 'getSnapshot', {});
     overlayTimers = result.status === 'error' ? [] : readOverlayTimers(result.data);
-  } catch { overlayTimers = []; }
+    overlayLastFailure = result.status === 'error' ? result.message : '';
+  } catch (error) {
+    overlayTimers = [];
+    overlayLastFailure = error instanceof Error ? error.message : String(error);
+  }
+  if (overlayLastFailure !== overlayLoggedFailure) {
+    overlayLoggedFailure = overlayLastFailure;
+    if (overlayLastFailure) writeLog('Overlay.RefreshFailed', 'The timer overlay could not read Work Time.', { error: overlayLastFailure });
+  }
   renderScreenOverlay();
 }
 
@@ -1630,7 +1643,7 @@ async function initializeApp(): Promise<void> {
     writeLog('App.InitializationFailed', 'Backend startup failed; the recovery window will remain available.', { error: backendFailure });
   }
   if (quitRequested) return;
-  if (!testMode) startScreenOverlay();
+  startScreenOverlay();
   await startMcp();
   if (quitRequested) return;
   if (!testMode || process.env.AUTOMATOR_TEST_TRAY === '1') trayIconReady = createTray();
