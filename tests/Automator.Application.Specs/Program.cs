@@ -24,9 +24,11 @@ var checks = new (string Name, Func<Task> Run)[]
     ("query changes cancel only the pending alias delay", PendingAliasDelayCanBeCancelled),
     ("a later query cannot cancel an activation already requested", QueryChangeDoesNotCancelActivation),
     ("concurrent state changes publish revisions in serialized order", ConcurrentCommandsKeepRevisionOrder),
-    ("tab registry publishes nine stable slots and their actions", TabRegistryPublishesVersionedSlots),
+    ("tab registry publishes ten stable slots and their actions", TabRegistryPublishesVersionedSlots),
     ("website shortcut actions validate settings and launch saved groups in order", WebsiteLauncherValidatesAndLaunchesGroups),
     ("snippets module keeps its text in module settings and registers no actions", SnippetsModuleKeepsTextInModuleSettings),
+    ("notes module saves, lists, and deletes validated notes in the module library", NotesModuleStoresNotesInTheLibrary),
+    ("notes module lists a full library within the structured result limit", NotesModuleListFitsTheResultLimit),
     ("snippets module publishes copyable shortcuts in state-sized chunks and skips invalid entries", SnippetsModulePublishesShortcutsInStateSizedChunks),
     ("bundled module registry validates and dispatches versioned actions", BundledModuleRegistryDispatches),
     ("bundled modules receive cancellation and module settings migrate", BundledModuleLifecycleAndSettings),
@@ -153,10 +155,16 @@ static Task NavigationKeyPolicyRequiresFocusedUnmodifiedLauncher()
     Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(state, nativeForeground: true, rendererFocused: true, hasModifier: true, 0x32));
     Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(state, true, true, false, 0x32));
     Check.Equal(NavigationKeyAction.OpenCatalog, NavigationKeyPolicy.Decide(state, true, true, false, 0xBF));
+    // The 0 key (top row and numpad) selects slot 10.
+    Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(state, true, true, false, 0x30));
+    Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(state, true, true, false, 0x60));
     session.OpenCatalog([]);
     Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x32));
     Check.True(session.SelectTabFromGlobalKey('2', launcherNativeForeground: true));
     Check.Equal(LauncherMode.Launcher, session.Snapshot.Mode);
+    Check.True(session.SelectTabFromGlobalKey('0', launcherNativeForeground: true));
+    Check.Equal(10, session.Snapshot.SelectedTab);
+    Check.True(session.SelectTab(1));
     session.SelectTab(2);
     Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x32));
     session.EnterMode(LauncherMode.Settings);
@@ -312,7 +320,7 @@ static async Task ConcurrentCommandsKeepRevisionOrder()
 static Task TabRegistryPublishesVersionedSlots()
 {
     var tabs = LauncherTabRegistry.Tabs;
-    Check.Equal(9, tabs.Count);
+    Check.Equal(10, tabs.Count);
     Check.Equal(3, LauncherTabRegistry.Version);
     Check.Equal(1, tabs[0].Slot);
     Check.Equal("launcher", tabs[0].Id);
@@ -335,13 +343,19 @@ static Task TabRegistryPublishesVersionedSlots()
     Check.Equal("Snippets", tabs[8].Title);
     Check.Equal(0, tabs[8].Actions.Count);
     Check.Equal(0, tabs[8].Capabilities.Count);
+    Check.Equal(10, tabs[9].Slot);
+    Check.Equal("notes", tabs[9].Id);
+    Check.Equal("notes", tabs[9].Kind);
+    Check.Equal("Quick notes", tabs[9].Title);
+    Check.True(tabs[9].Actions.Select(action => action.Id).SequenceEqual(["listNotes", "saveNote", "deleteNote"]));
+    Check.True(tabs[9].Capabilities.Single().Id == AutomationCapabilityIds.LibraryStorage);
     Check.False(tabs.Any(tab => tab.Id == "codex"));
     Check.True(tabs.Take(2).SelectMany(tab => tab.Capabilities).Any(capability => capability.Id == AutomationCapabilityIds.LibraryStorage));
-    Check.Equal(9, LauncherTabRegistry.States.Count);
+    Check.Equal(10, LauncherTabRegistry.States.Count);
     Check.True(LauncherTabRegistry.States.All(state => state.Version == LauncherTabRegistry.Version));
-    Check.Equal(9, tabs.Select(tab => tab.Slot).Distinct().Count());
+    Check.Equal(10, tabs.Select(tab => tab.Slot).Distinct().Count());
     var runtimeRegistry = LauncherTabRegistry.CreateAutomationRegistry(new AutomationCapabilityRegistry());
-    Check.Equal(9, runtimeRegistry.Modules.Count);
+    Check.Equal(10, runtimeRegistry.Modules.Count);
     foreach (var tab in tabs)
     {
         var definition = runtimeRegistry.Modules.Single(module => module.Id == tab.Id);
@@ -411,6 +425,90 @@ static async Task SnippetsModuleKeepsTextInModuleSettings()
     using var input = JsonDocument.Parse("{}");
     await Check.ThrowsAsync<InvalidOperationException>(() => registry.DispatchAsync(module.Id, "copy", 1, 1,
         input.RootElement, module.Id, context, updated, CancellationToken.None));
+}
+
+static async Task NotesModuleStoresNotesInTheLibrary()
+{
+    var module = new NotesModule();
+    Check.Equal(10, module.Definition.Slot);
+    Check.Equal("notes", module.Definition.ViewKind);
+    Check.True(module.Definition.Actions.Select(action => action.Id).SequenceEqual(["listNotes", "saveNote", "deleteNote"]));
+    Check.True(module.Definition.Capabilities.Single().Id == AutomationCapabilityIds.LibraryStorage);
+    Check.Equal("{}", module.CreateDefaultSettings().GetRawText());
+    Check.Throws<InvalidOperationException>(() => module.MigrateSettings(0, module.CreateDefaultSettings()));
+
+    var library = new MemoryNotesLibraryStore();
+    var capabilities = new AutomationCapabilityRegistry(libraryStoreFactory: _ => library);
+    var registry = new AutomationModuleRegistry([module], capabilities);
+    await using var context = capabilities.CreateContext(new AutomationModuleDescriptor(module.Id, module.Definition.Capabilities));
+    async Task<AutomationResult> Run(string action, string json)
+    {
+        using var input = System.Text.Json.JsonDocument.Parse(json);
+        return await registry.DispatchAsync(module.Id, action, 1, 1, input.RootElement, module.Id, context, [], CancellationToken.None);
+    }
+
+    Check.Equal(0, (await Run("listNotes", "{}")).Data.GetProperty("notes").GetArrayLength());
+    Check.Equal(AutomationStatus.Success, (await Run("saveNote", "{\"id\":\"todo\",\"title\":\" Todo \",\"body\":\"- [ ] first\\n- [x] zażółć\"}")).Status);
+    await Task.Delay(20); // The list is ordered by creation time, so the two notes need different timestamps.
+    Check.Equal(AutomationStatus.Success, (await Run("saveNote", "{\"id\":\"plain\",\"title\":\"Plain\",\"body\":\"\"}")).Status);
+    Check.Equal("notes", library.Records["todo"].ModuleId);
+    Check.Equal("notes", library.Records["todo"].Collection);
+
+    var listed = (await Run("listNotes", "{}")).Data.GetProperty("notes");
+    Check.Equal(2, listed.GetArrayLength());
+    Check.Equal("todo", listed[0].GetProperty("id").GetString());
+    Check.Equal("Todo", listed[0].GetProperty("title").GetString());
+    Check.Equal("- [ ] first\n- [x] zażółć", listed[0].GetProperty("body").GetString());
+
+    // Saving an existing note changes its text but keeps its place in the list.
+    Check.Equal(AutomationStatus.Success, (await Run("saveNote", "{\"id\":\"todo\",\"title\":\"Todo\",\"body\":\"- [x] first\"}")).Status);
+    listed = (await Run("listNotes", "{}")).Data.GetProperty("notes");
+    Check.Equal(2, listed.GetArrayLength());
+    Check.Equal("todo", listed[0].GetProperty("id").GetString());
+    Check.Equal("- [x] first", listed[0].GetProperty("body").GetString());
+
+    // Invalid notes are rejected and never stored.
+    foreach (var invalid in new[]
+    {
+        "{\"id\":\"Bad Id\",\"title\":\"x\",\"body\":\"\"}",
+        "{\"id\":\"ok\",\"title\":\"  \",\"body\":\"\"}",
+        "{\"id\":\"ok\",\"body\":\"\"}",
+        "{\"id\":\"ok\",\"title\":\"" + new string('a', NotesModule.MaximumTitleLength + 1) + "\",\"body\":\"\"}",
+        "{\"id\":\"ok\",\"title\":\"x\",\"body\":\"" + new string('a', NotesModule.MaximumBodyLength + 1) + "\"}",
+        "{\"id\":\"ok\",\"title\":\"x\",\"body\":\"bell\\u0007\"}",
+    })
+        Check.Equal(AutomationStatus.Error, (await Run("saveNote", invalid)).Status);
+    Check.Equal(2, library.Records.Count);
+
+    // Notes beyond the limit are refused, but existing notes can still be saved.
+    for (var index = library.Records.Count; index < NotesModule.MaximumNotes; index++)
+        Check.Equal(AutomationStatus.Success, (await Run("saveNote", $"{{\"id\":\"n{index}\",\"title\":\"n\",\"body\":\"\"}}")).Status);
+    Check.Equal(AutomationStatus.Error, (await Run("saveNote", "{\"id\":\"extra\",\"title\":\"x\",\"body\":\"\"}")).Status);
+    Check.Equal(AutomationStatus.Success, (await Run("saveNote", "{\"id\":\"plain\",\"title\":\"Plain\",\"body\":\"still ok\"}")).Status);
+
+    Check.Equal(AutomationStatus.Success, (await Run("deleteNote", "{\"id\":\"plain\"}")).Status);
+    Check.Equal(AutomationStatus.Information, (await Run("deleteNote", "{\"id\":\"plain\"}")).Status);
+    Check.Equal(AutomationStatus.Error, (await Run("deleteNote", "{\"id\":\"Bad Id\"}")).Status);
+}
+
+// The largest allowed list must stay within the 512 KiB structured-data limit even for three-byte characters.
+static async Task NotesModuleListFitsTheResultLimit()
+{
+    var module = new NotesModule();
+    var library = new MemoryNotesLibraryStore();
+    var capabilities = new AutomationCapabilityRegistry(libraryStoreFactory: _ => library);
+    var registry = new AutomationModuleRegistry([module], capabilities);
+    await using var context = capabilities.CreateContext(new AutomationModuleDescriptor(module.Id, module.Definition.Capabilities));
+    var body = new string('\u4e2d', NotesModule.MaximumBodyLength);
+    var title = new string('\u4e2d', NotesModule.MaximumTitleLength);
+    for (var index = 0; index < NotesModule.MaximumNotes; index++)
+    {
+        using var input = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(new { id = $"n{index}", title, body }));
+        Check.Equal(AutomationStatus.Success, (await registry.DispatchAsync(module.Id, "saveNote", 1, 1, input.RootElement, module.Id, context, [], CancellationToken.None)).Status);
+    }
+    using var empty = System.Text.Json.JsonDocument.Parse("{}");
+    var listed = await registry.DispatchAsync(module.Id, "listNotes", 1, 1, empty.RootElement, module.Id, context, [], CancellationToken.None);
+    Check.Equal(NotesModule.MaximumNotes, listed.Data.GetProperty("notes").GetArrayLength());
 }
 
 static Task SnippetsModulePublishesShortcutsInStateSizedChunks()
@@ -616,7 +714,7 @@ static Task ProductionModuleViewsMatchContract()
     Check.Equal("snippets", LauncherTabRegistry.Tabs.Single(tab => tab.Id == "snippets").Kind);
     // The unbound Codex view kind stays declared so its renderer view can be bound to a slot again.
     Check.True(supportedKinds.Contains(new CodexTaskModule().Definition.ViewKind));
-    Check.Equal(11, supportedKinds.Count);
+    Check.Equal(12, supportedKinds.Count);
     return Task.CompletedTask;
 }
 
@@ -1483,6 +1581,22 @@ sealed class RecordingLibraryStore : IAutomationLibraryStore
         LastWrite = null;
         return Task.FromResult(true);
     }
+}
+
+sealed class MemoryNotesLibraryStore : IAutomationLibraryStore
+{
+    public Dictionary<string, AutomationLibraryRecord> Records { get; } = new(StringComparer.Ordinal);
+    public Task<IReadOnlyList<AutomationLibraryRecord>> ListAsync(string moduleId, string collection, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AutomationLibraryRecord>>(Records.Values.Where(item => item.ModuleId == moduleId && item.Collection == collection).ToArray());
+    public Task<AutomationLibraryRecord?> GetAsync(string moduleId, string collection, string id, CancellationToken cancellationToken) =>
+        Task.FromResult(Records.TryGetValue(id, out var item) && item.ModuleId == moduleId && item.Collection == collection ? item : null);
+    public Task UpsertAsync(AutomationLibraryRecord record, CancellationToken cancellationToken)
+    {
+        Records[record.Id] = record;
+        return Task.CompletedTask;
+    }
+    public Task<bool> DeleteAsync(string moduleId, string collection, string id, CancellationToken cancellationToken) =>
+        Task.FromResult(Records.TryGetValue(id, out var item) && item.ModuleId == moduleId && item.Collection == collection && Records.Remove(id));
 }
 
 sealed class RecordingWebsiteLauncher : IAutomationWebsiteLauncher

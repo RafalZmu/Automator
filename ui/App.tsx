@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import * as Tabs from '@radix-ui/react-tabs';
 import {
   Activity, AlertCircle, AppWindow, ArrowDownToLine, ArrowUpFromLine, Bell, Braces, CalendarClock, Check,
-  ChevronRight, CircleDot, ClipboardCopy, Clock, FolderOpen, Globe, Keyboard, MousePointerClick, Moon, Plus, Search,
+  ChevronRight, CircleDot, ClipboardCopy, Clock, FolderOpen, Globe, Keyboard, MousePointerClick, Moon, NotebookPen, Plus, Search,
   Settings2, Sparkles, Sun, Terminal, Workflow, X,
 } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
@@ -34,7 +34,7 @@ import { AgentAccessSettings } from './AgentAccessSettings';
 type Binding = BackendUiState['bindings'][number];
 type SettingsDraft = Pick<BackendUiState, 'hotkey' | 'theme' | 'startWithWindows' | 'bindings'>;
 
-const numberedTabIcons = [AppWindow, Terminal, Braces, MousePointerClick, Workflow, CalendarClock, Clock, Globe, ClipboardCopy] as const;
+const numberedTabIcons = [AppWindow, Terminal, Braces, MousePointerClick, Workflow, CalendarClock, Clock, Globe, ClipboardCopy, NotebookPen] as const;
 
 const quickActionBootstrap: readonly { scope: string; id: string; label: string; keywords: readonly string[]; category: string }[] = [
   { scope: 'script-runner', id: 'new-script-profile', label: 'Create script profile', keywords: ['python', 'powershell', 'bash', 'new'], category: 'Script Runner · action' },
@@ -678,9 +678,9 @@ export function App() {
     const target = event.target;
     const isEditing = target instanceof HTMLElement
       && (target.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement);
-    if (/^[1-9]$/.test(event.key) && !isEditing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    if (/^[0-9]$/.test(event.key) && !isEditing && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
-      changeTab(Number(event.key));
+      changeTab(event.key === '0' ? 10 : Number(event.key));
     }
   };
 
@@ -727,7 +727,7 @@ export function App() {
       kind: 'tab',
       scope: tab.id,
       category: `Workspace tab · ${tab.slot}`,
-      shortcut: String(tab.slot),
+      shortcut: tab.slot === 10 ? '0' : String(tab.slot),
       targetId: String(tab.slot),
       run: noop,
     }));

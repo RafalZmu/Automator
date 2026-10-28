@@ -12,6 +12,7 @@ import { SchedulerView } from './modules/SchedulerView';
 import { FocusSessionsView } from './modules/FocusSessionsView';
 import { WebsiteLauncherView } from './modules/WebsiteLauncherView';
 import { SnippetsView } from './modules/SnippetsView';
+import { NotesView } from './modules/NotesView';
 import { CodexView } from './modules/CodexView';
 
 type ViewProps = {
@@ -66,6 +67,7 @@ export const launcherViewRegistry = Object.freeze({
   'focus-sessions': FocusSessionsView,
   'website-launcher': WebsiteLauncherView,
   snippets: SnippetsView,
+  notes: NotesView,
   // Kept so the Codex view can be bound to a slot again; no registered module currently uses this kind.
   codex: CodexView,
   reserved: ReservedTabView,

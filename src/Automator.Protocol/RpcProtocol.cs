@@ -220,7 +220,7 @@ public static class RpcParameterValidator
                 Require(IsKnownMode(RpcProtocol.ParseParameters<SetModeParams>(request).Mode), "Launcher mode is invalid.", request);
                 break;
             case RpcMethods.SelectTab:
-                Require(RpcProtocol.ParseParameters<SelectTabParams>(request).Tab is >= 1 and <= 9, "Tab must be between 1 and 9.", request);
+                Require(RpcProtocol.ParseParameters<SelectTabParams>(request).Tab is >= 1 and <= 10, "Tab must be between 1 and 10.", request);
                 break;
             case RpcMethods.SetQuery:
                 Require(RpcProtocol.ParseParameters<SetQueryParams>(request).Query is { Length: <= 512 }, "Query must be present and at most 512 characters.", request);
@@ -409,7 +409,7 @@ public static class RpcParameterValidator
     {
         if (context is null) return;
         Require(context.Role is "launcher" or "workspace", "Host window role is invalid.", request);
-        Require(context.SelectedTab is >= 1 and <= 9, "Host window tab must be between 1 and 9.", request);
+        Require(context.SelectedTab is >= 1 and <= 10, "Host window tab must be between 1 and 10.", request);
     }
 
     private static bool IsKnownMode(string? mode) => mode is "launcher" or "catalog" or "settings" or "recordingHotkey" or "aliasEditing";

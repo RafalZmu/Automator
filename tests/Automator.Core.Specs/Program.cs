@@ -4,7 +4,7 @@ using Automator.Core.Plugins;
 
 var checks = new (string Name, Action Run)[]
 {
-    ("tab keys select slots 1 through 9", TabKeysSelectSlots),
+    ("tab keys select slots 1 through 10", TabKeysSelectSlots),
     ("the opener reacts to a solo key tap but ignores chords", OpenerRecognizesSoloTaps),
     ("launcher aliases resolve exact and partial matches", AliasesResolve),
     ("aliases accept letters and reject duplicates", AliasesValidate),
@@ -42,7 +42,7 @@ static void TabKeysSelectSlots()
 {
     Check.Equal(0, TabKeyParser.Parse('1'));
     Check.Equal(8, TabKeyParser.Parse('9'));
-    Check.Equal<int?>(null, TabKeyParser.Parse('0'));
+    Check.Equal(9, TabKeyParser.Parse('0'));
     Check.Equal<int?>(null, TabKeyParser.Parse('a'));
 }
 

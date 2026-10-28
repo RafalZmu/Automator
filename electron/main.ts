@@ -894,7 +894,7 @@ function registerIpc(): void {
   ipcMain.handle('automator:select-tab', async (event, params: { tab?: unknown }) => {
     const context = assertMainFrame(event, ['launcher', 'workspace']);
     const tab = Number(params?.tab);
-    if (!Number.isInteger(tab) || tab < 1 || tab > 9) throw new Error('The requested tab slot is invalid.');
+    if (!Number.isInteger(tab) || tab < 1 || tab > 10) throw new Error('The requested tab slot is invalid.');
     if (context.role === 'launcher') {
       const result = await invokeBackend(event, 'launcher/selectTab', { tab });
       const parsed = backendUiStateSchema.safeParse(result);

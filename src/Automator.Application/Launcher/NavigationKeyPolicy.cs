@@ -25,7 +25,7 @@ public static class NavigationKeyPolicy
         if (state.Mode is not (LauncherMode.Launcher or LauncherMode.Catalog)) return NavigationKeyAction.None;
         if (virtualKey == 0x1B) return NavigationKeyAction.Close;
         if (textEntryFocused) return NavigationKeyAction.None;
-        if (virtualKey is >= 0x31 and <= 0x39 or >= 0x61 and <= 0x69) return NavigationKeyAction.SelectTab;
+        if (virtualKey is >= 0x30 and <= 0x39 or >= 0x60 and <= 0x69) return NavigationKeyAction.SelectTab;
         return state.Mode == LauncherMode.Launcher && state.SelectedTab == 1 && virtualKey == 0xBF
             ? NavigationKeyAction.OpenCatalog
             : NavigationKeyAction.None;

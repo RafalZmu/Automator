@@ -1635,8 +1635,8 @@ public sealed class BackendServer : IAsyncDisposable
                 break;
             case NavigationKeyAction.SelectTab:
             {
-                var digit = request.VirtualKey is >= 0x61 and <= 0x69
-                    ? (char)('1' + request.VirtualKey - 0x61)
+                var digit = request.VirtualKey is >= 0x60 and <= 0x69
+                    ? (char)('0' + request.VirtualKey - 0x60)
                     : (char)request.VirtualKey;
                 _launchScheduler!.CancelPending();
                 InvalidateCatalogLoad();
