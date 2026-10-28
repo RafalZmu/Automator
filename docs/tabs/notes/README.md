@@ -1,6 +1,6 @@
-# Quick notes — slot 10
+# Quick notes — slot 10 (row 2, key 1)
 
-Quick notes keeps short notes written in markdown. Press **0** (or click tab 10) to open it. The tab lists one row per note: the title on the left, then a status dot and an expand arrow on the right. Click a row to expand it and see the rendered markdown; click it again to collapse it.
+Quick notes keeps short notes written in markdown. Press **Down** to focus the second tab row and then **1** (or click the tab) to open it; dragging can move it to another position. The tab lists one row per note: the title on the left, then a status dot and an expand arrow on the right. Click a row to expand it and see the rendered markdown; click it again to collapse it.
 
 The dot reflects the note's markdown checkboxes (`- [ ] task`, `- [x] done`): red means at least one checkbox is unticked, green means every checkbox is ticked, and no dot means the note has no checkboxes. Checkboxes in an expanded note can be ticked and unticked directly; the change is saved at once.
 
@@ -17,7 +17,7 @@ Notes are stored in plain text in Automator's SQLite library (`library.db`), one
 - `ui/modules/notesMarkdown.ts` parses markdown into a tree, counts and toggles checkboxes.
 - `ui/contracts/notes.ts` validates a note and reads the `listNotes` result.
 - `src/Automator.Application/Automation/NotesModule.cs` registers slot 10, declares the `storage.library` capability, and implements the `listNotes`, `saveNote`, and `deleteNote` actions over the module's library partition.
-- `src/Automator.Application/Launcher/LauncherTabRegistry.cs` registers the module; `ui/viewRegistry.tsx`, `ui/viewKinds.ts`, and `contracts/bundled-tab-view-kinds.json` declare the `notes` view kind; `ui/App.tsx` supplies the tab icon and the **0** key.
+- `src/Automator.Application/Launcher/LauncherTabRegistry.cs` registers the module; `ui/viewRegistry.tsx`, `ui/viewKinds.ts`, and `contracts/bundled-tab-view-kinds.json` declare the `notes` view kind; `ui/App.tsx` supplies the tab icon and the tab bar rows.
 - Tests: `tests/notes-contract.test.mjs`, the Application specification listed in [TESTS.md](TESTS.md), and `tests/electron/tab-happy-path-visibility.test.cjs`.
 
 ## Test case steps

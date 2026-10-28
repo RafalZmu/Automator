@@ -14,6 +14,7 @@ import {
 import type { AutomationHttpIpcResponse } from '../contracts/automationHttpIpc.ts';
 import type { RunActivitySnapshot } from '../contracts/activity.ts';
 import type { McpStatus } from '../contracts/mcp.ts';
+import { normalizeTabOrder, rowOfSlot, shiftRow } from './tabLayout.ts';
 import type { AutomatorBridge, FocusRequest, HostInfo, InitialState } from './types.d';
 
 const tabs: BackendUiState['tabs'] = [
@@ -59,6 +60,8 @@ const mockState: BackendUiState = {
   previousForegroundHwnd: null,
   mode: 'launcher',
   tabs,
+  tabOrder: tabs.map((tab) => tab.slot),
+  tabRow: 0,
   bindings: [
     emptyBinding('browser', 'Microsoft Edge', 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', 'ed'),
     emptyBinding('terminal', 'Windows Terminal', 'C:\\Program Files\\WindowsApps\\WindowsTerminal.exe', 'wt'),
@@ -114,7 +117,11 @@ class BrowserPreviewBridge implements AutomatorBridge {
   async getWindowContext() { return { role: 'launcher' as const, selectedTab: this.state.selectedTab }; }
   async confirmPrimaryFocus() { return true; }
   async close() { return this.update({ visible: false }); }
-  async selectTab(tab: number) { return this.update({ selectedTab: tab, query: '', mode: 'launcher', aliasEditCandidate: null, error: null }); }
+  async selectTab(tab: number) { return this.update({ selectedTab: tab, tabRow: rowOfSlot(this.state.tabOrder, tab), query: '', mode: 'launcher', aliasEditCandidate: null, error: null }); }
+  async shiftTabRow(delta: -1 | 1) { return this.update({ tabRow: shiftRow(this.state.tabRow, delta, this.state.tabs.length) }); }
+  async setTabOrder(order: number[]) {
+    return this.update({ tabOrder: normalizeTabOrder(order, this.state.tabs.map((tab) => tab.slot)) });
+  }
   async setTextEntryFocused() { return true; }
   async setSidePanel() { return false; }
   async setQuery(query: string) {

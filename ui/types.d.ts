@@ -56,6 +56,10 @@ export interface AutomatorBridge {
   confirmPrimaryFocus(nonce: string, mode: FocusRequest['mode'], focused: boolean): Promise<boolean>;
   close(): Promise<BackendUiState>;
   selectTab(tab: number): Promise<BackendUiState>;
+  /** Moves the launcher's focused tab row up (-1) or down (1), wrapping. The Workspace window keeps its own row locally. */
+  shiftTabRow(delta: -1 | 1): Promise<BackendUiState>;
+  /** Persists the tab order as module slots; the launcher stays first. */
+  setTabOrder(order: number[]): Promise<BackendUiState>;
   setQuery(query: string): Promise<BackendUiState>;
   setTextEntryFocused(focused: boolean): Promise<boolean>;
   /** Widens the compact window to the left for a side panel (or narrows it back). Resolves false when this window is not resized. */

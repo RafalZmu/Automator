@@ -8,8 +8,8 @@ const { waitForPageCondition } = require('./wait-for-page.cjs');
 
 const workspace = path.resolve(__dirname, '../..');
 
-async function launchHost(name, { moduleSettings } = {}) {
-  const dataDirectory = path.join(workspace, 'artifacts', 'test-data', 'tab-visibility', name, randomUUID());
+async function launchHost(name, { moduleSettings, dataDirectory: existingDataDirectory } = {}) {
+  const dataDirectory = existingDataDirectory ?? path.join(workspace, 'artifacts', 'test-data', 'tab-visibility', name, randomUUID());
   if (moduleSettings) {
     // Seed the isolated backend settings so the host starts with these module preferences already saved.
     await fs.mkdir(path.join(dataDirectory, 'backend'), { recursive: true });
@@ -117,8 +117,8 @@ async function openWorkspace(app, launcher) {
 }
 
 async function assertTabIcons(page, tabs) {
-  for (const { name, slot } of tabs) {
-    const tab = page.getByRole('tab', { name: `${name}, tab ${slot}`, exact: true });
+  for (const { name, slot, label } of tabs) {
+    const tab = page.getByRole('tab', { name: label ?? `${name}, tab ${slot}`, exact: true });
     await tab.waitFor({ state: 'visible' });
     const icon = tab.locator('svg[aria-hidden="true"]');
     assert.equal(await icon.count(), 1, `${name} tab must show one decorative icon`);
@@ -158,12 +158,17 @@ test('numbered tabs show an identifying icon in the launcher and Workspace', asy
     { name: 'Work Time', slot: 7 },
     { name: 'Website Launcher', slot: 8 },
     { name: 'Snippets', slot: 9 },
-    { name: 'Quick notes', slot: 10 },
   ];
+  // Rows hold nine tabs, so Quick notes is key 1 of the second row.
+  const quickNotes = [{ name: 'Quick notes', slot: 1, label: 'Quick notes, tab 1 of row 2' }];
   try {
     await assertTabIcons(page, tabs);
+    await clickButton(page, page, 'Next tab row');
+    await assertTabIcons(page, quickNotes);
     const workspacePage = await openWorkspace(app, page);
     await assertTabIcons(workspacePage, tabs.slice(1));
+    await clickButton(workspacePage, workspacePage, 'Next tab row');
+    await assertTabIcons(workspacePage, quickNotes);
   } finally { await app.close(); }
 });
 
@@ -476,6 +481,53 @@ test('Snippets save and copy happy path keeps its buttons within visible bounds 
   } finally { await app.close(); }
 });
 
+test('tab rows page with the arrow keys and number keys follow the focused row', async () => {
+  const { app, page } = await launchHost('tab-rows');
+  const selected = async () => (await page.evaluate(() => window.automator.getInitialState())).state.selectedTab;
+  const indicator = page.getByLabel('Tab row 2 of 2', { exact: true });
+  try {
+    await page.getByLabel('Tab row 1 of 2', { exact: true }).waitFor({ state: 'visible' });
+    assert.equal(await page.getByRole('tab').count(), 9, 'the first row shows nine tabs');
+    // The empty Quick Actions search box has nothing to move through, so Down moves to the second row from there.
+    await page.keyboard.press('ArrowDown');
+    await indicator.waitFor({ state: 'visible' });
+    assert.equal(await page.getByRole('tab').count(), 1, 'the second row shows only Quick notes');
+    await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+    await page.keyboard.press('2');
+    assert.equal(await selected(), 1, 'key 2 of row two holds no tab');
+    await page.keyboard.press('1');
+    await page.waitForFunction(async () => (await window.automator.getInitialState()).state.selectedTab === 10);
+    await page.keyboard.press('ArrowUp');
+    await page.getByLabel('Tab row 1 of 2', { exact: true }).waitFor({ state: 'visible' });
+    await page.keyboard.press('2');
+    await page.waitForFunction(async () => (await window.automator.getInitialState()).state.selectedTab === 2);
+  } finally { await app.close(); }
+});
+
+test('dragging a tab onto another swaps their positions and numbers, and the order persists', async () => {
+  const first = await launchHost('tab-reorder');
+  const order = async (page) => (await page.evaluate(() => window.automator.getInitialState())).state.tabOrder;
+  try {
+    await first.page.getByRole('tab', { name: 'API, tab 3', exact: true }).dragTo(first.page.getByRole('tab', { name: 'Script Runner, tab 2', exact: true }));
+    await first.page.getByRole('tab', { name: 'API, tab 2', exact: true }).waitFor({ state: 'visible' });
+    await first.page.getByRole('tab', { name: 'Script Runner, tab 3', exact: true }).waitFor({ state: 'visible' });
+    assert.deepEqual((await order(first.page)).slice(0, 4), [1, 3, 2, 4]);
+    // The launcher is pinned: dragging it or dropping onto it changes nothing.
+    await first.page.getByRole('tab', { name: 'Work Time, tab 7', exact: true }).dragTo(first.page.getByRole('tab', { name: 'Launcher, tab 1', exact: true }));
+    assert.deepEqual((await order(first.page)).slice(0, 4), [1, 3, 2, 4]);
+  } finally { await first.app.close(); }
+
+  const second = await launchHost('tab-reorder', { dataDirectory: first.dataDirectory });
+  try {
+    await second.page.getByRole('tab', { name: 'API, tab 2', exact: true }).waitFor({ state: 'visible' });
+    assert.deepEqual((await order(second.page)).slice(0, 4), [1, 3, 2, 4]);
+    // Number keys follow the new order: key 2 now opens API (slot 3).
+    await second.page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+    await second.page.keyboard.press('2');
+    await second.page.waitForFunction(async () => (await window.automator.getInitialState()).state.selectedTab === 3);
+  } finally { await second.app.close(); }
+});
+
 test('Quick notes add, tick, edit, and delete happy path stores notes in the library and shows the unticked dot', async () => {
   const { app, page } = await launchHost('quick-notes');
   // Read the stored notes through the module's own list action, so the test sees what the library holds.
@@ -483,7 +535,8 @@ test('Quick notes add, tick, edit, and delete happy path stores notes in the lib
     requestId: crypto.randomUUID(), contractVersion: 1, moduleId: 'notes', actionId: 'listNotes', actionVersion: 1, input: {},
   })).data.notes);
   try {
-    await selectTab(page, 'Quick notes', 10);
+    await clickButton(page, page, 'Next tab row');
+    await page.getByRole('tab', { name: 'Quick notes, tab 1 of row 2', exact: true }).click();
     await clickButton(page, page, 'Add note');
     await page.getByLabel('Title', { exact: true }).fill('Shopping');
     await page.getByLabel('Note (markdown)', { exact: true }).fill('# Buy\n- [ ] milk\n- [x] bread');
@@ -495,7 +548,8 @@ test('Quick notes add, tick, edit, and delete happy path stores notes in the lib
     await page.getByRole('img', { name: '1 unticked checkbox' }).waitFor({ state: 'visible' });
 
     // Ticking the last open checkbox persists it and turns the dot green.
-    await page.getByRole('checkbox', { name: 'milk' }).check();
+    // The checkbox is controlled and updates after the save round trip, so click it instead of asserting an instant state change.
+    await page.getByRole('checkbox', { name: 'milk' }).click();
     await page.getByRole('img', { name: 'All checkboxes ticked' }).waitFor({ state: 'visible' });
     await page.waitForFunction(async () => (await window.automator.dispatchModuleAction({
       requestId: crypto.randomUUID(), contractVersion: 1, moduleId: 'notes', actionId: 'listNotes', actionVersion: 1, input: {},

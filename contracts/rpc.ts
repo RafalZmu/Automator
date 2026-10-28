@@ -55,9 +55,13 @@ const initializeParams = z.strictObject({
 });
 
 const emptyParams = z.strictObject({});
+/** Tabs are shown in rows of nine; mirrors TabLayout in Automator.Core. */
+export const TAB_ROW_SIZE = 9;
+export const MAX_TAB_SLOTS = 45;
+const tabSlot = z.number().int().min(1).max(MAX_TAB_SLOTS);
 export const hostWindowContextSchema = z.strictObject({
   role: z.enum(['launcher', 'workspace']),
-  selectedTab: z.number().int().min(1).max(10),
+  selectedTab: tabSlot,
 });
 export type HostWindowContext = z.infer<typeof hostWindowContextSchema>;
 const automationModuleParams = z.strictObject({
@@ -234,7 +238,11 @@ const methodParams = {
   'launcher/acquireForeground': emptyParams,
   'launcher/restoreForeground': z.strictObject({ windowHandleHex: hwnd }),
   'launcher/setMode': z.strictObject({ mode }),
-  'launcher/selectTab': z.strictObject({ tab: z.number().int().min(1).max(10) }),
+  'launcher/selectTab': z.strictObject({ tab: tabSlot }),
+  'launcher/shiftTabRow': z.strictObject({ delta: z.union([z.literal(-1), z.literal(1)]) }),
+  'launcher/setTabOrder': z.strictObject({
+    order: z.array(tabSlot).min(1).max(MAX_TAB_SLOTS).refine((order) => new Set(order).size === order.length),
+  }),
   'launcher/setQuery': z.strictObject({ query: z.string().max(512) }),
   'launcher/openCatalog': emptyParams,
   'catalog/select': z.strictObject({ bindingId: z.string().min(1).max(128) }),
@@ -322,7 +330,7 @@ export function validateRpcRequest(value: unknown): RpcRequest {
 
 export const bindingStateSchema = bindingParamsSchema.extend({ iconDataUrl: z.string().max(12_000).nullable() });
 export const tabMetadataSchema = z.strictObject({
-  slot: z.number().int().min(1).max(10),
+  slot: tabSlot,
   id: z.string().min(1).max(64),
   title: z.string().min(1).max(128),
   iconKey: z.string().min(1).max(64),
@@ -348,13 +356,13 @@ export const backendUiStateSchema = z.strictObject({
     moduleId: z.string().min(1).max(64),
     version: z.number().int().positive(),
     values: z.record(z.string(), z.string().max(2048)),
-  })).length(10),
+  })).min(1).max(MAX_TAB_SLOTS),
   visible: z.boolean(),
-  selectedTab: z.number().int().min(1).max(10),
+  selectedTab: tabSlot,
   query: z.string().max(512),
   previousForegroundHwnd: hwnd.nullable(),
   mode,
-  tabs: z.array(tabMetadataSchema).length(10),
+  tabs: z.array(tabMetadataSchema).min(1).max(MAX_TAB_SLOTS),
   bindings: z.array(bindingStateSchema).max(256),
   catalogApps: z.array(bindingStateSchema).max(256),
   catalogTotalCount: z.number().int().nonnegative().max(100_000),
@@ -371,6 +379,8 @@ export const backendUiStateSchema = z.strictObject({
   error: z.string().max(2048).nullable(),
   matchKind: z.enum(['None', 'Exact', 'Partial', 'AmbiguousExact']),
   matchedBindingId: z.string().nullable(),
+  tabOrder: z.array(tabSlot).max(MAX_TAB_SLOTS),
+  tabRow: z.number().int().min(0).max(MAX_TAB_SLOTS),
 });
 
 export type BackendUiState = z.infer<typeof backendUiStateSchema>;

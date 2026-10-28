@@ -2,7 +2,7 @@
 
 Workspace is the larger window for editing complex profiles and reviewing module data. It hosts the same tabs and module services as the compact launcher, but keeps its own selected tab. It also provides Run Activity and notification entry points.
 
-Each numbered tab displays a small icon beside its number to help identify the tab. The icon is decorative; the tab retains its accessible name.
+Tabs are arranged in rows of nine (keys 1–9). Up and Down, or the row arrows in the top bar, switch which row the Workspace shows; the row is local to the Workspace window. Dragging a tab onto another in the same row swaps them and saves the order for both windows. Each numbered tab displays a small icon beside its number to help identify the tab. The icon is decorative; the tab retains its accessible name.
 
 The compact panel remains optimized for quick access. Workspace changes should reuse module views and host capabilities rather than fork feature behavior.
 

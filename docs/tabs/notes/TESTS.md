@@ -113,8 +113,8 @@ Run the full contract suite with npm.cmd run test:contracts. The Application and
 - `notes module saves, lists, and deletes validated notes in the module library` — keeps notes in the `notes` collection, trims titles, keeps order when a note is edited, rejects invalid notes and a 51st note, and deletes notes.
 - `notes module lists a full library within the structured result limit` — 50 notes of the maximum size of three-byte characters list without exceeding the 512 KiB result limit.
 - `tab registry publishes ten stable slots and their actions` — Quick notes is the tenth tab.
-- `global navigation consumes only focused unmodified launcher keys` — the 0 key selects a tab.
-- `tab keys select slots 1 through 10` — the 0 key maps to slot 10.
+- `global navigation consumes only focused unmodified launcher keys` — the 0 key is not a tab key and the digits 1–9 select a tab.
+- `tab keys select keys 1 through 9 of a row` — the 0 key is not a tab key.
 
 ## Electron — tests/electron/tab-happy-path-visibility.test.cjs
 

@@ -4,7 +4,9 @@ using Automator.Core.Plugins;
 
 var checks = new (string Name, Action Run)[]
 {
-    ("tab keys select slots 1 through 10", TabKeysSelectSlots),
+    ("tab keys select keys 1 through 9 of a row", TabKeysSelectSlots),
+    ("tab layout normalizes the order and maps row keys to slots", TabLayoutRules),
+    ("settings accept a valid tab order and reject duplicates", TabOrderSettings),
     ("the opener reacts to a solo key tap but ignores chords", OpenerRecognizesSoloTaps),
     ("launcher aliases resolve exact and partial matches", AliasesResolve),
     ("aliases accept letters and reject duplicates", AliasesValidate),
@@ -42,8 +44,33 @@ static void TabKeysSelectSlots()
 {
     Check.Equal(0, TabKeyParser.Parse('1'));
     Check.Equal(8, TabKeyParser.Parse('9'));
-    Check.Equal(9, TabKeyParser.Parse('0'));
+    Check.Equal<int?>(null, TabKeyParser.Parse('0'));
     Check.Equal<int?>(null, TabKeyParser.Parse('a'));
+}
+
+static void TabLayoutRules()
+{
+    Check.Equal(1, TabLayout.RowCount(9));
+    Check.Equal(2, TabLayout.RowCount(10));
+    var order = TabLayout.Normalize([3, 2, 3, 99, 1, 0], 10);
+    Check.Equal("1,3,2,4,5,6,7,8,9,10", string.Join(",", order));
+    Check.Equal("1,2,3", string.Join(",", TabLayout.Normalize(null, 3)));
+    Check.Equal<int?>(1, TabLayout.SlotAt(order, 0, 1));
+    Check.Equal<int?>(9, TabLayout.SlotAt(order, 0, 9));
+    Check.Equal<int?>(10, TabLayout.SlotAt(order, 1, 1));
+    Check.Equal<int?>(null, TabLayout.SlotAt(order, 1, 2));
+    Check.Equal<int?>(null, TabLayout.SlotAt(order, 0, 0));
+    Check.Equal(1, TabLayout.RowOfSlot(order, 10));
+    Check.Equal(0, TabLayout.RowOfSlot(order, 3));
+}
+
+static void TabOrderSettings()
+{
+    var settings = new LauncherSettings { TabOrder = [1, 3, 2] };
+    Check.Equal("1,3,2", string.Join(",", SettingsSerializer.Deserialize(SettingsSerializer.Serialize(settings)).TabOrder));
+    Check.Equal(0, SettingsSerializer.Deserialize(SettingsSerializer.Serialize(new LauncherSettings())).TabOrder.Count);
+    Check.Throws<InvalidDataException>(() => SettingsSerializer.Serialize(new LauncherSettings { TabOrder = [2, 2] }));
+    Check.Throws<InvalidDataException>(() => SettingsSerializer.Serialize(new LauncherSettings { TabOrder = [0] }));
 }
 
 static void OpenerRecognizesSoloTaps()

@@ -14,7 +14,7 @@ Source of truth: `docs/sections/workspace/` in the repository. This concept is g
 
 Workspace is the larger window for editing complex profiles and reviewing module data. It hosts the same tabs and module services as the compact launcher, but keeps its own selected tab. It also provides Run Activity and notification entry points.
 
-Each numbered tab displays a small icon beside its number to help identify the tab. The icon is decorative; the tab retains its accessible name.
+Tabs are arranged in rows of nine (keys 1–9). Up and Down, or the row arrows in the top bar, switch which row the Workspace shows; the row is local to the Workspace window. Dragging a tab onto another in the same row swaps them and saves the order for both windows. Each numbered tab displays a small icon beside its number to help identify the tab. The icon is decorative; the tab retains its accessible name.
 
 The compact panel remains optimized for quick access. Workspace changes should reuse module views and host capabilities rather than fork feature behavior.
 
@@ -38,7 +38,8 @@ Read the root AGENTS.md first. Workspace is the larger editing/review window ove
 
 - Keep the launcher and Workspace as separate window surfaces while sharing validated module services through the preload/RPC bridge.
 - Workspace tab selection is local to that window; do not accidentally mutate compact launcher selection unless an explicit navigation action requires it.
-- Keep each active numbered tab paired with its purpose icon in both windows, keep slot 9's Snippets clipboard icon and slot 10's Quick notes notebook icon, and preserve the existing accessible tab name.
+- Keep each active numbered tab paired with its purpose icon in both windows, keep slot 9's Snippets clipboard icon and slot 10's Quick notes notebook icon, and preserve the existing accessible tab name (`<title>, tab <key>` on row one, `<title>, tab <key> of row <n>` on later rows). Icons follow the tab (its slot), not its position.
+- Tabs are shown in rows of nine selected with keys 1–9; Up/Down switch the focused row. The compact launcher's row lives in the backend (`LauncherSession`, `launcher/shiftTabRow`) because its global keys need it; Workspace keeps its own row in the renderer. The tab order (`LauncherSettings.TabOrder`, `launcher/setTabOrder`) is shared by both windows. Slot is a tab's stable identity; keep module state, settings and authorization keyed by slot/ID, never by position. The launcher (slot 1) stays pinned at position 1.
 - Keep window sizing, placement, activation, and lifecycle in electron/main.ts. Renderer events must not make the window follow the pointer or drift while controls receive focus.
 - Avoid duplicating module business logic in Workspace. Reuse the same tab view registry and service interfaces; only change layout or per-surface affordances.
 - Run or add Electron integration coverage for Workspace open/hide, tab isolation, focus, and activity navigation when changing host or window behavior.

@@ -93,8 +93,8 @@ public static class AliasValidator
 
 public static class TabKeyParser
 {
-    /// <summary>Maps the 1 through 9 keys to slots 1 through 9 (zero based) and the 0 key to slot 10.</summary>
-    public static int? Parse(char key) => key is >= '1' and <= '9' ? key - '1' : key == '0' ? 9 : null;
+    /// <summary>Maps the 1 through 9 keys to zero-based keys 0 through 8 of the focused tab row.</summary>
+    public static int? Parse(char key) => key is >= '1' and <= '9' ? key - '1' : null;
 }
 
 public enum LaunchAction

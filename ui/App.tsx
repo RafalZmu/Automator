@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import * as Tabs from '@radix-ui/react-tabs';
 import {
   Activity, AlertCircle, AppWindow, ArrowDownToLine, ArrowUpFromLine, Bell, Braces, CalendarClock, Check,
-  ChevronRight, CircleDot, ClipboardCopy, Clock, FolderOpen, Globe, Keyboard, MousePointerClick, Moon, NotebookPen, Plus, Search,
+  ChevronDown, ChevronRight, ChevronUp, CircleDot, ClipboardCopy, Clock, FolderOpen, Globe, Keyboard, MousePointerClick, Moon, NotebookPen, Plus, Search,
   Settings2, Sparkles, Sun, Terminal, Workflow, X,
 } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
@@ -17,6 +17,7 @@ import type { AutomationServices } from './automationServices';
 import { getAutomatorBridge } from './bridge';
 import type { AutomatorBridge, FocusRequest, HostInfo, InitialState } from './types';
 import { launcherViewRegistry } from './viewRegistry';
+import { clampRow, keyOfSlot, normalizeTabOrder, rowOfSlot, shiftRow, slotAtKey, slotsInRow, swapSlots, tabRowCount } from './tabLayout';
 import { TabCommandBar } from './commands/TabCommandBar';
 import { QuickActionsHome, type QuickAction } from './commands/QuickActionsHome';
 import { useAllTabCommandCatalog, useTabCommandResolver } from './commands/TabCommandRegistry';
@@ -349,6 +350,9 @@ export function App() {
   const [explorerLaunches, setExplorerLaunches] = useState<FileExplorerLaunchRequest[]>([]);
   const consumeExplorerLaunch = useCallback(() => setExplorerLaunches(current => current.slice(1)), []);
   const [bridge, setBridge] = useState<AutomatorBridge | null>(null);
+  // The compact launcher's focused row lives in the backend (its global keys need it); Workspace keeps its own here.
+  const [workspaceRow, setWorkspaceRow] = useState(0);
+  const [draggedSlot, setDraggedSlot] = useState<number | null>(null);
   const [bridgeError, setBridgeError] = useState('');
   const [state, setState] = useState<BackendUiState | null>(null);
   const [host, setHost] = useState<HostInfo | null>(null);
@@ -514,6 +518,15 @@ export function App() {
   }, [state?.selectedTab, state?.mode]);
 
   const activeTab = state?.tabs.find((tab) => tab.slot === state.selectedTab) ?? state?.tabs[0];
+  const tabOrder = useMemo(
+    () => normalizeTabOrder(state?.tabOrder, state?.tabs.map((tab) => tab.slot) ?? []),
+    [state?.tabOrder, state?.tabs]);
+  const totalRows = tabRowCount(tabOrder.length);
+  const focusedRow = clampRow(isWorkspaceSurface ? workspaceRow : state?.tabRow ?? 0, tabOrder.length);
+  // Selecting a tab from elsewhere (activity, running-task pills) brings the Workspace to the row that holds it.
+  useEffect(() => {
+    if (isWorkspaceSurface && state) setWorkspaceRow(rowOfSlot(tabOrder, state.selectedTab));
+  }, [isWorkspaceSurface, state?.selectedTab, tabOrder.join()]);
   const moduleState = activeTab ? state?.moduleStates.find((item) => item.moduleId === activeTab.id) : undefined;
   const capabilitySignature = activeTab?.capabilities.map(({ id, version }) => `${id}@${version}`).join(',') ?? '';
   const serviceContextKey = bridge && activeTab ? `${activeTab.id}|${capabilitySignature}` : '';
@@ -678,10 +691,37 @@ export function App() {
     const target = event.target;
     const isEditing = target instanceof HTMLElement
       && (target.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement);
-    if (/^[0-9]$/.test(event.key) && !isEditing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    const hasModifier = event.ctrlKey || event.metaKey || event.altKey || event.shiftKey;
+    if (/^[1-9]$/.test(event.key) && !isEditing && !hasModifier) {
       event.preventDefault();
-      changeTab(event.key === '0' ? 10 : Number(event.key));
+      const slot = slotAtKey(tabOrder, focusedRow, Number(event.key));
+      if (slot !== undefined) changeTab(slot);
+      return;
     }
+    // Up and Down move between rows. Text fields keep their arrows, except the empty launcher and command search boxes, which have nothing to move through.
+    const isEmptyNavigationInput = target instanceof HTMLInputElement && target.value === ''
+      && (target === searchRef.current || target.id === 'quick-actions-search' || target.id === 'tab-command-input');
+    const ownsArrows = isEditing && !isEmptyNavigationInput
+      || (target instanceof HTMLElement && target.closest('[role="listbox"], [role="menu"], [role="combobox"]') !== null);
+    if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && totalRows > 1 && state.mode === 'launcher'
+        && !ownsArrows && !hasModifier) {
+      event.preventDefault();
+      changeTabRow(event.key === 'ArrowDown' ? 1 : -1);
+    }
+  };
+
+  const changeTabRow = (delta: -1 | 1) => {
+    if (!bridge) return;
+    if (isWorkspaceSurface) setWorkspaceRow((row) => shiftRow(row, delta, tabOrder.length));
+    else void runCommand(() => bridge.shiftTabRow(delta));
+  };
+
+  const dropTab = (targetSlot: number) => {
+    const source = draggedSlot;
+    setDraggedSlot(null);
+    if (!bridge || source === null || source === targetSlot) return;
+    const next = swapSlots(tabOrder, source, targetSlot);
+    if (next.join() !== tabOrder.join()) void runCommand(() => bridge.setTabOrder(next));
   };
 
   if (bridgeError) {
@@ -727,7 +767,7 @@ export function App() {
       kind: 'tab',
       scope: tab.id,
       category: `Workspace tab · ${tab.slot}`,
-      shortcut: tab.slot === 10 ? '0' : String(tab.slot),
+      shortcut: String(keyOfSlot(tabOrder, tab.slot)),
       targetId: String(tab.slot),
       run: noop,
     }));
@@ -919,6 +959,11 @@ export function App() {
           {preview && <span className="preview-badge">Preview</span>}
         </div>
         <div className="topbar-actions">
+          {totalRows > 1 && <div className="tab-row-switch" role="group" aria-label="Tab rows">
+            <button className="icon-button" type="button" aria-label="Previous tab row" title="Previous tab row (Up)" onClick={() => changeTabRow(-1)}><ChevronUp size={14} /></button>
+            <span className="tab-row-indicator" aria-live="polite" aria-label={`Tab row ${focusedRow + 1} of ${totalRows}`}>{focusedRow + 1}/{totalRows}</span>
+            <button className="icon-button" type="button" aria-label="Next tab row" title="Next tab row (Down)" onClick={() => changeTabRow(1)}><ChevronDown size={14} /></button>
+          </div>}
           {runningScript && <button className="script-running-pill" type="button" title="Open Script Runner" aria-label={`${runningScript.profileName} is running. Open Script Runner`}
             onClick={() => {
               const tab = state.tabs.find((candidate) => candidate.id === 'script-runner');
@@ -957,12 +1002,28 @@ export function App() {
       {preview && !state.hookInstalled && <div className="preview-hook-note" role="status">The Windows keyboard hook is unavailable in browser preview.</div>}
 
       <Tabs.Root className="tab-root" activationMode="manual" value={showQuickActions ? '' : String(state.selectedTab)} onValueChange={(value) => changeTab(Number(value))}>
-        <Tabs.List className="tabs" aria-label="Workspace tabs">
-          {state.tabs.filter((tab) => !isWorkspaceSurface || tab.slot > 1).map((tab) => {
+        <Tabs.List className="tabs" aria-label="Workspace tabs" data-launcher-row={!isWorkspaceSurface && focusedRow === 0 ? 'true' : undefined}>
+          {slotsInRow(tabOrder, focusedRow).map((slot) => state.tabs.find((candidate) => candidate.slot === slot))
+            .filter((tab): tab is BackendUiState['tabs'][number] => tab !== undefined && (!isWorkspaceSurface || tab.slot > 1)).map((tab) => {
             const TabIcon = numberedTabIcons[tab.slot - 1] ?? CircleDot;
+            const tabKey = keyOfSlot(tabOrder, tab.slot);
+            const movable = tab.slot !== 1;
             return (
-              <Tabs.Trigger key={tab.id} className="tab-button" value={String(tab.slot)} aria-label={`${tab.title}, tab ${tab.slot}`} ref={(element) => { tabRefs.current[tab.slot - 1] = element; }}>
-                <span className="tab-number">{tab.slot}</span>
+              <Tabs.Trigger key={tab.id} className="tab-button" value={String(tab.slot)}
+                aria-label={focusedRow === 0 ? `${tab.title}, tab ${tabKey}` : `${tab.title}, tab ${tabKey} of row ${focusedRow + 1}`}
+                data-drop-target={draggedSlot !== null && draggedSlot !== tab.slot && movable ? 'true' : undefined}
+                draggable={movable}
+                onDragStart={(event) => {
+                  if (!movable) { event.preventDefault(); return; }
+                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', String(tab.slot));
+                  setDraggedSlot(tab.slot);
+                }}
+                onDragOver={(event) => { if (draggedSlot !== null && movable) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }}
+                onDrop={(event) => { event.preventDefault(); if (movable) dropTab(tab.slot); else setDraggedSlot(null); }}
+                onDragEnd={() => setDraggedSlot(null)}
+                ref={(element) => { tabRefs.current[tab.slot - 1] = element; }}>
+                <span className="tab-number">{tabKey}</span>
                 <TabIcon className="tab-icon" aria-hidden="true" size={12} strokeWidth={2.1} />
                 {tab.slot === 1 && <span className="tab-name">Launcher</span>}
               </Tabs.Trigger>

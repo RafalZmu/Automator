@@ -440,7 +440,46 @@ Run this packaged lifecycle case separately with npm.cmd run test:packaged-lifec
 
 **Steps**
 
-1. Launch the isolated compact host and locate slots 1–10 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
-2. Open Workspace and verify slots 2–9 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
+1. Launch the isolated compact host and locate slots 1–9 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
+2. Switch to the second tab row and verify Quick notes ("Quick notes, tab 1 of row 2") shows one such icon.
+3. Open Workspace and verify slots 2–9 each contain one visible decorative icon, then switch its row and verify Quick notes does too.
 
 **Expected result:** The numbered tabs retain their accessible names and show one visible icon in both windows.
+
+## Tab rows and reordering — tests/electron/tab-happy-path-visibility.test.cjs, tests/tab-layout.test.mjs
+
+### tab rows page with the arrow keys and number keys follow the focused row
+
+**Source:** tests/electron/tab-happy-path-visibility.test.cjs
+
+**Steps**
+
+1. Launch the isolated compact host and verify the tab bar shows nine tabs and the `1/2` row indicator.
+2. Press Down in the empty Quick Actions search box; verify the bar shows only Quick notes and the indicator reads `2/2`.
+3. Blur the search box, press 2 (no tab at that position, selection unchanged), then 1 (Quick notes opens).
+4. Press Up, then 2.
+
+**Expected result:** Up and Down switch the focused row, and number keys select the tab at that position in the focused row.
+
+### dragging a tab onto another swaps their positions and numbers, and the order persists
+
+**Source:** tests/electron/tab-happy-path-visibility.test.cjs
+
+**Steps**
+
+1. Drag the API tab onto Script Runner; verify they now read tab 2 and tab 3 and the saved order starts `1, 3, 2, 4`.
+2. Drag Work Time onto the Launcher tab; verify the order is unchanged.
+3. Restart the host with the same data directory; verify the order is restored and key 2 opens API.
+
+**Expected result:** Dropping swaps two tabs, the launcher stays first, numbering follows the order, and the order survives a restart.
+
+### tab layout rules (contract)
+
+**Source:** tests/tab-layout.test.mjs, `TabLayout` specs in tests/Automator.Core.Specs and `LauncherSession` specs in tests/Automator.Application.Specs
+
+**Steps**
+
+1. Run `npm.cmd run test:contracts` and `npm.cmd run test:dotnet`.
+
+**Expected result:** Rows hold nine tabs, normalization keeps the launcher first, swapping never moves the launcher, and the C# and TypeScript rules agree.
+
