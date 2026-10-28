@@ -76,7 +76,7 @@ test('module action requests and structured results enforce version and payload 
   assert.equal(workspaceRequest.params.hostWindowContext.selectedTab, 5);
   assert.equal(automationModuleActionRequestSchema.safeParse({
     requestId: 'test-run', contractVersion: 1, moduleId: 'fixture-module', actionId: 'summarize', actionVersion: 1,
-    input: {}, hostWindowContext: { role: 'workspace', selectedTab: 10 },
+    input: {}, hostWindowContext: { role: 'workspace', selectedTab: 11 },
   }).success, false);
   assert.equal(automationModuleActionRequestSchema.safeParse({
     requestId: 'test-run', contractVersion: 1, moduleId: 'fixture-module', actionId: 'summarize', actionVersion: 0, input: {},

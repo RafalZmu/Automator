@@ -57,7 +57,7 @@ const initializeParams = z.strictObject({
 const emptyParams = z.strictObject({});
 export const hostWindowContextSchema = z.strictObject({
   role: z.enum(['launcher', 'workspace']),
-  selectedTab: z.number().int().min(1).max(9),
+  selectedTab: z.number().int().min(1).max(10),
 });
 export type HostWindowContext = z.infer<typeof hostWindowContextSchema>;
 const automationModuleParams = z.strictObject({
@@ -234,7 +234,7 @@ const methodParams = {
   'launcher/acquireForeground': emptyParams,
   'launcher/restoreForeground': z.strictObject({ windowHandleHex: hwnd }),
   'launcher/setMode': z.strictObject({ mode }),
-  'launcher/selectTab': z.strictObject({ tab: z.number().int().min(1).max(9) }),
+  'launcher/selectTab': z.strictObject({ tab: z.number().int().min(1).max(10) }),
   'launcher/setQuery': z.strictObject({ query: z.string().max(512) }),
   'launcher/openCatalog': emptyParams,
   'catalog/select': z.strictObject({ bindingId: z.string().min(1).max(128) }),
@@ -348,13 +348,13 @@ export const backendUiStateSchema = z.strictObject({
     moduleId: z.string().min(1).max(64),
     version: z.number().int().positive(),
     values: z.record(z.string(), z.string().max(2048)),
-  })).length(9),
+  })).length(10),
   visible: z.boolean(),
-  selectedTab: z.number().int().min(1).max(9),
+  selectedTab: z.number().int().min(1).max(10),
   query: z.string().max(512),
   previousForegroundHwnd: hwnd.nullable(),
   mode,
-  tabs: z.array(tabMetadataSchema).length(9),
+  tabs: z.array(tabMetadataSchema).length(10),
   bindings: z.array(bindingStateSchema).max(256),
   catalogApps: z.array(bindingStateSchema).max(256),
   catalogTotalCount: z.number().int().nonnegative().max(100_000),
