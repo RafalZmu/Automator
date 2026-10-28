@@ -13,6 +13,8 @@ var checks = new (string Name, Func<Task> Run)[]
     ("global tab keys require the visible foreground launcher context", GlobalTabKeysRequireLauncherContext),
     ("global navigation consumes only focused unmodified launcher keys", NavigationKeyPolicyRequiresFocusedUnmodifiedLauncher),
     ("global navigation yields digits and slash while text entry is focused", NavigationKeyPolicyYieldsDigitsAndSlashToTextEntry),
+    ("tab rows page with the arrow keys and number keys follow the focused row", TabRowsFollowFocusedRow),
+    ("reordering tabs moves their number keys and survives reopening", ReorderedTabsMoveTheirKeys),
     ("hotkey recording ignores stale, unfocused and native-dialog input", RecordingRequiresVisibleFocusedContext),
     ("a view-mode transition cancels pending alias activation", ModeTransitionCancelsPendingActivation),
     ("stale catalog completion is ignored after the view changes", StaleCatalogCompletionIsIgnored),
@@ -155,20 +157,66 @@ static Task NavigationKeyPolicyRequiresFocusedUnmodifiedLauncher()
     Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(state, nativeForeground: true, rendererFocused: true, hasModifier: true, 0x32));
     Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(state, true, true, false, 0x32));
     Check.Equal(NavigationKeyAction.OpenCatalog, NavigationKeyPolicy.Decide(state, true, true, false, 0xBF));
-    // The 0 key (top row and numpad) selects slot 10.
-    Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(state, true, true, false, 0x30));
-    Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(state, true, true, false, 0x60));
+    // Rows hold nine tabs, so the 0 key is not a tab key.
+    Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(state, true, true, false, 0x30));
+    Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(state, true, true, false, 0x60));
     session.OpenCatalog([]);
     Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x32));
     Check.True(session.SelectTabFromGlobalKey('2', launcherNativeForeground: true));
     Check.Equal(LauncherMode.Launcher, session.Snapshot.Mode);
-    Check.True(session.SelectTabFromGlobalKey('0', launcherNativeForeground: true));
-    Check.Equal(10, session.Snapshot.SelectedTab);
+    Check.False(session.SelectTabFromGlobalKey('0', launcherNativeForeground: true));
     Check.True(session.SelectTab(1));
     session.SelectTab(2);
     Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x32));
     session.EnterMode(LauncherMode.Settings);
     Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x1B));
+    return Task.CompletedTask;
+}
+
+static Task TabRowsFollowFocusedRow()
+{
+    var session = new LauncherSession(CreateSettings());
+    session.ShowPanel("0x11");
+    Check.Equal(0, session.Snapshot.TabRow);
+    // With ten tabs there are two rows: Quick notes (slot 10) is key 1 of row two.
+    Check.Equal(2, session.NavigationState.TabRowCount);
+    Check.Equal(NavigationKeyAction.NextTabRow, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x28));
+    Check.Equal(NavigationKeyAction.PreviousTabRow, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x26));
+    Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x28, textEntryFocused: true));
+    Check.False(session.ShiftTabRow(1, launcherNativeForeground: false));
+    Check.True(session.ShiftTabRow(1));
+    Check.Equal(1, session.Snapshot.TabRow);
+    Check.Equal(1, session.Snapshot.SelectedTab);
+    Check.False(session.SelectTabFromGlobalKey('2', launcherNativeForeground: true));
+    Check.True(session.SelectTabFromGlobalKey('1', launcherNativeForeground: true));
+    Check.Equal(10, session.Snapshot.SelectedTab);
+    Check.True(session.ShiftTabRow(1));
+    Check.Equal(0, session.Snapshot.TabRow);
+    Check.True(session.SelectTabFromGlobalKey('9', launcherNativeForeground: true));
+    Check.Equal(9, session.Snapshot.SelectedTab);
+    // Selecting a tab by slot moves the focused row to the row that holds it.
+    session.SelectTab(10);
+    Check.Equal(1, session.Snapshot.TabRow);
+    session.ShowPanel("0x11");
+    Check.Equal(0, session.Snapshot.TabRow);
+    return Task.CompletedTask;
+}
+
+static Task ReorderedTabsMoveTheirKeys()
+{
+    var settings = CreateSettings() with { TabOrder = [1, 3, 2] };
+    var session = new LauncherSession(settings);
+    session.ShowPanel("0x11");
+    Check.Equal("1,3,2,4,5,6,7,8,9,10", string.Join(",", session.Snapshot.TabOrder));
+    Check.True(session.SelectTabFromGlobalKey('2', launcherNativeForeground: true));
+    Check.Equal(3, session.Snapshot.SelectedTab);
+    session.SetTabOrder([1, 10, 2, 3]);
+    Check.Equal("1,10,2,3,4,5,6,7,8,9", string.Join(",", session.Snapshot.TabOrder));
+    Check.True(session.SelectTabFromGlobalKey('2', launcherNativeForeground: true));
+    Check.Equal(10, session.Snapshot.SelectedTab);
+    // The launcher stays first even when a request tries to move it.
+    session.SetTabOrder([5, 1, 2]);
+    Check.Equal(1, session.Snapshot.TabOrder[0]);
     return Task.CompletedTask;
 }
 

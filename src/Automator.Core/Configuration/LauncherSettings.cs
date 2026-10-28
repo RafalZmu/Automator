@@ -20,6 +20,9 @@ public sealed record LauncherSettings
     public bool StartWithWindows { get; init; } = true;
     public List<AppBinding> Bindings { get; init; } = [];
     public List<ModuleSettingsEntry> ModuleSettings { get; init; } = [];
+
+    /// <summary>User-chosen tab order as module slots. Empty keeps the natural order; the launcher always stays first.</summary>
+    public List<int> TabOrder { get; init; } = [];
 }
 
 /// <summary>Opaque JSON preferences owned by a single automation module.</summary>
@@ -150,6 +153,13 @@ public static class SettingsSerializer
             }
 
             aliases.Add(binding.Alias);
+        }
+
+        if (settings.TabOrder is null || settings.TabOrder.Count > TabLayout.MaximumSlots
+            || settings.TabOrder.Any(slot => slot < 1 || slot > TabLayout.MaximumSlots)
+            || settings.TabOrder.Distinct().Count() != settings.TabOrder.Count)
+        {
+            throw new InvalidDataException("The tab order must list each tab slot at most once.");
         }
 
         ValidateModuleSettings(settings.ModuleSettings);

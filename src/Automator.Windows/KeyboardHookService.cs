@@ -289,7 +289,7 @@ public sealed class KeyboardHookService : IDisposable
     }
 
     private static bool IsNavigationKey(uint key) => key == 0x1B || key == 0xBF
-        || key is >= 0x30 and <= 0x39 or >= 0x60 and <= 0x69;
+        || key is >= 0x30 and <= 0x39 or >= 0x60 and <= 0x69 or 0x26 or 0x28;
 
     private static bool IsAnyModifierPressed() => ModifierKeys.Any(IsKeyDown);
 

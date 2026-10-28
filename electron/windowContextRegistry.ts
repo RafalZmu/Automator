@@ -1,6 +1,9 @@
 import type { AutomationWindowRole, AutomationWindowContext } from './automationServiceAuthorization';
 import type { BackendUiState } from '../contracts/rpc';
 
+// Mirrors MAX_TAB_SLOTS in contracts/rpc.ts (a type-only import keeps this module free of the schema runtime).
+const MAX_TAB_SLOTS = 45;
+
 /** Associates renderer identities with a host-created role and a local active tab. */
 export class WindowContextRegistry<TRenderer extends object = object> {
   private readonly contexts = new Map<TRenderer, AutomationWindowContext>();
@@ -20,7 +23,7 @@ export class WindowContextRegistry<TRenderer extends object = object> {
   setSelectedTab(renderer: TRenderer, slot: number): void {
     const current = this.contexts.get(renderer);
     if (!current) throw new Error('The renderer does not belong to an Automator window.');
-    if (!Number.isSafeInteger(slot) || slot < 1 || slot > 10) throw new Error('The tab slot must be an integer from 1 to 10.');
+    if (!Number.isSafeInteger(slot) || slot < 1 || slot > MAX_TAB_SLOTS) throw new Error(`The tab slot must be an integer from 1 to ${MAX_TAB_SLOTS}.`);
     current.selectedTab = slot;
   }
 }

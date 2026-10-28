@@ -76,7 +76,7 @@ test('module action requests and structured results enforce version and payload 
   assert.equal(workspaceRequest.params.hostWindowContext.selectedTab, 5);
   assert.equal(automationModuleActionRequestSchema.safeParse({
     requestId: 'test-run', contractVersion: 1, moduleId: 'fixture-module', actionId: 'summarize', actionVersion: 1,
-    input: {}, hostWindowContext: { role: 'workspace', selectedTab: 11 },
+    input: {}, hostWindowContext: { role: 'workspace', selectedTab: 46 },
   }).success, false);
   assert.equal(automationModuleActionRequestSchema.safeParse({
     requestId: 'test-run', contractVersion: 1, moduleId: 'fixture-module', actionId: 'summarize', actionVersion: 0, input: {},
@@ -234,4 +234,19 @@ test('module action input rejects undefined object members such as an unset work
   const profile = { id: 'workflow-abc', name: 'backup', variables: {}, steps: [] };
   assert.equal(automationModuleActionRequestSchema.safeParse({ ...base, input: profile }).success, true);
   assert.equal(automationModuleActionRequestSchema.safeParse({ ...base, input: { ...profile, variableReferences: undefined } }).success, false);
+});
+
+test('tab row and tab order requests accept rows of up to forty-five tabs and reject malformed input', () => {
+  const request = (method, params) => validateRpcRequest({ jsonrpc: '2.0', id: 1, method, params });
+  assert.deepEqual(request('launcher/selectTab', { tab: 10 }).params, { tab: 10 });
+  assert.deepEqual(request('launcher/selectTab', { tab: 45 }).params, { tab: 45 });
+  assert.throws(() => request('launcher/selectTab', { tab: 46 }));
+  assert.deepEqual(request('launcher/shiftTabRow', { delta: 1 }).params, { delta: 1 });
+  assert.deepEqual(request('launcher/shiftTabRow', { delta: -1 }).params, { delta: -1 });
+  assert.throws(() => request('launcher/shiftTabRow', { delta: 2 }));
+  assert.deepEqual(request('launcher/setTabOrder', { order: [1, 3, 2] }).params, { order: [1, 3, 2] });
+  assert.throws(() => request('launcher/setTabOrder', { order: [1, 1] }), 'repeated slots');
+  assert.throws(() => request('launcher/setTabOrder', { order: [0] }), 'slot zero');
+  assert.throws(() => request('launcher/setTabOrder', { order: [] }), 'empty order');
+  assert.throws(() => request('launcher/setTabOrder', { order: [1], extra: true }));
 });

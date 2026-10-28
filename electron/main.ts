@@ -18,6 +18,7 @@ import {
   globalVariableSnapshotSchema,
   backendUiStateSchema,
   PROTOCOL_VERSION,
+  MAX_TAB_SLOTS,
   validateRpcRequest,
   type BackendUiState,
   type RpcMethod,
@@ -74,6 +75,7 @@ const backendMethods: Record<string, RpcMethod> = {
   'remove-binding': 'binding/remove',
   'activate-binding': 'launcher/activateBinding',
   'set-mode': 'launcher/setMode',
+  'shift-tab-row': 'launcher/shiftTabRow',
   'update-settings': 'settings/update',
   'start-hotkey-recording': 'hotkey/startRecording',
   'cancel-hotkey-recording': 'hotkey/cancelRecording',
@@ -891,10 +893,20 @@ function registerIpc(): void {
     });
   }
 
+  // The order is a shared preference, so the Workspace window may change it too (its tab row stays local to it).
+  ipcMain.handle('automator:set-tab-order', async (event, params: { order?: unknown }) => {
+    const context = assertMainFrame(event, ['launcher', 'workspace']);
+    const result = await invokeHostServiceBackend(event, 'launcher/setTabOrder', { order: params?.order });
+    const parsed = backendUiStateSchema.safeParse(result);
+    if (parsed.success) applyBackendState(parsed.data);
+    if (context.role === 'launcher' || !parsed.success) return result;
+    return projectStateForWindow(parsed.data, context);
+  });
+
   ipcMain.handle('automator:select-tab', async (event, params: { tab?: unknown }) => {
     const context = assertMainFrame(event, ['launcher', 'workspace']);
     const tab = Number(params?.tab);
-    if (!Number.isInteger(tab) || tab < 1 || tab > 10) throw new Error('The requested tab slot is invalid.');
+    if (!Number.isInteger(tab) || tab < 1 || tab > MAX_TAB_SLOTS) throw new Error('The requested tab slot is invalid.');
     if (context.role === 'launcher') {
       const result = await invokeBackend(event, 'launcher/selectTab', { tab });
       const parsed = backendUiStateSchema.safeParse(result);

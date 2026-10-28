@@ -62,14 +62,15 @@ The app keeps its compact numbered launcher tabs and also provides a larger Work
 | Agent access (MCP) | [Agent guide](docs/sections/agent-access/AGENTS.md) · [Functionality and code](docs/sections/agent-access/README.md) | — |
 | E2E test catalog | [Agent guide](docs/sections/e2e-catalog/AGENTS.md) · [Functionality and code](docs/sections/e2e-catalog/README.md) | [Open the catalog](docs/e2e/index.html) |
 
-Slot 9 is Snippets and slot 10 is Quick notes. The Codex task builder code is kept in the repository but is not bound to a slot.
+Slot 9 is Snippets and slot 10 is Quick notes. A slot is a tab's identity; its position (and number key) can be changed by dragging, so see "Controls and tab behavior" for how tabs are numbered. The Codex task builder code is kept in the repository but is not bound to a slot.
 
 Agents can also read the same guides as an [Open Knowledge Format bundle](docs/okf/index.md). It is generated from the files above with `npm run okf:build`.
 
 ## Controls and tab behavior
 
 - Tap **Right Ctrl** to open or close the panel. Opening selects slot 1.
-- Press **1–9** to select slots 1–9 and **0** to select slot 10 (Quick notes), to select a workspace tab. While a text field in the launcher has focus, digits and `/` type into it instead. Each numbered tab shows a purpose icon beside its number. Slot 1 is the app launcher; slots 2–8 are Script Runner, API, Browser Automation, Workflows, Scheduler, Work Time, and Website Launcher; slot 9 is Snippets; slot 10 is Quick notes.
+- Tabs are shown in rows of nine. Press **1–9** to select the tab at that position in the focused row; there is no **0** key. Press **Up** or **Down** (or use the row arrows beside the `1/2` indicator in the top bar, shown only when there is more than one row) to focus another row. The tab bar shows only the focused row. While a text field in the launcher has focus, digits and `/` type into it instead; the launcher search box still lets Up and Down switch rows. Each numbered tab shows a purpose icon beside its number. By default row 1 holds slot 1 (app launcher) and slots 2–9 (Script Runner, API, Browser Automation, Workflows, Scheduler, Work Time, Website Launcher, Snippets), and row 2 holds slot 10, Quick notes, as key 1.
+- Drag a tab onto another tab in the same row to swap their positions; the numbers follow and the order is saved in `settings.json` (`TabOrder`). The launcher tab is pinned first and cannot be moved. The Workspace window keeps its own focused row but shares the saved order.
 - Opening the compact launcher shows Global Action Search as its home surface. It searches registered actions across tabs; a unique match runs, and choosing a tab-specific action switches to that tab. This home surface is not a numbered tab.
 - Press **/** in slot 1 to open the app catalog. The app under the pointer when the panel opens is pinned first.
 - Choose a listed app or browse for an EXE/shortcut, then assign a unique letters-only alias.

@@ -25,7 +25,7 @@ test('host-owned BrowserWindow contexts preserve independent roles and active ta
   assert.deepEqual(contexts.get(launcherContents), { role: 'launcher', selectedTab: 1 });
   assert.deepEqual(contexts.get(workspaceContents), { role: 'workspace', selectedTab: 5 });
   assert.equal(contexts.get({}), null);
-  assert.throws(() => contexts.setSelectedTab(workspaceContents, 11), /tab slot/i);
+  assert.throws(() => contexts.setSelectedTab(workspaceContents, 46), /tab slot/i);
 });
 
 test('window context disposal removes only the owning renderer', async () => {

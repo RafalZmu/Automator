@@ -39,7 +39,7 @@ public static class RpcProtocol
     private static readonly HashSet<string> Methods = new(StringComparer.Ordinal)
     {
         "initialize", "getState", "launcher/open", "launcher/close", "launcher/setWindowContext", "launcher/verifyForeground", "launcher/acquireForeground", "launcher/restoreForeground", "launcher/setMode",
-        "launcher/selectTab", "launcher/setQuery", "launcher/openCatalog", "catalog/select",
+        "launcher/selectTab", "launcher/shiftTabRow", "launcher/setTabOrder", "launcher/setQuery", "launcher/openCatalog", "catalog/select",
         "catalog/addCustom", "binding/saveAlias", "binding/select", "binding/remove", "settings/update",
         "settings/import", "settings/export", "settings/openLogFolder", "settings/relink",
         "hotkey/startRecording", "hotkey/cancelRecording", "launcher/activateBinding",
@@ -159,6 +159,8 @@ public sealed record WindowContextParams(string WindowHandleHex, bool Visible, b
 public sealed record ForegroundCheckParams(string WindowHandleHex);
 public sealed record SetModeParams(string Mode);
 public sealed record SelectTabParams(int Tab);
+public sealed record ShiftTabRowParams(int Delta);
+public sealed record SetTabOrderParams(IReadOnlyList<int> Order);
 public sealed record SetQueryParams(string Query);
 public sealed record SelectBindingParams(string BindingId);
 public sealed record CustomAppParams(string Path);
@@ -220,7 +222,15 @@ public static class RpcParameterValidator
                 Require(IsKnownMode(RpcProtocol.ParseParameters<SetModeParams>(request).Mode), "Launcher mode is invalid.", request);
                 break;
             case RpcMethods.SelectTab:
-                Require(RpcProtocol.ParseParameters<SelectTabParams>(request).Tab is >= 1 and <= 10, "Tab must be between 1 and 10.", request);
+                Require(RpcProtocol.ParseParameters<SelectTabParams>(request).Tab is >= 1 and <= MaximumTabSlot, "Tab must be between 1 and 45.", request);
+                break;
+            case RpcMethods.ShiftTabRow:
+                Require(RpcProtocol.ParseParameters<ShiftTabRowParams>(request).Delta is -1 or 1, "Tab row delta must be -1 or 1.", request);
+                break;
+            case RpcMethods.SetTabOrder:
+                var order = RpcProtocol.ParseParameters<SetTabOrderParams>(request).Order;
+                Require(order is { Count: >= 1 and <= MaximumTabSlot } && order.All(slot => slot is >= 1 and <= MaximumTabSlot) && order.Distinct().Count() == order.Count,
+                    "Tab order must list each tab slot once.", request);
                 break;
             case RpcMethods.SetQuery:
                 Require(RpcProtocol.ParseParameters<SetQueryParams>(request).Query is { Length: <= 512 }, "Query must be present and at most 512 characters.", request);
@@ -398,6 +408,8 @@ public static class RpcParameterValidator
         }
     }
 
+    private const int MaximumTabSlot = Automator.Core.Launcher.TabLayout.MaximumSlots;
+
     private static bool IsAbsoluteFilePath(string? path) => !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path) && path.Length <= 4096;
 
     private static void ValidateModuleId(string? moduleId, RpcRequest request) =>
@@ -409,7 +421,7 @@ public static class RpcParameterValidator
     {
         if (context is null) return;
         Require(context.Role is "launcher" or "workspace", "Host window role is invalid.", request);
-        Require(context.SelectedTab is >= 1 and <= 10, "Host window tab must be between 1 and 10.", request);
+        Require(context.SelectedTab is >= 1 and <= MaximumTabSlot, "Host window tab must be between 1 and 45.", request);
     }
 
     private static bool IsKnownMode(string? mode) => mode is "launcher" or "catalog" or "settings" or "recordingHotkey" or "aliasEditing";
@@ -441,6 +453,8 @@ public static class RpcMethods
     public const string RestoreForeground = "launcher/restoreForeground";
     public const string SetMode = "launcher/setMode";
     public const string SelectTab = "launcher/selectTab";
+    public const string ShiftTabRow = "launcher/shiftTabRow";
+    public const string SetTabOrder = "launcher/setTabOrder";
     public const string SetQuery = "launcher/setQuery";
     public const string OpenCatalog = "launcher/openCatalog";
     public const string SelectCatalogApp = "catalog/select";

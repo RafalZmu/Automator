@@ -39,7 +39,9 @@ public sealed record BackendUiState(
     bool Busy,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Error,
     string MatchKind,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? MatchedBindingId);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? MatchedBindingId,
+    IReadOnlyList<int> TabOrder,
+    int TabRow);
 
 public sealed record BackendInitializeResult(BackendUiState State, bool HookInstalled, int HookInstallErrorCode, string SessionId);
 

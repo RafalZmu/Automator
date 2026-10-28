@@ -21,9 +21,11 @@ public sealed record LauncherSnapshot(
     LauncherMode Mode,
     IReadOnlyList<AppBinding> Bindings,
     IReadOnlyList<AppBinding> CatalogApps,
-    AppBinding? AliasEditCandidate);
+    AppBinding? AliasEditCandidate,
+    IReadOnlyList<int> TabOrder,
+    int TabRow);
 
-public sealed record LauncherNavigationState(bool Visible, int SelectedTab, LauncherMode Mode);
+public sealed record LauncherNavigationState(bool Visible, int SelectedTab, LauncherMode Mode, int TabRowCount = 1);
 
 /// <summary>Holds UI-neutral launcher state and enforces context-sensitive global-key rules.</summary>
 public sealed class LauncherSession
@@ -37,6 +39,8 @@ public sealed class LauncherSession
     private string _query = string.Empty;
     private string? _previousForegroundHwnd;
     private int _selectedTab = 1;
+    private IReadOnlyList<int> _tabOrder;
+    private int _tabRow;
     private long _revision;
     private bool _visible;
 
@@ -44,6 +48,7 @@ public sealed class LauncherSession
     {
         ArgumentNullException.ThrowIfNull(settings);
         _bindings = settings.Bindings.Select(Clone).ToList();
+        _tabOrder = TabLayout.Normalize(settings.TabOrder, LauncherTabRegistry.Tabs.Count);
     }
 
     public LauncherSnapshot Snapshot
@@ -61,7 +66,7 @@ public sealed class LauncherSession
     {
         get
         {
-            lock (_sync) return new LauncherNavigationState(_visible, _selectedTab, _mode);
+            lock (_sync) return new LauncherNavigationState(_visible, _selectedTab, _mode, TabLayout.RowCount(_tabOrder.Count));
         }
     }
 
@@ -72,6 +77,7 @@ public sealed class LauncherSession
         {
             _visible = true;
             _selectedTab = 1;
+            _tabRow = 0;
             _query = string.Empty;
             _mode = LauncherMode.Launcher;
             _previousForegroundHwnd = previousForegroundHwnd;
@@ -104,7 +110,8 @@ public sealed class LauncherSession
         lock (_sync)
         {
             if (!_visible || !launcherNativeForeground || _mode is not (LauncherMode.Launcher or LauncherMode.Catalog)) return false;
-            _selectedTab = tab.Value + 1;
+            if (TabLayout.SlotAt(_tabOrder, _tabRow, tab.Value + 1) is not { } slot) return false;
+            _selectedTab = slot;
             _query = string.Empty;
             _mode = LauncherMode.Launcher;
             _catalogApps = [];
@@ -116,17 +123,43 @@ public sealed class LauncherSession
 
     public bool SelectTab(int tab)
     {
-        if (tab is < 1 or > 10) return false;
         lock (_sync)
         {
+            if (tab < 1 || tab > _tabOrder.Count) return false;
             if (_selectedTab == tab && _mode == LauncherMode.Launcher) return true;
             _selectedTab = tab;
+            _tabRow = TabLayout.RowOfSlot(_tabOrder, tab);
             _query = string.Empty;
             _mode = LauncherMode.Launcher;
             _catalogApps = [];
             _aliasEditCandidate = null;
             BumpRevision();
             return true;
+        }
+    }
+
+    /// <summary>Moves the focused tab row by <paramref name="delta"/> rows, wrapping at both ends. The selected tab is unchanged.</summary>
+    public bool ShiftTabRow(int delta, bool launcherNativeForeground = true)
+    {
+        lock (_sync)
+        {
+            var rows = TabLayout.RowCount(_tabOrder.Count);
+            if (rows < 2 || !_visible || !launcherNativeForeground || _mode is not (LauncherMode.Launcher or LauncherMode.Catalog)) return false;
+            _tabRow = ((_tabRow + delta) % rows + rows) % rows;
+            BumpRevision();
+            return true;
+        }
+    }
+
+    /// <summary>Replaces the tab order. Invalid or repeated slots are dropped and the launcher stays first.</summary>
+    public void SetTabOrder(IEnumerable<int> order)
+    {
+        ArgumentNullException.ThrowIfNull(order);
+        lock (_sync)
+        {
+            _tabOrder = TabLayout.Normalize(order, LauncherTabRegistry.Tabs.Count);
+            _tabRow = Math.Min(_tabRow, TabLayout.RowCount(_tabOrder.Count) - 1);
+            BumpRevision();
         }
     }
 
@@ -315,7 +348,9 @@ public sealed class LauncherSession
         _mode,
         _bindings.Select(Clone).ToArray(),
         _catalogApps.Select(Clone).ToArray(),
-        _aliasEditCandidate is null ? null : Clone(_aliasEditCandidate));
+        _aliasEditCandidate is null ? null : Clone(_aliasEditCandidate),
+        _tabOrder.ToArray(),
+        _tabRow);
 
     private void BumpRevision() => _revision = checked(_revision + 1);
 

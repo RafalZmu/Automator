@@ -41,6 +41,8 @@ const api: AutomatorBridge = Object.freeze({
   confirmPrimaryFocus: (nonce: string, mode: FocusRequest['mode'], focused: boolean) => ipcRenderer.invoke('automator:confirm-focus', { nonce, mode, focused }),
   close: () => ipcRenderer.invoke('automator:close'),
   selectTab: (tab: number) => ipcRenderer.invoke('automator:select-tab', { tab }),
+  shiftTabRow: (delta: -1 | 1) => ipcRenderer.invoke('automator:shift-tab-row', { delta }),
+  setTabOrder: (order: number[]) => ipcRenderer.invoke('automator:set-tab-order', { order }),
   setQuery: (query: string) => ipcRenderer.invoke('automator:set-query', { query }),
   setTextEntryFocused: (focused: boolean) => ipcRenderer.invoke('automator:set-text-entry-focused', { focused }) as Promise<boolean>,
   setSidePanel: (open: boolean, animate = true) => ipcRenderer.invoke('automator:set-side-panel', { open, animate }) as Promise<boolean>,

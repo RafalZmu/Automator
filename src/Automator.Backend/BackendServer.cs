@@ -233,6 +233,12 @@ public sealed class BackendServer : IAsyncDisposable
                 ClearError();
                 await PublishStateAsync().ConfigureAwait(false);
                 return GetState();
+            case RpcMethods.ShiftTabRow:
+                _session!.ShiftTabRow(RpcProtocol.ParseParameters<ShiftTabRowParams>(request).Delta);
+                await PublishStateAsync().ConfigureAwait(false);
+                return GetState();
+            case RpcMethods.SetTabOrder:
+                return await SetTabOrderAsync(RpcProtocol.ParseParameters<SetTabOrderParams>(request).Order).ConfigureAwait(false);
             case RpcMethods.SetQuery:
                 return await SetQueryAsync(RpcProtocol.ParseParameters<SetQueryParams>(request).Query).ConfigureAwait(false);
             case RpcMethods.OpenCatalog:
@@ -1109,7 +1115,9 @@ public sealed class BackendServer : IAsyncDisposable
             _busy,
             _error,
             match.Kind.ToString(),
-            match.Binding?.Id);
+            match.Binding?.Id,
+            session.TabOrder,
+            session.TabRow);
     }
 
     private BindingUiState ToBindingState(AppBinding binding) => new(
@@ -1256,6 +1264,20 @@ public sealed class BackendServer : IAsyncDisposable
         return GetState();
     }
 
+    private async Task<BackendUiState> SetTabOrderAsync(IReadOnlyList<int> requested)
+    {
+        var order = TabLayout.Normalize(requested, LauncherTabRegistry.Tabs.Count).ToList();
+        var settings = _settings! with { TabOrder = order };
+        // Persist before changing the live order so a failed write keeps the tab bar as it was.
+        _ = SettingsSerializer.Serialize(settings);
+        _settingsStore!.Save(settings);
+        _settings = settings;
+        _session!.SetTabOrder(order);
+        ClearError();
+        await PublishStateAsync().ConfigureAwait(false);
+        return GetState();
+    }
+
     private async Task<BackendUiState> UpdateSettingsAsync(SettingsUpdateParams parameters)
     {
         var settings = new LauncherSettings
@@ -1265,7 +1287,8 @@ public sealed class BackendServer : IAsyncDisposable
             StartWithWindows = parameters.StartWithWindows,
             Bindings = parameters.Bindings.Select(binding => new AppBinding(
                 binding.Id, binding.Name, binding.TargetPath, binding.Alias, binding.Arguments)).ToList(),
-            ModuleSettings = _settings!.ModuleSettings.Select(entry => entry with { Value = entry.Value.Clone() }).ToList()
+            ModuleSettings = _settings!.ModuleSettings.Select(entry => entry with { Value = entry.Value.Clone() }).ToList(),
+            TabOrder = _settings.TabOrder.ToList()
         };
         _ = SettingsSerializer.Serialize(settings); // Full schema validation before any persistent or hook mutation.
         _settingsStore!.Save(settings);
@@ -1647,6 +1670,11 @@ public sealed class BackendServer : IAsyncDisposable
                 }
                 break;
             }
+            case NavigationKeyAction.PreviousTabRow:
+            case NavigationKeyAction.NextTabRow:
+                if (_session.ShiftTabRow(action == NavigationKeyAction.NextTabRow ? 1 : -1, launcherNativeForeground: nativeForeground))
+                    await PublishStateAsync().ConfigureAwait(false);
+                break;
             case NavigationKeyAction.OpenCatalog:
                 await BeginCatalogLoadingAsync().ConfigureAwait(false);
                 break;
