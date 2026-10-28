@@ -14,7 +14,7 @@ import {
 import type { AutomationHttpIpcResponse } from '../contracts/automationHttpIpc.ts';
 import type { RunActivitySnapshot } from '../contracts/activity.ts';
 import type { McpStatus } from '../contracts/mcp.ts';
-import { normalizeTabOrder, rowOfSlot, shiftRow } from './tabLayout';
+import { normalizeTabOrder, rowOfSlot, shiftRow } from './tabLayout.ts';
 import type { AutomatorBridge, FocusRequest, HostInfo, InitialState } from './types.d';
 
 const tabs: BackendUiState['tabs'] = [

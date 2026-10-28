@@ -455,7 +455,7 @@ Run this packaged lifecycle case separately with npm.cmd run test:packaged-lifec
 **Steps**
 
 1. Launch the isolated compact host and verify the tab bar shows nine tabs and the `1/2` row indicator.
-2. Press Down in the launcher search box; verify the bar shows only Quick notes and the indicator reads `2/2`.
+2. Press Down in the empty Quick Actions search box; verify the bar shows only Quick notes and the indicator reads `2/2`.
 3. Blur the search box, press 2 (no tab at that position, selection unchanged), then 1 (Quick notes opens).
 4. Press Up, then 2.
 

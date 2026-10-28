@@ -698,11 +698,13 @@ export function App() {
       if (slot !== undefined) changeTab(slot);
       return;
     }
-    // Up and Down move between rows. Text fields keep their arrows, except the launcher search box, which has no use for them.
-    const ownsArrows = isEditing && target !== searchRef.current
+    // Up and Down move between rows. Text fields keep their arrows, except the empty launcher and command search boxes, which have nothing to move through.
+    const isEmptyNavigationInput = target instanceof HTMLInputElement && target.value === ''
+      && (target === searchRef.current || target.id === 'quick-actions-search' || target.id === 'tab-command-input');
+    const ownsArrows = isEditing && !isEmptyNavigationInput
       || (target instanceof HTMLElement && target.closest('[role="listbox"], [role="menu"], [role="combobox"]') !== null);
     if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && totalRows > 1 && state.mode === 'launcher'
-        && !ownsArrows && !hasModifier && !quickActionsHomeRef.current) {
+        && !ownsArrows && !hasModifier) {
       event.preventDefault();
       changeTabRow(event.key === 'ArrowDown' ? 1 : -1);
     }
