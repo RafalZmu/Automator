@@ -81,6 +81,8 @@ export interface AutomatorBridge {
   setTimerOverlay(enabled: boolean): Promise<NotificationPrefs>;
   setOverlayColor(color: string): Promise<NotificationPrefs>;
   setOverlayMoving(moving: boolean): Promise<boolean>;
+  getOverlayMoving(): Promise<boolean>;
+  onOverlayMoveEnded(listener: () => void): () => void;
   resetOverlayPosition(): Promise<NotificationPrefs>;
   getMcpStatus(): Promise<McpStatus>;
   setMcpEnabled(enabled: boolean): Promise<McpStatus>;

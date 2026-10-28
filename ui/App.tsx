@@ -122,8 +122,16 @@ function SettingsDialog({
   useEffect(() => {
     if (!open) return;
     let current = true;
-    bridge.getNotificationPrefs().then((prefs) => { if (current) { setTaskToasts(prefs.taskToasts); setTimerOverlay(prefs.timerOverlay); setOverlayColor(prefs.overlayColor); setOverlayMoving(false); } }).catch(() => undefined);
-    return () => { current = false; };
+    bridge.getNotificationPrefs().then((prefs) => { if (current) { setTaskToasts(prefs.taskToasts); setTimerOverlay(prefs.timerOverlay); setOverlayColor(prefs.overlayColor); } }).catch(() => undefined);
+    bridge.getOverlayMoving().then((moving) => { if (current) setOverlayMoving(moving); }).catch(() => undefined);
+    const stopListening = bridge.onOverlayMoveEnded(() => setOverlayMoving(false));
+    return () => {
+      current = false;
+      stopListening();
+      // Closing Settings (Done, Esc, clicking outside) must not leave the overlay capturing the mouse.
+      setOverlayMoving(false);
+      bridge.setOverlayMoving(false).catch(() => undefined);
+    };
   }, [open, bridge]);
 
   useEffect(() => {

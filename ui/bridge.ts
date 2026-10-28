@@ -169,6 +169,8 @@ class BrowserPreviewBridge implements AutomatorBridge {
   async setTimerOverlay(enabled: boolean) { this.timerOverlay = enabled; return this.prefs(); }
   async setOverlayColor(color: string) { this.overlayColor = color; return this.prefs(); }
   async setOverlayMoving(moving: boolean) { return moving; }
+  async getOverlayMoving() { return false; }
+  onOverlayMoveEnded() { return () => undefined; }
   async resetOverlayPosition() { this.overlayPosition = null; return this.prefs(); }
   private mcp: McpStatus = { enabled: true, state: 'listening', port: 47821, url: 'http://127.0.0.1:47821/mcp', error: null };
   async getMcpStatus() { return { ...this.mcp }; }

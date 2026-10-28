@@ -91,6 +91,8 @@ const api: AutomatorBridge = Object.freeze({
   setTimerOverlay: (enabled: boolean) => ipcRenderer.invoke('automator:set-timer-overlay', enabled) as Promise<{ taskToasts: boolean; timerOverlay: boolean; overlayColor: string; overlayPosition: { x: number; y: number } | null }>,
   setOverlayColor: (color: string) => ipcRenderer.invoke('automator:set-overlay-color', color) as Promise<{ taskToasts: boolean; timerOverlay: boolean; overlayColor: string; overlayPosition: { x: number; y: number } | null }>,
   setOverlayMoving: (moving: boolean) => ipcRenderer.invoke('automator:set-overlay-moving', moving) as Promise<boolean>,
+  getOverlayMoving: () => ipcRenderer.invoke('automator:get-overlay-moving') as Promise<boolean>,
+  onOverlayMoveEnded: (listener: () => void) => listen<void>('automator:overlay-move-ended', listener),
   resetOverlayPosition: () => ipcRenderer.invoke('automator:reset-overlay-position') as Promise<{ taskToasts: boolean; timerOverlay: boolean; overlayColor: string; overlayPosition: { x: number; y: number } | null }>,
   getMcpStatus: async () => mcpStatusSchema.parse(await ipcRenderer.invoke('automator:mcp-get-status')),
   setMcpEnabled: async (enabled: boolean) => mcpStatusSchema.parse(await ipcRenderer.invoke('automator:mcp-set-enabled', enabled)),

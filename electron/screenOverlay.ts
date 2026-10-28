@@ -93,6 +93,18 @@ export function computeOverlayBounds(anchor: OverlayPosition, size?: { width: nu
   return { x: anchor.x - width, y: anchor.y - height, width, height };
 }
 
+/**
+ * Where the overlay window should be, or null to leave it alone. Normally it sits at its anchor. While the user may be dragging it keeps wherever it is
+ * (anchored at its bottom-right) and only follows size changes beyond a small tolerance (Electron rounds sizes on scaled displays, so exact comparisons
+ * would make it creep). `force` (used by Reset) always goes to the anchor.
+ */
+export function overlayPlacement(options: { moving: boolean; force?: boolean; current: Area; anchor: OverlayPosition; size?: { width: number; height: number } }): Area | null {
+  if (!options.moving || options.force) return computeOverlayBounds(options.anchor, options.size);
+  const { current } = options;
+  const next = computeOverlayBounds({ x: current.x + current.width, y: current.y + current.height }, options.size);
+  return Math.abs(next.width - current.width) > 2 || Math.abs(next.height - current.height) > 2 ? next : null;
+}
+
 function maxOverlayHeight(): number {
   return OVERLAY_MAX_ITEMS * OVERLAY_LINE_HEIGHT + 2 * OVERLAY_PADDING_Y;
 }

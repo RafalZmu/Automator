@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { computeOverlayBounds, defaultOverlayAnchor, formatOverlayDuration, isOverlayPosition, normalizeOverlayColor, overlayHtml, overlayItemsScript, overlayShadow, overlayStyleScript, readOverlayTimers, resolveOverlayAnchor, timerOverlayItems, DEFAULT_OVERLAY_COLOR, OVERLAY_LINE_HEIGHT, OVERLAY_MAX_ITEMS, OVERLAY_PADDING_Y, OVERLAY_WIDTH } from '../electron/screenOverlay.ts';
+import { computeOverlayBounds, overlayPlacement, defaultOverlayAnchor, formatOverlayDuration, isOverlayPosition, normalizeOverlayColor, overlayHtml, overlayItemsScript, overlayShadow, overlayStyleScript, readOverlayTimers, resolveOverlayAnchor, timerOverlayItems, DEFAULT_OVERLAY_COLOR, OVERLAY_LINE_HEIGHT, OVERLAY_MAX_ITEMS, OVERLAY_PADDING_Y, OVERLAY_WIDTH } from '../electron/screenOverlay.ts';
 
 const timer = (extra = {}) => ({ id: 't1', description: 'Write report', status: 'running', elapsedMilliseconds: 61_000, sampledUtc: '2026-10-26T10:00:00Z', ...extra });
 const at = (iso) => Date.parse(iso);
@@ -88,4 +88,19 @@ test('the style script recolours the page and toggles move mode', () => {
   const moving = overlayStyleScript('#ff0000', true);
   assert.ok(moving.includes('"#ff0000"') && moving.includes("toggle('moving',true)"));
   assert.ok(overlayStyleScript('#ff0000', false).includes("toggle('moving',false)"));
+});
+
+test('placement follows the anchor, but only follows size changes while moving, and Reset forces the anchor', () => {
+  const anchor = { x: 1000, y: 700 };
+  const size = { width: 140, height: 42 };
+  const dragged = { x: 300, y: 200, width: 135, height: 41 };
+  // Not moving: always the anchor.
+  assert.deepEqual(overlayPlacement({ moving: false, current: dragged, anchor, size }), { x: 860, y: 658, width: 140, height: 42 });
+  // Moving: rounding-sized differences leave the dragged window alone.
+  assert.equal(overlayPlacement({ moving: true, current: dragged, anchor, size: { width: 136, height: 42 } }), null);
+  // Moving: a real size change keeps the bottom-right corner where the window is.
+  const grown = overlayPlacement({ moving: true, current: dragged, anchor, size: { width: 200, height: 42 } });
+  assert.deepEqual({ right: grown.x + grown.width, bottom: grown.y + grown.height, width: grown.width }, { right: 435, bottom: 241, width: 200 });
+  // Reset while moving goes to the (default) anchor immediately.
+  assert.deepEqual(overlayPlacement({ moving: true, force: true, current: dragged, anchor, size }), { x: 860, y: 658, width: 140, height: 42 });
 });

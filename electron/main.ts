@@ -35,7 +35,7 @@ import { getScriptRunnerPathPickerSpec } from './scriptRunnerPathPicker';
 import { getCodexScopePathPickerSpec } from './codexScopePathPicker';
 import { authorizeCodexExport, extensionForCodexFormat, writeCodexSourceCreateNew } from './codexExport';
 import { mcpSetEnabledSchema, mcpSetPortSchema } from '../contracts/mcp';
-import { computeOverlayBounds, isOverlayColor, normalizeOverlayColor, overlayHtml, overlayItemsScript, overlayStyleScript, readOverlayTimers, resolveOverlayAnchor, timerOverlayItems, OVERLAY_MOVE_SAMPLE, OVERLAY_POLL_MS } from './screenOverlay';
+import { computeOverlayBounds, isOverlayColor, normalizeOverlayColor, overlayHtml, overlayPlacement, overlayItemsScript, overlayStyleScript, readOverlayTimers, resolveOverlayAnchor, timerOverlayItems, OVERLAY_MOVE_SAMPLE, OVERLAY_POLL_MS } from './screenOverlay';
 import { createMcpBackend } from './mcp/backendBridge';
 import { McpController } from './mcp/controller';
 import type { TokenProtector } from './mcp/config';
@@ -635,12 +635,9 @@ function overlayAnchor() {
   return resolveOverlayAnchor(notificationPrefs.overlayPosition, screen.getAllDisplays().map((display) => display.bounds), screen.getPrimaryDisplay().workArea);
 }
 
-function placeOverlay(target: BrowserWindow): void {
-  if (!overlayMoving) return void target.setBounds(computeOverlayBounds(overlayAnchor(), overlaySize), false);
-  // While the user may be dragging, keep wherever the window is (anchored at its bottom-right) and only follow size changes.
-  const current = target.getBounds();
-  const next = computeOverlayBounds({ x: current.x + current.width, y: current.y + current.height }, overlaySize);
-  if (Math.abs(next.width - current.width) > 2 || Math.abs(next.height - current.height) > 2) target.setBounds(next, false);
+function placeOverlay(target: BrowserWindow, force = false): void {
+  const bounds = overlayPlacement({ moving: overlayMoving, force, current: target.getBounds(), anchor: overlayAnchor(), size: overlaySize });
+  if (bounds) target.setBounds(bounds, false);
 }
 
 /** Pushes the text colour and move mode into the open overlay page. */
@@ -657,6 +654,7 @@ function endOverlayMove(): void {
   overlayMoveTimer = undefined;
   if (!overlayMoving) return;
   overlayMoving = false;
+  for (const window of liveWindows()) window.webContents.send('automator:overlay-move-ended');
   saveNotificationPrefs(notificationPrefsPath, notificationPrefs);
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     overlayWindow.setIgnoreMouseEvents(true);
@@ -1157,11 +1155,12 @@ function registerIpc(): void {
     }
     return overlayMoving;
   });
+  ipcMain.handle('automator:get-overlay-moving', (event) => { assertMainFrame(event); return overlayMoving; });
   ipcMain.handle('automator:reset-overlay-position', (event) => {
     assertMainFrame(event);
     notificationPrefs = { ...notificationPrefs, overlayPosition: null };
     saveNotificationPrefs(notificationPrefsPath, notificationPrefs);
-    if (overlayWindow && !overlayWindow.isDestroyed() && overlayReady) placeOverlay(overlayWindow);
+    if (overlayWindow && !overlayWindow.isDestroyed() && overlayReady) placeOverlay(overlayWindow, true);
     return { ...notificationPrefs };
   });
   ipcMain.handle('automator:mcp-get-status', (event) => { assertMainFrame(event); return requireMcp().status(); });
