@@ -485,6 +485,8 @@ test('tab rows page with the arrow keys and number keys follow the focused row',
   const { app, page } = await launchHost('tab-rows');
   const selected = async () => (await page.evaluate(() => window.automator.getInitialState())).state.selectedTab;
   const indicator = page.getByLabel('Tab row 2 of 2', { exact: true });
+  // Keys reach the page only from inside it, so put focus on a tab button (not a text field) before each key.
+  const focusTab = () => page.getByRole('tab').first().focus();
   try {
     await page.getByLabel('Tab row 1 of 2', { exact: true }).waitFor({ state: 'visible' });
     assert.equal(await page.getByRole('tab').count(), 9, 'the first row shows nine tabs');
@@ -492,13 +494,15 @@ test('tab rows page with the arrow keys and number keys follow the focused row',
     await page.keyboard.press('ArrowDown');
     await indicator.waitFor({ state: 'visible' });
     assert.equal(await page.getByRole('tab').count(), 1, 'the second row shows only Quick notes');
-    await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
+    await focusTab();
     await page.keyboard.press('2');
     assert.equal(await selected(), 1, 'key 2 of row two holds no tab');
     await page.keyboard.press('1');
     await page.waitForFunction(async () => (await window.automator.getInitialState()).state.selectedTab === 10);
+    await focusTab();
     await page.keyboard.press('ArrowUp');
     await page.getByLabel('Tab row 1 of 2', { exact: true }).waitFor({ state: 'visible' });
+    await focusTab();
     await page.keyboard.press('2');
     await page.waitForFunction(async () => (await window.automator.getInitialState()).state.selectedTab === 2);
   } finally { await app.close(); }
