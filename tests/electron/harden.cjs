@@ -4,8 +4,10 @@
 const { execFileSync } = require('node:child_process');
 const { _electron: electron } = require('playwright');
 
-const CALL_TIMEOUT_MS = 45_000;
-const CLOSE_TIMEOUT_MS = 30_000;
+// Generous against CI timings: the slowest whole test takes 22 s, so a single call or close that needs more is stuck.
+const LAUNCH_TIMEOUT_MS = 30_000;
+const CALL_TIMEOUT_MS = 20_000;
+const CLOSE_TIMEOUT_MS = 15_000;
 const OUTPUT_LINES = 40;
 const live = new Set();
 
@@ -66,7 +68,7 @@ function boundApp(app, name) {
 const launch = electron.launch.bind(electron);
 electron.launch = async (options) => {
   const name = options?.env?.AUTOMATOR_BUILD_ID ?? 'electron';
-  return boundApp(await launch(options), name);
+  return boundApp(await launch({ ...options, timeout: Math.min(options?.timeout ?? LAUNCH_TIMEOUT_MS, LAUNCH_TIMEOUT_MS) }), name);
 };
 
 process.on('exit', () => { for (const child of live) killTree(child); });
