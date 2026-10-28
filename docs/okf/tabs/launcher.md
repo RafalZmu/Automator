@@ -27,7 +27,7 @@ See [TESTS.md](TESTS.md) for launcher, host, platform, and end-to-end cases with
 ### Code map
 
 
-The Quick Actions home also lists the open tasks from Quick notes (every unticked markdown checkbox, oldest note first) in the lower half of the panel, each with its note's title; the list is hidden when there are none, and selecting a task opens the Quick notes tab. The backend publishes the tasks as the `openTasks` value of the `notes` module state (`NotesModule.CreateOpenTaskStateValue`), refreshed at start and after every note save or delete, and cut to fit one state value with the full count kept.
+The Quick Actions home also lists the open tasks from Quick notes (every unticked markdown checkbox, oldest note first) in the lower half of the panel, grouped under the title of their note; the list is hidden when there are none, and selecting a task opens the Quick notes tab. The backend publishes the tasks as the `openTasks` value of the `notes` module state (`NotesModule.CreateOpenTaskStateValue`), refreshed at start and after every note save or delete, and cut to fit one state value with the full count kept.
 
 - `ui/App.tsx` composes launcher state, tabs, alias entry, and the Quick Actions home.
 - `ui/commands/QuickActionsHome.tsx` renders the global action-search home; shared command matching and registration live under `ui/commands`.
