@@ -46,6 +46,8 @@ public sealed class BackendServer : IAsyncDisposable
     private AutomationWorkTimeCoordinator? _workTimeCoordinator;
     private PlaywrightAutomationBrowserService? _browserAutomationService;
     private AutomationLibraryTransferService? _libraryTransferService;
+    private IAutomationLibraryStore? _notesLibrary;
+    private string _openTasksState = string.Empty;
     private AutomationVariableService? _variableService;
     private AutomationRunActivityService? _runActivityService;
     private AutomationCapabilityRegistry? _capabilityRegistry;
@@ -447,6 +449,12 @@ public sealed class BackendServer : IAsyncDisposable
                             parameters.ContractVersion, parameters.ActionVersion, parameters.Input, activeTab.Id,
                             context, _settings!.ModuleSettings, token).ConfigureAwait(false);
                         status = result.Status;
+                        if (status != AutomationStatus.Error && parameters.ModuleId == NotesModule.IdValue
+                            && parameters.ActionId is "saveNote" or "deleteNote")
+                        {
+                            await RefreshOpenTasksAsync().ConfigureAwait(false);
+                            await PublishStateAsync().ConfigureAwait(false);
+                        }
                         return result;
                     }
                     catch (OperationCanceledException)
@@ -492,6 +500,21 @@ public sealed class BackendServer : IAsyncDisposable
         finally
         {
             if (detached) await context.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Reads the unticked note checkboxes so the launch panel can list them without opening Quick notes.</summary>
+    private async Task RefreshOpenTasksAsync()
+    {
+        if (_notesLibrary is null) return;
+        try
+        {
+            var records = await _notesLibrary.ListAsync(NotesModule.IdValue, NotesModule.NoteCollection, _lifetime.Token).ConfigureAwait(false);
+            _openTasksState = NotesModule.CreateOpenTaskStateValue(records);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _log?.Write(ApplicationLogLevel.Warning, "Notes.OpenTasksFailed", "Open note tasks could not be read.", exception);
         }
     }
 
@@ -972,6 +995,8 @@ public sealed class BackendServer : IAsyncDisposable
             fileExplorerMenuFactory: moduleId => moduleId == ScriptRunnerModule.IdValue ? explorerMenu
                 : throw new InvalidOperationException("Explorer menu registration is limited to Script Runner."));
         _automationModules = LauncherTabRegistry.CreateAutomationRegistry(_capabilityRegistry, _variableService, dataDirectory, explorerExecutable);
+        _notesLibrary = libraryStore;
+        await RefreshOpenTasksAsync().ConfigureAwait(false);
         if (explorerRegistrationEnabled)
         {
             await using var menuContext = _capabilityRegistry.CreateContext(new(ScriptRunnerModule.IdValue,
@@ -1087,6 +1112,16 @@ public sealed class BackendServer : IAsyncDisposable
             {
                 // Unreadable preferences publish no shortcuts; the tab reports the settings issue.
             }
+        }
+        // Unticked note checkboxes are published so the launch panel can list them without opening Quick notes.
+        var notesStateIndex = Array.FindIndex(moduleStates, item => item.ModuleId == NotesModule.IdValue);
+        if (notesStateIndex >= 0 && _openTasksState.Length > 0)
+        {
+            var values = new Dictionary<string, string>(moduleStates[notesStateIndex].Values, StringComparer.Ordinal)
+            {
+                [NotesModule.OpenTasksStateKey] = _openTasksState,
+            };
+            moduleStates[notesStateIndex] = moduleStates[notesStateIndex] with { Values = values };
         }
         return new BackendUiState(
             RpcProtocol.Version,

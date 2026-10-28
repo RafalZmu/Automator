@@ -19,6 +19,7 @@ import type { AutomatorBridge, FocusRequest, HostInfo, InitialState } from './ty
 import { launcherViewRegistry } from './viewRegistry';
 import { clampRow, keyOfSlot, normalizeTabOrder, rowOfSlot, shiftRow, slotAtKey, slotsInRow, swapSlots, tabRowCount } from './tabLayout';
 import { TabCommandBar } from './commands/TabCommandBar';
+import { readOpenTasks } from './contracts/notes';
 import { QuickActionsHome, type QuickAction } from './commands/QuickActionsHome';
 import { useAllTabCommandCatalog, useTabCommandResolver } from './commands/TabCommandRegistry';
 import type { TabCommand } from './commands/commandMatching';
@@ -747,6 +748,7 @@ export function App() {
       ? launcherViewRegistry[activeTab.kind as keyof typeof launcherViewRegistry]
       : launcherViewRegistry.reserved
     : launcherViewRegistry.launcher;
+  const openTasks = readOpenTasks(state.moduleStates.find((item) => item.moduleId === 'notes')?.values.openTasks);
   const quickActions: QuickAction[] = (() => {
     const noop = () => undefined;
     const bindings: QuickAction[] = state.bindings.map((binding) => ({
@@ -1040,7 +1042,7 @@ export function App() {
           registeredActionsForModule={(moduleId) => state.tabs.find((tab) => tab.id === moduleId)?.actions ?? []}
           onAction={(entry, action) => runActivityFollowUp(entry, action)}
         />{activeTab && <LatestModuleResult moduleId={activeTab.id} moduleTitle={activeTab.title} />}</div> : <FileExplorerLaunchContext.Provider value={{ request: explorerLaunches[0] ?? null, consume: consumeExplorerLaunch }}><AnimatePresence mode="wait" initial={false}>
-          {showQuickActions ? <QuickActionsHome key="quick-actions" actions={quickActions} onRun={runQuickAction}
+          {showQuickActions ? <QuickActionsHome key="quick-actions" actions={quickActions} openTasks={openTasks} onRun={runQuickAction}
             onAddApp={() => { setQuickActionsHome(false); void bridge.openCatalog().then(acceptState).catch((error) => setCommandError(errorMessage(error))); }}
             onOpenSettings={openSettings} onClose={() => { void runCommand(() => bridge.close()); }} />
           : launcherViewProps ? <ActiveView key={`${activeTab?.id}-${state.mode}`} {...launcherViewProps}>

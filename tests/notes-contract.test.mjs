@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_NOTES, MAX_NOTE_BODY_LENGTH, MAX_NOTE_TITLE_LENGTH, readNotes, validateNote } from '../ui/contracts/notes.ts';
+import { MAX_NOTES, MAX_NOTE_BODY_LENGTH, MAX_NOTE_TITLE_LENGTH, readNotes, readOpenTasks, validateNote } from '../ui/contracts/notes.ts';
 import { countCheckboxes, hasUntickedCheckbox, parseInline, parseMarkdown, toggleCheckbox } from '../ui/modules/notesMarkdown.ts';
 
 const todo = { id: 'todo', title: 'Todo', body: '- [ ] first\n- [x] second' };
@@ -91,4 +91,11 @@ test('parses inline markup and only links http and https addresses', () => {
   assert.deepEqual(parseInline('[site](https://example.com/a?b=1)'), [{ kind: 'link', href: 'https://example.com/a?b=1', children: [{ kind: 'text', text: 'site' }] }]);
   assert.deepEqual(parseInline('[bad](javascript:alert(1))'), [{ kind: 'text', text: '[bad](javascript:alert(1))' }]);
   assert.deepEqual(parseInline('snake_case_name <b>x</b>'), [{ kind: 'text', text: 'snake_case_name <b>x</b>' }]);
+});
+
+test('reads the published open tasks and ignores malformed state', () => {
+  const value = JSON.stringify({ total: 3, tasks: [{ note: 'Todo', text: 'first' }, { note: 'Todo', text: '' }, { note: 5, text: 'bad' }] });
+  assert.deepEqual(readOpenTasks(value), { total: 3, tasks: [{ note: 'Todo', text: 'first' }] });
+  for (const bad of [undefined, '', 'not json', '[]', '{"tasks":5}']) assert.deepEqual(readOpenTasks(bad), { total: 0, tasks: [] });
+  assert.equal(readOpenTasks('{"total":0,"tasks":[{"note":"a","text":"b"}]}').total, 1);
 });

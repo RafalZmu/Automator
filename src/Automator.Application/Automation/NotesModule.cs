@@ -26,6 +26,17 @@ public sealed class NotesModule : ILauncherTabModuleProvider
     /// </summary>
     public const int MaximumBodyLength = 3000;
 
+    /// <summary>Keeps the published open-task value under the 2048-character module state value limit.</summary>
+    public const int MaximumOpenTaskStateLength = 2000;
+    public const string OpenTasksStateKey = "openTasks";
+    private const int MaximumTaskTextLength = 100;
+    private const int MaximumTaskNoteLength = 40;
+    private const int MaximumOpenTasksConsidered = 200;
+
+    private static readonly Regex FencePattern = new(@"^\s*(`{3,}|~{3,})", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex UntickedTaskPattern = new(@"^\s*(?:[-*+]|\d+[.)])\s+\[ \](?:\s(.*))?$",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex LineBreakPattern = new(@"\r\n|\r|\n", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly Regex IdPattern = new("^[a-z0-9][a-z0-9._-]{0,63}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -135,6 +146,75 @@ public sealed class NotesModule : ILauncherTabModuleProvider
 
     private static AutomationResult Result(AutomationStatus status, string message, object data) => new(
         AutomationTabContract.CurrentVersion, status, message, JsonSerializer.SerializeToElement(data, JsonOptions), []);
+
+    /// <summary>
+    /// Builds the JSON the launch panel shows as open tasks: every unticked markdown checkbox outside fenced code, oldest note first.
+    /// The text is shortened and the list cut so the value always fits one module state value; <c>total</c> still counts every task.
+    /// </summary>
+    public static string CreateOpenTaskStateValue(IEnumerable<AutomationLibraryRecord> records)
+    {
+        var tasks = new List<(string Note, string Text)>();
+        var total = 0;
+        var notes = records.Select(TryReadNote).Where(note => note is not null).Cast<StoredNote>()
+            .OrderBy(note => note.Created, StringComparer.Ordinal).ThenBy(note => note.Id, StringComparer.Ordinal);
+        foreach (var note in notes)
+        {
+            foreach (var text in ReadOpenTasks(note.Body))
+            {
+                total++;
+                if (tasks.Count < MaximumOpenTasksConsidered) tasks.Add((Shorten(note.Title, MaximumTaskNoteLength), Shorten(text, MaximumTaskTextLength)));
+            }
+        }
+
+        var kept = new List<object>();
+        var json = Serialize(total, kept);
+        foreach (var (noteTitle, text) in tasks)
+        {
+            kept.Add(new { note = noteTitle, text });
+            var candidate = Serialize(total, kept);
+            if (candidate.Length > MaximumOpenTaskStateLength)
+            {
+                kept.RemoveAt(kept.Count - 1);
+                break;
+            }
+            json = candidate;
+        }
+        return json;
+    }
+
+    private static string Serialize(int total, List<object> tasks) =>
+        JsonSerializer.Serialize(new { total, tasks }, JsonOptions);
+
+    private static IEnumerable<string> ReadOpenTasks(string body)
+    {
+        char? fence = null;
+        foreach (var line in LineBreakPattern.Split(body))
+        {
+            var fenceMatch = FencePattern.Match(line);
+            if (fence is null)
+            {
+                if (fenceMatch.Success) { fence = fenceMatch.Groups[1].Value[0]; continue; }
+            }
+            else
+            {
+                if (fenceMatch.Success && fenceMatch.Groups[1].Value[0] == fence
+                    && line.Trim().Replace("`", string.Empty).Replace("~", string.Empty).Length == 0) fence = null;
+                continue;
+            }
+
+            var task = UntickedTaskPattern.Match(line);
+            if (!task.Success) continue;
+            var text = string.Join(' ', task.Groups[1].Value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            if (text.Length > 0) yield return text;
+        }
+    }
+
+    private static string Shorten(string value, int limit)
+    {
+        if (value.Length <= limit) return value;
+        var end = char.IsHighSurrogate(value[limit - 2]) ? limit - 2 : limit - 1;
+        return value[..end] + "\u2026";
+    }
 
     private sealed record StoredNote(string Id, string Title, string Body, string Created);
 
