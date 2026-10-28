@@ -1288,7 +1288,7 @@ public sealed class BackendServer : IAsyncDisposable
             Bindings = parameters.Bindings.Select(binding => new AppBinding(
                 binding.Id, binding.Name, binding.TargetPath, binding.Alias, binding.Arguments)).ToList(),
             ModuleSettings = _settings!.ModuleSettings.Select(entry => entry with { Value = entry.Value.Clone() }).ToList(),
-            TabOrder = _settings.TabOrder.ToList()
+            TabOrder = _settings!.TabOrder.ToList()
         };
         _ = SettingsSerializer.Serialize(settings); // Full schema validation before any persistent or hook mutation.
         _settingsStore!.Save(settings);
@@ -1354,6 +1354,7 @@ public sealed class BackendServer : IAsyncDisposable
         _settingsError = null;
         _keyboardHook!.SetOpener(settings.Hotkey);
         _session!.ReplaceBindings(settings.Bindings);
+        _session.SetTabOrder(settings.TabOrder);
         _launchScheduler!.CancelPending();
         ClearError();
         await PublishStateAsync().ConfigureAwait(false);

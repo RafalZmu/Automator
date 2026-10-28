@@ -526,7 +526,7 @@ export function App() {
   // Selecting a tab from elsewhere (activity, running-task pills) brings the Workspace to the row that holds it.
   useEffect(() => {
     if (isWorkspaceSurface && state) setWorkspaceRow(rowOfSlot(tabOrder, state.selectedTab));
-  }, [isWorkspaceSurface, state?.selectedTab, tabOrder]);
+  }, [isWorkspaceSurface, state?.selectedTab, tabOrder.join()]);
   const moduleState = activeTab ? state?.moduleStates.find((item) => item.moduleId === activeTab.id) : undefined;
   const capabilitySignature = activeTab?.capabilities.map(({ id, version }) => `${id}@${version}`).join(',') ?? '';
   const serviceContextKey = bridge && activeTab ? `${activeTab.id}|${capabilitySignature}` : '';

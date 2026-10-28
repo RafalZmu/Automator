@@ -29,8 +29,8 @@ public static class NavigationKeyPolicy
         if (textEntryFocused) return NavigationKeyAction.None;
         if (virtualKey is >= 0x31 and <= 0x39 or >= 0x61 and <= 0x69) return NavigationKeyAction.SelectTab;
         // Up and Down belong to the page unless there is more than one row of tabs to move between.
-        if (state.TabRowCount > 1 && virtualKey == 0x26) return NavigationKeyAction.PreviousTabRow;
-        if (state.TabRowCount > 1 && virtualKey == 0x28) return NavigationKeyAction.NextTabRow;
+        if (state.Mode == LauncherMode.Launcher && state.TabRowCount > 1 && virtualKey == 0x26) return NavigationKeyAction.PreviousTabRow;
+        if (state.Mode == LauncherMode.Launcher && state.TabRowCount > 1 && virtualKey == 0x28) return NavigationKeyAction.NextTabRow;
         return state.Mode == LauncherMode.Launcher && state.SelectedTab == 1 && virtualKey == 0xBF
             ? NavigationKeyAction.OpenCatalog
             : NavigationKeyAction.None;
