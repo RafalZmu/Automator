@@ -52,6 +52,25 @@ jobs:
       - name: Verify
         timeout-minutes: 20
         run: npm run verify
+      - name: Collect hang diagnostics
+        if: failure() || cancelled()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force diagnostics | Out-Null
+          Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'electron|node|dotnet|Automator|powershell|pwsh' } |
+            Select-Object ProcessId, ParentProcessId, Name, CreationDate, CommandLine | Format-List | Out-File diagnostics/processes.txt
+          Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object Id, ProcessName, MainWindowTitle | Format-Table -Auto | Out-File diagnostics/windows.txt
+          Get-ChildItem -Path artifacts/test-data -Recurse -Include *.jsonl, *.log -ErrorAction SilentlyContinue | ForEach-Object {
+            $target = Join-Path diagnostics ($_.FullName.Substring((Get-Location).Path.Length).TrimStart('\') -replace '[\\/:]', '_')
+            Copy-Item $_.FullName $target
+          }
+      - name: Upload hang diagnostics
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-hang-diagnostics
+          path: diagnostics
+          if-no-files-found: ignore
       # Electron/Playwright children can outlive a cancelled or hung step and hold the runner.
       - name: Stop leftover processes
         if: always()
