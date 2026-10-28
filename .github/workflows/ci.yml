@@ -16,7 +16,7 @@ jobs:
   # Fast feedback: platform-independent TypeScript checks and Node contract tests.
   node-linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,7 +32,8 @@ jobs:
   # Electron host, backend, and net10.0-windows test projects.
   verify-windows:
     runs-on: windows-latest
-    timeout-minutes: 60
+    # A healthy run takes about 6.5 minutes (Verify about 4); anything past 12 is hung, so fail it early.
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -44,8 +45,36 @@ jobs:
           dotnet-version: 10.0.x
           dotnet-quality: ga
       - run: npm ci
+        timeout-minutes: 5
       # Some spec projects are not part of Automator.sln, and the npm scripts build with --no-restore.
       - name: Restore .NET projects
         shell: pwsh
+        timeout-minutes: 5
         run: Get-ChildItem -Path src, tests -Filter *.csproj -Recurse | ForEach-Object { dotnet restore $_.FullName; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
-      - run: npm run verify
+      - name: Verify
+        timeout-minutes: 8
+        run: npm run verify
+      - name: Collect hang diagnostics
+        if: failure() || cancelled()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force diagnostics | Out-Null
+          Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'electron|node|dotnet|Automator|powershell|pwsh' } |
+            Select-Object ProcessId, ParentProcessId, Name, CreationDate, CommandLine | Format-List | Out-File diagnostics/processes.txt
+          Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object Id, ProcessName, MainWindowTitle | Format-Table -Auto | Out-File diagnostics/windows.txt
+          Get-ChildItem -Path artifacts/test-data -Recurse -Include *.jsonl, *.log -ErrorAction SilentlyContinue | ForEach-Object {
+            $target = Join-Path diagnostics ($_.FullName.Substring((Get-Location).Path.Length).TrimStart('\') -replace '[\\/:]', '_')
+            Copy-Item $_.FullName $target
+          }
+      - name: Upload hang diagnostics
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-hang-diagnostics
+          path: diagnostics
+          if-no-files-found: ignore
+      # Electron/Playwright children can outlive a cancelled or hung step and hold the runner.
+      - name: Stop leftover processes
+        if: always()
+        shell: pwsh
+        run: Get-Process electron, Automator.Backend, dotnet -ErrorAction SilentlyContinue | Stop-Process -Force
