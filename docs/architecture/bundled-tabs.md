@@ -38,7 +38,7 @@ Profiles are persisted in the `script-runner/profiles` SQLite collection. Each p
 
 ## Quick notes (slot 10)
 
-`NotesModule` is registered by `LauncherTabRegistry.CreateProviders` with the `notes` module ID and view kind. It declares no actions and no capabilities. The renderer reads and writes its `{ "notes": [{ id, title, body }] }` preferences through the module settings bridge, validates them with `ui/contracts/notes.ts`, renders the markdown body to React elements with `ui/modules/notesMarkdown.ts`, and saves each add, edit, delete, and checkbox tick immediately. Notes are plain JSON in `settings.json`, so they are not a place for secrets.
+`NotesModule` is registered by `LauncherTabRegistry.CreateProviders` with the `notes` module ID and view kind. It declares the `storage.library` capability and the `listNotes`, `saveNote`, and `deleteNote` actions, and keeps one `{ id, title, body, created }` record per note in its partition of the SQLite library. The renderer validates notes with `ui/contracts/notes.ts`, renders the markdown body to React elements with `ui/modules/notesMarkdown.ts`, and saves each add, edit, delete, and checkbox tick immediately through the actions. The host re-validates every note and limits the library to 50 notes of 3000 characters so the list result fits the 512 KiB data limit. Notes are stored unencrypted, so they are not a place for secrets.
 
 ## Codex (not bound to a slot)
 

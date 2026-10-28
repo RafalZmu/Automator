@@ -476,11 +476,12 @@ test('Snippets save and copy happy path keeps its buttons within visible bounds 
   } finally { await app.close(); }
 });
 
-test('Quick notes add, tick, edit, and delete happy path persists notes and shows the unticked dot', async () => {
+test('Quick notes add, tick, edit, and delete happy path stores notes in the library and shows the unticked dot', async () => {
   const { app, page } = await launchHost('quick-notes');
-  const savedNotes = async () => (await page.evaluate(() => window.automator.getModuleSettings({
-    contractVersion: 1, moduleId: 'notes', settingsVersion: 1,
-  }))).value.notes;
+  // Read the stored notes through the module's own list action, so the test sees what the library holds.
+  const savedNotes = () => page.evaluate(async () => (await window.automator.dispatchModuleAction({
+    requestId: crypto.randomUUID(), contractVersion: 1, moduleId: 'notes', actionId: 'listNotes', actionVersion: 1, input: {},
+  })).data.notes);
   try {
     await selectTab(page, 'Quick notes', 10);
     await clickButton(page, page, 'Add note');
@@ -496,8 +497,9 @@ test('Quick notes add, tick, edit, and delete happy path persists notes and show
     // Ticking the last open checkbox persists it and turns the dot green.
     await page.getByRole('checkbox', { name: 'milk' }).check();
     await page.getByRole('img', { name: 'All checkboxes ticked' }).waitFor({ state: 'visible' });
-    await page.waitForFunction(async () => (await window.automator.getModuleSettings({ contractVersion: 1, moduleId: 'notes', settingsVersion: 1 }))
-      .value.notes[0]?.body === '# Buy\n- [x] milk\n- [x] bread');
+    await page.waitForFunction(async () => (await window.automator.dispatchModuleAction({
+      requestId: crypto.randomUUID(), contractVersion: 1, moduleId: 'notes', actionId: 'listNotes', actionVersion: 1, input: {},
+    })).data.notes[0]?.body === '# Buy\n- [x] milk\n- [x] bread');
 
     // Collapsing hides the rendered note, and editing changes the title and text.
     await page.getByRole('button', { name: /^Shopping/ }).click();

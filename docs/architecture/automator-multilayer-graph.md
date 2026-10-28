@@ -101,7 +101,7 @@ flowchart LR
   registry -->|dispatches to| website
   snippets -->|stores text as module preferences| settings
   snippets -->|adds shortcut copy actions| search
-  notes -->|stores markdown notes as module preferences| settings
+  notes -->|stores markdown notes as library records| library
 
   launcher -->|app catalog and activation| windows
   script -->|runs saved scripts| processService

@@ -1,51 +1,56 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_NOTES, MAX_NOTE_BODY_LENGTH, parseNotesSettings, readNotesSettings, validateNotesSettings } from '../ui/contracts/notes.ts';
+import { MAX_NOTES, MAX_NOTE_BODY_LENGTH, MAX_NOTE_TITLE_LENGTH, readNotes, validateNote } from '../ui/contracts/notes.ts';
 import { countCheckboxes, hasUntickedCheckbox, parseInline, parseMarkdown, toggleCheckbox } from '../ui/modules/notesMarkdown.ts';
 
 const todo = { id: 'todo', title: 'Todo', body: '- [ ] first\n- [x] second' };
 const plain = { id: 'plain', title: 'Plain', body: 'Just text' };
 
-test('parses notes without changing their order or text', () => {
-  const settings = { notes: [todo, plain] };
-  assert.deepEqual(parseNotesSettings(settings), settings);
+test('accepts a note with an empty body and keeps line breaks and tabs', () => {
+  assert.deepEqual(validateNote(plain), []);
+  assert.deepEqual(validateNote({ ...plain, body: '' }), []);
+  assert.deepEqual(validateNote({ ...plain, body: 'a\r\n\tb' }), []);
 });
 
-test('allows an empty body, line breaks and tabs, but no other control characters', () => {
-  assert.deepEqual(validateNotesSettings({ notes: [{ ...plain, body: '' }, { ...todo, body: 'a\r\n\tb' }] }), []);
+test('rejects control characters other than line breaks and tabs in the text', () => {
   for (const body of ['bell\u0007', 'nul\u0000', 'escape\u001b[0m']) {
-    assert.ok(validateNotesSettings({ notes: [{ ...plain, body }] }).some((error) => /text/i.test(error)), `${JSON.stringify(body)} should be rejected`);
+    assert.ok(validateNote({ ...plain, body }).some((error) => /text/i.test(error)), `${JSON.stringify(body)} should be rejected`);
   }
 });
 
 test('requires a title of at most 128 characters without control characters', () => {
-  for (const title of ['', '   ', 'a'.repeat(129), 'tab\there']) {
-    assert.ok(validateNotesSettings({ notes: [{ ...plain, title }] }).some((error) => /title/i.test(error)), `${JSON.stringify(title)} should be rejected`);
+  assert.deepEqual(validateNote({ ...plain, title: 'a'.repeat(MAX_NOTE_TITLE_LENGTH) }), []);
+  for (const title of ['', '   ', 'a'.repeat(MAX_NOTE_TITLE_LENGTH + 1), 'tab\there']) {
+    assert.ok(validateNote({ ...plain, title }).some((error) => /title/i.test(error)), `${JSON.stringify(title)} should be rejected`);
   }
 });
 
-test('limits the body length', () => {
-  assert.deepEqual(validateNotesSettings({ notes: [{ ...plain, body: 'a'.repeat(MAX_NOTE_BODY_LENGTH) }] }), []);
-  assert.ok(validateNotesSettings({ notes: [{ ...plain, body: 'a'.repeat(MAX_NOTE_BODY_LENGTH + 1) }] }).length > 0);
+test('limits the text length', () => {
+  assert.deepEqual(validateNote({ ...plain, body: 'a'.repeat(MAX_NOTE_BODY_LENGTH) }), []);
+  assert.ok(validateNote({ ...plain, body: 'a'.repeat(MAX_NOTE_BODY_LENGTH + 1) }).length > 0);
 });
 
-test('requires a unique valid key for each note', () => {
-  assert.ok(validateNotesSettings({ notes: [todo, { ...plain, id: 'todo' }] }).some((error) => /key/i.test(error)));
-  assert.ok(validateNotesSettings({ notes: [{ ...plain, id: 'bad id' }] }).some((error) => /key/i.test(error)));
+test('requires a valid key', () => {
+  for (const id of ['', 'bad id', 'Upper', 'a'.repeat(65), 7, undefined]) {
+    assert.ok(validateNote({ ...plain, id }).some((error) => /key/i.test(error)), `${String(id)} should be rejected`);
+  }
+  assert.ok(validateNote(null).length > 0);
 });
 
-test('rejects malformed settings, too many notes, and an oversized payload', () => {
-  assert.throws(() => parseNotesSettings({ notes: 'not-an-array' }));
-  assert.throws(() => parseNotesSettings({}));
-  const many = Array.from({ length: MAX_NOTES + 1 }, (_, index) => ({ ...plain, id: `n${index}` }));
-  assert.ok(validateNotesSettings({ notes: many }).length > 0);
-  const large = Array.from({ length: 10 }, (_, index) => ({ ...plain, id: `n${index}`, body: 'x'.repeat(MAX_NOTE_BODY_LENGTH) }));
-  assert.ok(validateNotesSettings({ notes: large }).some((error) => /64 KiB/.test(error)));
+test('reads the saved notes in order', () => {
+  assert.deepEqual(readNotes({ notes: [todo, plain] }), [todo, plain]);
 });
 
-test('reads an invalid saved list as empty instead of exposing partial data', () => {
-  assert.deepEqual(readNotesSettings({ notes: [todo, { ...plain, title: '' }] }), { notes: [] });
-  assert.deepEqual(readNotesSettings(undefined), { notes: [] });
+test('skips invalid and repeated notes without hiding the others', () => {
+  const notes = readNotes({ notes: [todo, { ...plain, title: '' }, null, 'x', { ...todo, title: 'Again' }, { ...plain, id: 'second' }] });
+  assert.deepEqual(notes.map((note) => note.id), ['todo', 'second']);
+  assert.deepEqual(readNotes({ notes: 'no' }), []);
+  assert.deepEqual(readNotes(undefined), []);
+});
+
+test('never reads more notes than the limit', () => {
+  const many = Array.from({ length: MAX_NOTES + 5 }, (_, index) => ({ ...plain, id: `n${index}` }));
+  assert.equal(readNotes({ notes: many }).length, MAX_NOTES);
 });
 
 test('counts unticked checkboxes and ignores checkbox-like text in code and prose', () => {

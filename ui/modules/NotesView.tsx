@@ -1,8 +1,8 @@
 import { ChevronDown, ChevronRight, NotebookPen, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AutomationServices } from '../automationServices';
-import type { BackendUiState, ModuleSettingsUpdateRequest } from '../../contracts/rpc';
-import { MAX_NOTE_BODY_LENGTH, MAX_NOTES, readNotesSettings, validateNotesSettings, type Note, type NotesSettings } from '../contracts/notes';
+import type { BackendUiState } from '../../contracts/rpc';
+import { MAX_NOTE_BODY_LENGTH, MAX_NOTE_TITLE_LENGTH, MAX_NOTES, readNotes, validateNote, type Note } from '../contracts/notes';
 import { countCheckboxes, parseMarkdown, toggleCheckbox, type Block, type Inline } from './notesMarkdown';
 import './NotesView.css';
 
@@ -53,26 +53,23 @@ function NoteDot({ body }: { body: string }) {
     aria-label={open ? `${unticked} unticked checkbox${unticked === 1 ? '' : 'es'}` : 'All checkboxes ticked'} title={open ? `${unticked} unticked` : 'All ticked'} />;
 }
 
-export function NotesView({ tab }: ViewProps) {
-  const [settings, setSettings] = useState<NotesSettings>({ notes: [] });
+export function NotesView({ services }: ViewProps) {
+  const [notes, setNotes] = useState<Note[]>([]);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [draft, setDraft] = useState<Draft | null>(null);
-  const current = useRef(settings);
-  current.current = settings;
+  const current = useRef(notes);
+  current.current = notes;
 
   useEffect(() => {
     let alive = true;
     void (async () => {
       try {
-        const bridge = window.automator;
-        if (!bridge) throw new Error('The Automator settings bridge is unavailable.');
-        const value = await bridge.getModuleSettings({ contractVersion: tab.contractVersion, moduleId: tab.id, settingsVersion: tab.settingsVersion });
-        if (!alive) return;
-        setSettings(readNotesSettings(value.value));
-        if (validateNotesSettings(value.value).length) setNotice('Some saved notes were invalid and could not be loaded.');
+        const result = await services.modules.dispatch('listNotes', {});
+        if (result.status === 'error') throw new Error(result.message);
+        if (alive) setNotes(readNotes(result.data));
       } catch (error) {
         if (alive) setNotice(error instanceof Error ? error.message : 'Could not load notes.');
       } finally {
@@ -80,24 +77,36 @@ export function NotesView({ tab }: ViewProps) {
       }
     })();
     return () => { alive = false; };
-  }, [tab.contractVersion, tab.id, tab.settingsVersion]);
+  }, [services]);
 
-  /** Every change is written straight to the module preferences. The list on screen only changes once the write succeeded. */
-  const persist = async (next: NotesSettings, success = ''): Promise<boolean> => {
-    const errors = validateNotesSettings(next);
+  /** Saves one note through the host. The list on screen changes only once the write succeeded. */
+  const saveNote = async (note: Note, success = ''): Promise<boolean> => {
+    const errors = validateNote(note);
     if (errors.length) { setNotice(errors[0]); return false; }
-    const bridge = window.automator;
-    if (!bridge) { setNotice('The Automator settings bridge is unavailable.'); return false; }
     setBusy(true);
     try {
-      await bridge.updateModuleSettings({ contractVersion: tab.contractVersion, moduleId: tab.id, settingsVersion: tab.settingsVersion,
-        value: next as ModuleSettingsUpdateRequest['value'] });
-      current.current = next;
-      setSettings(next);
+      const result = await services.modules.dispatch('saveNote', note);
+      if (result.status === 'error') throw new Error(result.message);
+      const exists = current.current.some((item) => item.id === note.id);
+      setNotes(exists ? current.current.map((item) => item.id === note.id ? note : item) : [...current.current, note]);
       setNotice(success);
       return true;
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Could not save notes.');
+      setNotice(error instanceof Error ? error.message : 'Could not save the note.');
+      return false;
+    } finally { setBusy(false); }
+  };
+
+  const deleteNote = async (note: Note): Promise<boolean> => {
+    setBusy(true);
+    try {
+      const result = await services.modules.dispatch('deleteNote', { id: note.id });
+      if (result.status === 'error') throw new Error(result.message);
+      setNotes(current.current.filter((item) => item.id !== note.id));
+      setNotice('Note deleted.');
+      return true;
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not delete the note.');
       return false;
     } finally { setBusy(false); }
   };
@@ -114,15 +123,14 @@ export function NotesView({ tab }: ViewProps) {
   const saveDraft = async () => {
     if (!draft) return;
     const note: Note = { id: draft.id, title: draft.title.trim(), body: draft.body };
-    const notes = draft.isNew ? [...current.current.notes, note] : current.current.notes.map((item) => item.id === note.id ? note : item);
-    if (await persist({ notes }, 'Note saved.')) {
+    if (await saveNote(note, 'Note saved.')) {
       setDraft(null);
       setExpanded((open) => new Set(open).add(note.id));
     }
   };
 
   const remove = async (note: Note) => {
-    if (await persist({ notes: current.current.notes.filter((item) => item.id !== note.id) }, 'Note deleted.')) {
+    if (await deleteNote(note)) {
       setExpanded((open) => { const next = new Set(open); next.delete(note.id); return next; });
       setDraft((editing) => editing?.id === note.id ? null : editing);
     }
@@ -131,11 +139,11 @@ export function NotesView({ tab }: ViewProps) {
   const tick = (note: Note, line: number) => {
     const body = toggleCheckbox(note.body, line);
     if (body === note.body) return;
-    void persist({ notes: current.current.notes.map((item) => item.id === note.id ? { ...item, body } : item) });
+    void saveNote({ ...note, body });
   };
 
   const editor = (note: Draft) => <div className="note-editor">
-    <label>Title<input value={note.title} maxLength={128} placeholder="Shopping list" autoFocus
+    <label>Title<input value={note.title} maxLength={MAX_NOTE_TITLE_LENGTH} placeholder="Shopping list" autoFocus
       onChange={(event) => setDraft({ ...note, title: event.target.value })} /></label>
     <label>Note (markdown)<textarea value={note.body} maxLength={MAX_NOTE_BODY_LENGTH} rows={Math.min(12, Math.max(4, note.body.split('\n').length + 1))} spellCheck={false}
       placeholder={'Write text, a list, or a checklist:\n- [ ] first task\n- [x] done task'} onChange={(event) => setDraft({ ...note, body: event.target.value })} /></label>
@@ -148,13 +156,13 @@ export function NotesView({ tab }: ViewProps) {
   return <section className="notes-view" aria-label="Quick notes">
     <header className="notes-heading">
       <div><h1>Quick notes</h1><p>Short markdown notes. A red dot marks a note with an unticked checkbox.</p></div>
-      <button type="button" className="primary-button" onClick={startNew} disabled={!ready || busy || draft?.isNew === true || settings.notes.length >= MAX_NOTES}><Plus size={14} /> Add note</button>
+      <button type="button" className="primary-button" onClick={startNew} disabled={!ready || busy || draft?.isNew === true || notes.length >= MAX_NOTES}><Plus size={14} /> Add note</button>
     </header>
     {!ready && <p className="notes-status" role="status">Loading saved notes…</p>}
     {draft?.isNew && <article className="note-card">{editor(draft)}</article>}
-    {ready && settings.notes.length === 0 && !draft && <div className="notes-empty"><NotebookPen size={20} /><strong>No notes yet</strong><span>Add a note and use <code>- [ ]</code> for checkboxes.</span></div>}
+    {ready && notes.length === 0 && !draft && <div className="notes-empty"><NotebookPen size={20} /><strong>No notes yet</strong><span>Add a note and use <code>- [ ]</code> for checkboxes.</span></div>}
     <div className="notes-list">
-      {settings.notes.map((note) => {
+      {notes.map((note) => {
         const open = expanded.has(note.id);
         const editing = draft?.id === note.id && !draft.isNew;
         const panel = `note-panel-${note.id}`;

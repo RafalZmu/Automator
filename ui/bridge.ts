@@ -38,7 +38,9 @@ const tabs: BackendUiState['tabs'] = [
   { slot: 9, id: 'snippets', title: 'Snippets', iconKey: 'clipboard', kind: 'snippets' as const,
     searchEnabled: true, contractVersion: 1, settingsVersion: 1, actions: [], capabilities: [] },
   { slot: 10, id: 'notes', title: 'Quick notes', iconKey: 'notebook', kind: 'notes' as const,
-    searchEnabled: false, contractVersion: 1, settingsVersion: 1, actions: [], capabilities: [] },
+    searchEnabled: false, contractVersion: 1, settingsVersion: 1,
+    actions: ['listNotes', 'saveNote', 'deleteNote'].map((id) => ({ id, version: 1, command: null, requiredCapabilities: [{ id: 'storage.library', version: 1 }] })),
+    capabilities: [{ id: 'storage.library', version: 1 }] },
 ];
 
 const emptyBinding = (id: string, name: string, targetPath: string, alias: string): BackendUiState['bindings'][number] => ({
@@ -101,7 +103,7 @@ class BrowserPreviewBridge implements AutomatorBridge {
   private hotkeyListeners = new Set<(key: string) => void>();
   private activityListeners = new Set<() => void>();
   private variableListeners = new Set<() => void>();
-  private moduleSettings = new Map<string, ModuleSettingsGetResult['value']>();
+  private notes: { id: string; title: string; body: string }[] = [];
   private globalVariables: GlobalVariableSnapshot = { version: 1, values: {}, migrationConflicts: [] };
 
   async getInitialState(): Promise<InitialState> { return { state: structuredClone(this.state), host }; }
@@ -195,6 +197,21 @@ class BrowserPreviewBridge implements AutomatorBridge {
     if (request.moduleId === 'codex' && request.actionId === 'listDrafts') return {
       contractVersion: 1, status: 'information', message: 'Codex drafts are unavailable in browser preview.', data: [], actions: [],
     };
+    if (request.moduleId === 'notes') {
+      const input = request.input as { id?: string; title?: string; body?: string };
+      const done = (message: string, data: AutomationResult['data']): AutomationResult => ({ contractVersion: 1, status: 'success', message, data, actions: [] });
+      if (request.actionId === 'listNotes') return done('Notes.', { notes: structuredClone(this.notes) });
+      if (request.actionId === 'saveNote' && input.id && input.title !== undefined) {
+        const note = { id: input.id, title: input.title, body: input.body ?? '' };
+        const index = this.notes.findIndex((item) => item.id === note.id);
+        if (index < 0) this.notes.push(note); else this.notes[index] = note;
+        return done('Note saved.', { note });
+      }
+      if (request.actionId === 'deleteNote') {
+        this.notes = this.notes.filter((item) => item.id !== input.id);
+        return done('Note deleted.', { id: input.id ?? null, deleted: true });
+      }
+    }
     throw new Error('Module actions are unavailable in browser preview.');
   }
   async cancelAutomationModuleAction(_moduleId: string, _requestId: string) { return { canceled: false }; }
@@ -207,14 +224,13 @@ class BrowserPreviewBridge implements AutomatorBridge {
   async exportCodexDraft(_id: string): Promise<boolean> { throw new Error('Draft export is unavailable in browser preview.'); }
   async saveWorkTimeCsv(_csvText: string) { return false; }
   async updateModuleSettings(request: ModuleSettingsUpdateRequest): Promise<ModuleSettingsUpdateResult> {
-    this.moduleSettings.set(request.moduleId, structuredClone(request.value) as ModuleSettingsGetResult['value']);
     return { saved: true, moduleId: request.moduleId, settingsVersion: request.settingsVersion };
   }
   async getModuleSettings(request: ModuleSettingsGetRequest): Promise<ModuleSettingsGetResult> {
     const tab = tabs.find((candidate) => candidate.id === request.moduleId);
     if (!tab || tab.contractVersion !== request.contractVersion || tab.settingsVersion !== request.settingsVersion)
       throw new Error('The module settings request is stale or unregistered.');
-    return { ...request, value: this.moduleSettings.get(tab.id) ?? (tab.id === 'snippets' ? { snippets: [] } : tab.id === 'notes' ? { notes: [] } : {}) };
+    return { ...request, value: tab.id === 'snippets' ? { snippets: [] } : {} };
   }
   async getGlobalVariables(): Promise<GlobalVariableSnapshot> { return structuredClone(this.globalVariables); }
   async setGlobalVariables(values: GlobalVariableSnapshot['values']): Promise<GlobalVariableSnapshot> {

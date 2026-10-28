@@ -9,17 +9,17 @@ The dot reflects the note's markdown checkboxes (`- [ ] task`, `- [x] done`): re
 
 Supported markdown: headings, paragraphs, block quotes, horizontal rules, fenced code, bullet, numbered and task lists, `**bold**`, `*italic*`, `~~strikethrough~~`, `` `code` `` and `[text](https://…)` links. Other markup is shown as plain text.
 
-Notes are stored as module preferences in plain text in `settings.json`, with the other tab preferences. They are not encrypted, so keep passwords and other secrets out of them. Limits: 100 notes, 128 characters of title and 8000 characters of text each, and 64 KiB for all notes. Text may contain line breaks and tabs but no other control characters.
+Notes are stored in plain text in Automator's SQLite library (`library.db`), one record per note, so they survive restarts and are saved the moment you change them. They are not encrypted, so keep passwords and other secrets out of them. They are not yet included in the library export. Limits: 50 notes, 128 characters of title and 3000 characters of text each. Text may contain line breaks and tabs but no other control characters.
 
 ## Code map
 
-- `ui/modules/NotesView.tsx` and `NotesView.css` render the list, editor, dots, and checkboxes, and save every change through the module settings bridge.
+- `ui/modules/NotesView.tsx` and `NotesView.css` render the list, editor, dots, and checkboxes, and save every change through the `saveNote` and `deleteNote` module actions.
 - `ui/modules/notesMarkdown.ts` parses markdown into a tree, counts and toggles checkboxes.
-- `ui/contracts/notes.ts` validates and reads the saved settings.
-- `src/Automator.Application/Automation/NotesModule.cs` registers slot 10, defines the empty default settings, and declares no actions or capabilities. Settings are written and read through the shared module-settings route.
+- `ui/contracts/notes.ts` validates a note and reads the `listNotes` result.
+- `src/Automator.Application/Automation/NotesModule.cs` registers slot 10, declares the `storage.library` capability, and implements the `listNotes`, `saveNote`, and `deleteNote` actions over the module's library partition.
 - `src/Automator.Application/Launcher/LauncherTabRegistry.cs` registers the module; `ui/viewRegistry.tsx`, `ui/viewKinds.ts`, and `contracts/bundled-tab-view-kinds.json` declare the `notes` view kind; `ui/App.tsx` supplies the tab icon and the **0** key.
 - Tests: `tests/notes-contract.test.mjs`, the Application specification listed in [TESTS.md](TESTS.md), and `tests/electron/tab-happy-path-visibility.test.cjs`.
 
 ## Test case steps
 
-See [TESTS.md](TESTS.md) for the settings and markdown contract, module registration, and Electron coverage.
+See [TESTS.md](TESTS.md) for the note and markdown contract, module registration, and Electron coverage.
