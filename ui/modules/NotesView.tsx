@@ -139,7 +139,10 @@ export function NotesView({ services }: ViewProps) {
   const tick = (note: Note, line: number) => {
     const body = toggleCheckbox(note.body, line);
     if (body === note.body) return;
-    void saveNote({ ...note, body });
+    // The tick shows at once and is undone if the note could not be saved.
+    const before = current.current;
+    setNotes(before.map((item) => item.id === note.id ? { ...item, body } : item));
+    void saveNote({ ...note, body }).then((saved) => { if (!saved) setNotes(before); });
   };
 
   const editor = (note: Draft) => <div className="note-editor">
