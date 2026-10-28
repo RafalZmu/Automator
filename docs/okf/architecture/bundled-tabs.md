@@ -16,7 +16,7 @@ Automator tabs are compiled into the .NET backend. The backend owns slot registr
 
 Add one `IAutomationModule` provider to `LauncherTabRegistry.CreateProviders`. Its `AutomationModuleDefinition` is the source for the backend runtime registry and the metadata sent to React, so slot, ID, title, view kind, versions, actions, and capabilities do not need a second backend registration. Slots 1–7 are Launcher, Script Runner, API, Browser Automation, Workflows, Scheduler, and Work Time. Slot 8 is Website Launcher; slot 9 is Snippets. The Codex module is kept in the codebase but is not registered for any slot.
 
-Module IDs use lowercase stable names such as `report-viewer`. Action IDs use stable names such as `refresh` or `open-report`. Increase an action version when its input or behavior changes incompatibly. Increase `ContractVersion` only when the shared module contract changes. Slots remain numbered 1–9.
+Module IDs use lowercase stable names such as `report-viewer`. Action IDs use stable names such as `refresh` or `open-report`. Increase an action version when its input or behavior changes incompatibly. Increase `ContractVersion` only when the shared module contract changes. Slots are numbered 1–10.
 
 Tab 1's existing command routes are marked with `LegacyCommand`. They stay on their current RPC methods and cannot be dispatched through `automation/moduleAction`. New module actions leave `LegacyCommand` unset; the backend then checks the active tab, contract and action versions, and declared capabilities before calling `ExecuteAsync`.
 
@@ -45,6 +45,10 @@ Profiles are persisted in the `script-runner/profiles` SQLite collection. Each p
 ### Snippets (slot 9)
 
 `SnippetsModule` is registered by `LauncherTabRegistry.CreateProviders` with the `snippets` module ID and view kind. It declares no actions and no capabilities. The renderer reads and writes its `{ "snippets": [...] }` preferences through the module settings bridge, validates them with `ui/contracts/snippets.ts`, and copies a snippet to the clipboard with the renderer's `navigator.clipboard`. `BackendServer.GetState` also merges the snippets that have a shortcut into the module state through `SnippetsModule.CreateShortcutStateValues` (`meta/{id}` and chunked `text/{id}/{index}` entries, each within the 2048-character state value limit), so the launch panel can copy one and close the launcher without opening the tab. Because the preferences are plain JSON in `settings.json`, snippets are not a place for passwords or other secrets.
+
+### Quick notes (slot 10)
+
+`NotesModule` is registered by `LauncherTabRegistry.CreateProviders` with the `notes` module ID and view kind. It declares no actions and no capabilities. The renderer reads and writes its `{ "notes": [{ id, title, body }] }` preferences through the module settings bridge, validates them with `ui/contracts/notes.ts`, renders the markdown body to React elements with `ui/modules/notesMarkdown.ts`, and saves each add, edit, delete, and checkbox tick immediately. Notes are plain JSON in `settings.json`, so they are not a place for secrets.
 
 ### Codex (not bound to a slot)
 

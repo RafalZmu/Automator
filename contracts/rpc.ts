@@ -322,7 +322,7 @@ export function validateRpcRequest(value: unknown): RpcRequest {
 
 export const bindingStateSchema = bindingParamsSchema.extend({ iconDataUrl: z.string().max(12_000).nullable() });
 export const tabMetadataSchema = z.strictObject({
-  slot: z.number().int().min(1).max(9),
+  slot: z.number().int().min(1).max(10),
   id: z.string().min(1).max(64),
   title: z.string().min(1).max(128),
   iconKey: z.string().min(1).max(64),

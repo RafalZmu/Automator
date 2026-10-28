@@ -20,7 +20,7 @@ export class WindowContextRegistry<TRenderer extends object = object> {
   setSelectedTab(renderer: TRenderer, slot: number): void {
     const current = this.contexts.get(renderer);
     if (!current) throw new Error('The renderer does not belong to an Automator window.');
-    if (!Number.isSafeInteger(slot) || slot < 1 || slot > 9) throw new Error('The tab slot must be an integer from 1 to 9.');
+    if (!Number.isSafeInteger(slot) || slot < 1 || slot > 10) throw new Error('The tab slot must be an integer from 1 to 10.');
     current.selectedTab = slot;
   }
 }

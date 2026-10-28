@@ -16,7 +16,7 @@ The Launcher binds short letter aliases to installed apps, EXEs, and shortcuts. 
 
 When the compact panel opens, its home surface is Global Action Search. That surface searches actions from all tabs and does not consume a numbered slot. Typing a unique command runs it; selecting a tab-specific result routes to that tab. The normal app-alias flow remains available on slot 1.
 
-While a text-like field (text input, search, number, textarea, select, or contenteditable) has focus in the open launcher, digits 1–9 and `/` type into that field instead of selecting a tab or opening the catalog. Escape still closes the panel. The renderer reports text-entry focus to the backend through `launcher/setWindowContext` (`textEntryFocused`), and the native keyboard hook uses it; buttons and checkboxes do not change the behavior.
+While a text-like field (text input, search, number, textarea, select, or contenteditable) has focus in the open launcher, digits 0–9 and `/` type into that field instead of selecting a tab or opening the catalog. Escape still closes the panel. The renderer reports text-entry focus to the backend through `launcher/setWindowContext` (`textEntryFocused`), and the native keyboard hook uses it; buttons and checkboxes do not change the behavior.
 
 The compact launcher uses a fixed 760×800 preferred window size and clamps to the selected display's work area when needed. Each time the panel opens, it is placed centered horizontally under the pointer on the display the pointer is on. Moving the pointer while the panel is open does not move it. The active tab view scrolls vertically; the topbar, tab selector, command bar, and footer stay in place.
 
@@ -42,7 +42,7 @@ Read the root AGENTS.md first. This guide covers the slot 1 app launcher and its
 ### Preserve the launcher contract
 
 - Keep app aliases separate from tab commands. App aliases remain letters-only and are resolved by the launcher; global commands are registered through the tab command registry.
-- Keep the numbered slots 1–9 available for tab selection. Global Action Search is a home surface, not another tab.
+- Keep the numbered slots 1–10 available for tab selection (keys 1–9 and 0). Global Action Search is a home surface, not another tab.
 - Digits 1–9 and `/` must not be consumed globally while a text-entry control is focused. The renderer's `textEntryFocused` flag (`ui/App.tsx` focus reporting → `electron/main.ts` → `launcher/setWindowContext` → `NavigationKeyPolicy.Decide`) carries that state; Escape always still closes.
 - The panel opener, native keyboard hook, activation, and foreground restoration belong to the desktop host/backend. Do not replace them with renderer-only keyboard listeners.
 - Preserve Tab 1 catalog behavior, custom EXE/shortcut binding, app-row shortcut removal, and launch/restore/minimize semantics.
@@ -502,7 +502,7 @@ Run this packaged lifecycle case separately with npm.cmd run test:packaged-lifec
 
 **Steps**
 
-1. Launch the isolated compact host and locate slots 1–9 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
+1. Launch the isolated compact host and locate slots 1–10 by their exact accessible tab names; verify each contains one visible decorative icon with dimensions of at least 12 by 12 pixels.
 2. Open Workspace and verify slots 2–9 each contain one visible decorative icon with dimensions of at least 12 by 12 pixels.
 
 **Expected result:** The numbered tabs retain their accessible names and show one visible icon in both windows.

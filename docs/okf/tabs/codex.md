@@ -45,7 +45,7 @@ Read the root AGENTS.md first. Codex drafts repeatable tasks in Python, Playwrig
 
 ### Current status: unbound
 
-Slot 9 belongs to Snippets, and `LauncherTabRegistry.CreateProviders` does not register `CodexTaskModule`. Keep the module, service, CLI clients, renderer view, contracts, export/picker bridges, and tests in place. To bring the tab back, register `CodexTaskModule` in a free slot (its definition still declares slot 9, and the registry allows only nine modules, so one existing module must move or leave), add its icon to `numberedTabIcons` in `ui/App.tsx`, restore its tab entry in the browser-preview bridge `ui/bridge.ts`, and remove the `skip` from the Codex flows in `tests/electron/ui-flow.test.cjs`. Update the registry specs, this guide, and the root README in the same change. Until then do not describe Codex as reachable.
+Slot 9 belongs to Snippets, and `LauncherTabRegistry.CreateProviders` does not register `CodexTaskModule`. Keep the module, service, CLI clients, renderer view, contracts, export/picker bridges, and tests in place. To bring the tab back, register `CodexTaskModule` in a free slot (its definition still declares slot 9, and the registry allows only ten modules, all ten slots are in use, so one existing module must move or leave), add its icon to `numberedTabIcons` in `ui/App.tsx`, restore its tab entry in the browser-preview bridge `ui/bridge.ts`, and remove the `skip` from the Codex flows in `tests/electron/ui-flow.test.cjs`. Update the registry specs, this guide, and the root README in the same change. Until then do not describe Codex as reachable.
 
 ### Authoring and execution rules
 

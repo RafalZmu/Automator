@@ -4,7 +4,7 @@ The Launcher binds short letter aliases to installed apps, EXEs, and shortcuts. 
 
 When the compact panel opens, its home surface is Global Action Search. That surface searches actions from all tabs and does not consume a numbered slot. Typing a unique command runs it; selecting a tab-specific result routes to that tab. The normal app-alias flow remains available on slot 1.
 
-While a text-like field (text input, search, number, textarea, select, or contenteditable) has focus in the open launcher, digits 1–9 and `/` type into that field instead of selecting a tab or opening the catalog. Escape still closes the panel. The renderer reports text-entry focus to the backend through `launcher/setWindowContext` (`textEntryFocused`), and the native keyboard hook uses it; buttons and checkboxes do not change the behavior.
+While a text-like field (text input, search, number, textarea, select, or contenteditable) has focus in the open launcher, digits 0–9 and `/` type into that field instead of selecting a tab or opening the catalog. Escape still closes the panel. The renderer reports text-entry focus to the backend through `launcher/setWindowContext` (`textEntryFocused`), and the native keyboard hook uses it; buttons and checkboxes do not change the behavior.
 
 The compact launcher uses a fixed 760×800 preferred window size and clamps to the selected display's work area when needed. Each time the panel opens, it is placed centered horizontally under the pointer on the display the pointer is on. Moving the pointer while the panel is open does not move it. The active tab view scrolls vertically; the topbar, tab selector, command bar, and footer stay in place.
 

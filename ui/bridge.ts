@@ -37,6 +37,8 @@ const tabs: BackendUiState['tabs'] = [
     capabilities: [{ id: 'website.launch', version: 1 }] },
   { slot: 9, id: 'snippets', title: 'Snippets', iconKey: 'clipboard', kind: 'snippets' as const,
     searchEnabled: true, contractVersion: 1, settingsVersion: 1, actions: [], capabilities: [] },
+  { slot: 10, id: 'notes', title: 'Quick notes', iconKey: 'notebook', kind: 'notes' as const,
+    searchEnabled: false, contractVersion: 1, settingsVersion: 1, actions: [], capabilities: [] },
 ];
 
 const emptyBinding = (id: string, name: string, targetPath: string, alias: string): BackendUiState['bindings'][number] => ({
@@ -99,6 +101,7 @@ class BrowserPreviewBridge implements AutomatorBridge {
   private hotkeyListeners = new Set<(key: string) => void>();
   private activityListeners = new Set<() => void>();
   private variableListeners = new Set<() => void>();
+  private moduleSettings = new Map<string, ModuleSettingsGetResult['value']>();
   private globalVariables: GlobalVariableSnapshot = { version: 1, values: {}, migrationConflicts: [] };
 
   async getInitialState(): Promise<InitialState> { return { state: structuredClone(this.state), host }; }
@@ -204,13 +207,14 @@ class BrowserPreviewBridge implements AutomatorBridge {
   async exportCodexDraft(_id: string): Promise<boolean> { throw new Error('Draft export is unavailable in browser preview.'); }
   async saveWorkTimeCsv(_csvText: string) { return false; }
   async updateModuleSettings(request: ModuleSettingsUpdateRequest): Promise<ModuleSettingsUpdateResult> {
+    this.moduleSettings.set(request.moduleId, structuredClone(request.value) as ModuleSettingsGetResult['value']);
     return { saved: true, moduleId: request.moduleId, settingsVersion: request.settingsVersion };
   }
   async getModuleSettings(request: ModuleSettingsGetRequest): Promise<ModuleSettingsGetResult> {
     const tab = tabs.find((candidate) => candidate.id === request.moduleId);
     if (!tab || tab.contractVersion !== request.contractVersion || tab.settingsVersion !== request.settingsVersion)
       throw new Error('The module settings request is stale or unregistered.');
-    return { ...request, value: tab.id === 'snippets' ? { snippets: [] } : {} };
+    return { ...request, value: this.moduleSettings.get(tab.id) ?? (tab.id === 'snippets' ? { snippets: [] } : tab.id === 'notes' ? { notes: [] } : {}) };
   }
   async getGlobalVariables(): Promise<GlobalVariableSnapshot> { return structuredClone(this.globalVariables); }
   async setGlobalVariables(values: GlobalVariableSnapshot['values']): Promise<GlobalVariableSnapshot> {

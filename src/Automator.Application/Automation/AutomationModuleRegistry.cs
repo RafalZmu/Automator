@@ -205,7 +205,7 @@ public sealed class AutomationModuleRegistry
 
     private void Validate(IReadOnlyList<IAutomationModule> modules)
     {
-        if (modules.Count > 9) throw new InvalidOperationException("At most nine bundled automation modules can be registered.");
+        if (modules.Count > 10) throw new InvalidOperationException("At most ten bundled automation modules can be registered.");
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var slots = new HashSet<int>();
         foreach (var module in modules)
@@ -215,7 +215,7 @@ public sealed class AutomationModuleRegistry
                 throw new InvalidOperationException("The module identity must match its registered definition.");
             if (!StableId.IsMatch(definition.Id) || !ids.Add(definition.Id))
                 throw new InvalidOperationException($"Automation module id '{definition.Id}' is invalid or duplicated.");
-            if (definition.Slot is < 1 or > 9 || !slots.Add(definition.Slot))
+            if (definition.Slot is < 1 or > 10 || !slots.Add(definition.Slot))
                 throw new InvalidOperationException($"Automation module '{definition.Id}' has an invalid or duplicated slot.");
             if (string.IsNullOrWhiteSpace(definition.Title) || definition.Title.Length > 128
                 || string.IsNullOrWhiteSpace(definition.IconKey) || definition.IconKey.Length > 64

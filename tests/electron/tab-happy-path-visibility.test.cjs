@@ -158,6 +158,7 @@ test('numbered tabs show an identifying icon in the launcher and Workspace', asy
     { name: 'Work Time', slot: 7 },
     { name: 'Website Launcher', slot: 8 },
     { name: 'Snippets', slot: 9 },
+    { name: 'Quick notes', slot: 10 },
   ];
   try {
     await assertTabIcons(page, tabs);
@@ -472,6 +473,45 @@ test('Snippets save and copy happy path keeps its buttons within visible bounds 
     assert.deepEqual(saved.value.snippets.map(({ name, alias, value }) => ({ name, alias, value })), [
       { name: 'Plan command', alias: 'plan', value: '/plan\nsecond line' },
     ]);
+  } finally { await app.close(); }
+});
+
+test('Quick notes add, tick, edit, and delete happy path persists notes and shows the unticked dot', async () => {
+  const { app, page } = await launchHost('quick-notes');
+  const savedNotes = async () => (await page.evaluate(() => window.automator.getModuleSettings({
+    contractVersion: 1, moduleId: 'notes', settingsVersion: 1,
+  }))).value.notes;
+  try {
+    await selectTab(page, 'Quick notes', 10);
+    await clickButton(page, page, 'Add note');
+    await page.getByLabel('Title', { exact: true }).fill('Shopping');
+    await page.getByLabel('Note (markdown)', { exact: true }).fill('# Buy\n- [ ] milk\n- [x] bread');
+    await clickButton(page, page, 'Save note');
+    await page.getByRole('status').filter({ hasText: 'Note saved.' }).waitFor({ state: 'visible' });
+
+    // The new note opens expanded with its markdown rendered, and its dot shows an unticked checkbox.
+    await page.getByRole('heading', { name: 'Buy' }).waitFor({ state: 'visible' });
+    await page.getByRole('img', { name: '1 unticked checkbox' }).waitFor({ state: 'visible' });
+
+    // Ticking the last open checkbox persists it and turns the dot green.
+    await page.getByRole('checkbox', { name: 'milk' }).check();
+    await page.getByRole('img', { name: 'All checkboxes ticked' }).waitFor({ state: 'visible' });
+    await page.waitForFunction(async () => (await window.automator.getModuleSettings({ contractVersion: 1, moduleId: 'notes', settingsVersion: 1 }))
+      .value.notes[0]?.body === '# Buy\n- [x] milk\n- [x] bread');
+
+    // Collapsing hides the rendered note, and editing changes the title and text.
+    await page.getByRole('button', { name: /^Shopping/ }).click();
+    await page.getByRole('heading', { name: 'Buy' }).waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: /^Shopping/ }).click();
+    await clickButton(page, page, 'Edit Shopping');
+    await page.getByLabel('Title', { exact: true }).fill('Groceries');
+    await clickButton(page, page, 'Save note');
+    await page.getByRole('button', { name: /^Groceries/ }).waitFor({ state: 'visible' });
+    assert.deepEqual((await savedNotes()).map(({ title }) => title), ['Groceries']);
+
+    await clickButton(page, page, 'Delete Groceries');
+    await page.getByText('No notes yet').waitFor({ state: 'visible' });
+    assert.deepEqual(await savedNotes(), []);
   } finally { await app.close(); }
 });
 

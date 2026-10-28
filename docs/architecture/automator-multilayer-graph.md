@@ -47,6 +47,7 @@ flowchart LR
     worktime["7 Work Time"]
     website["8 Website Launcher"]
     snippets["9 Snippets"]
+    notes["10 Quick notes"]
 
     tabs --> launcher
     tabs --> script
@@ -57,6 +58,7 @@ flowchart LR
     tabs --> worktime
     tabs --> website
     tabs --> snippets
+    tabs --> notes
   end
 
   subgraph backend[".NET backend process and application services"]
@@ -99,6 +101,7 @@ flowchart LR
   registry -->|dispatches to| website
   snippets -->|stores text as module preferences| settings
   snippets -->|adds shortcut copy actions| search
+  notes -->|stores markdown notes as module preferences| settings
 
   launcher -->|app catalog and activation| windows
   script -->|runs saved scripts| processService

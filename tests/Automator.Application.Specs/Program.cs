@@ -24,9 +24,10 @@ var checks = new (string Name, Func<Task> Run)[]
     ("query changes cancel only the pending alias delay", PendingAliasDelayCanBeCancelled),
     ("a later query cannot cancel an activation already requested", QueryChangeDoesNotCancelActivation),
     ("concurrent state changes publish revisions in serialized order", ConcurrentCommandsKeepRevisionOrder),
-    ("tab registry publishes nine stable slots and their actions", TabRegistryPublishesVersionedSlots),
+    ("tab registry publishes ten stable slots and their actions", TabRegistryPublishesVersionedSlots),
     ("website shortcut actions validate settings and launch saved groups in order", WebsiteLauncherValidatesAndLaunchesGroups),
     ("snippets module keeps its text in module settings and registers no actions", SnippetsModuleKeepsTextInModuleSettings),
+    ("notes module keeps its markdown notes in module settings and registers no actions", NotesModuleKeepsNotesInModuleSettings),
     ("snippets module publishes copyable shortcuts in state-sized chunks and skips invalid entries", SnippetsModulePublishesShortcutsInStateSizedChunks),
     ("bundled module registry validates and dispatches versioned actions", BundledModuleRegistryDispatches),
     ("bundled modules receive cancellation and module settings migrate", BundledModuleLifecycleAndSettings),
@@ -153,10 +154,16 @@ static Task NavigationKeyPolicyRequiresFocusedUnmodifiedLauncher()
     Check.Equal(NavigationKeyAction.None, NavigationKeyPolicy.Decide(state, nativeForeground: true, rendererFocused: true, hasModifier: true, 0x32));
     Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(state, true, true, false, 0x32));
     Check.Equal(NavigationKeyAction.OpenCatalog, NavigationKeyPolicy.Decide(state, true, true, false, 0xBF));
+    // The 0 key (top row and numpad) selects slot 10.
+    Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(state, true, true, false, 0x30));
+    Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(state, true, true, false, 0x60));
     session.OpenCatalog([]);
     Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x32));
     Check.True(session.SelectTabFromGlobalKey('2', launcherNativeForeground: true));
     Check.Equal(LauncherMode.Launcher, session.Snapshot.Mode);
+    Check.True(session.SelectTabFromGlobalKey('0', launcherNativeForeground: true));
+    Check.Equal(10, session.Snapshot.SelectedTab);
+    Check.True(session.SelectTab(1));
     session.SelectTab(2);
     Check.Equal(NavigationKeyAction.SelectTab, NavigationKeyPolicy.Decide(session.NavigationState, true, true, false, 0x32));
     session.EnterMode(LauncherMode.Settings);
@@ -312,7 +319,7 @@ static async Task ConcurrentCommandsKeepRevisionOrder()
 static Task TabRegistryPublishesVersionedSlots()
 {
     var tabs = LauncherTabRegistry.Tabs;
-    Check.Equal(9, tabs.Count);
+    Check.Equal(10, tabs.Count);
     Check.Equal(3, LauncherTabRegistry.Version);
     Check.Equal(1, tabs[0].Slot);
     Check.Equal("launcher", tabs[0].Id);
@@ -335,13 +342,19 @@ static Task TabRegistryPublishesVersionedSlots()
     Check.Equal("Snippets", tabs[8].Title);
     Check.Equal(0, tabs[8].Actions.Count);
     Check.Equal(0, tabs[8].Capabilities.Count);
+    Check.Equal(10, tabs[9].Slot);
+    Check.Equal("notes", tabs[9].Id);
+    Check.Equal("notes", tabs[9].Kind);
+    Check.Equal("Quick notes", tabs[9].Title);
+    Check.Equal(0, tabs[9].Actions.Count);
+    Check.Equal(0, tabs[9].Capabilities.Count);
     Check.False(tabs.Any(tab => tab.Id == "codex"));
     Check.True(tabs.Take(2).SelectMany(tab => tab.Capabilities).Any(capability => capability.Id == AutomationCapabilityIds.LibraryStorage));
-    Check.Equal(9, LauncherTabRegistry.States.Count);
+    Check.Equal(10, LauncherTabRegistry.States.Count);
     Check.True(LauncherTabRegistry.States.All(state => state.Version == LauncherTabRegistry.Version));
-    Check.Equal(9, tabs.Select(tab => tab.Slot).Distinct().Count());
+    Check.Equal(10, tabs.Select(tab => tab.Slot).Distinct().Count());
     var runtimeRegistry = LauncherTabRegistry.CreateAutomationRegistry(new AutomationCapabilityRegistry());
-    Check.Equal(9, runtimeRegistry.Modules.Count);
+    Check.Equal(10, runtimeRegistry.Modules.Count);
     foreach (var tab in tabs)
     {
         var definition = runtimeRegistry.Modules.Single(module => module.Id == tab.Id);
@@ -410,6 +423,31 @@ static async Task SnippetsModuleKeepsTextInModuleSettings()
     await using var context = new AutomationCapabilityRegistry().CreateContext(new AutomationModuleDescriptor(module.Id, []));
     using var input = JsonDocument.Parse("{}");
     await Check.ThrowsAsync<InvalidOperationException>(() => registry.DispatchAsync(module.Id, "copy", 1, 1,
+        input.RootElement, module.Id, context, updated, CancellationToken.None));
+}
+
+static async Task NotesModuleKeepsNotesInModuleSettings()
+{
+    var module = new NotesModule();
+    Check.Equal(10, module.Definition.Slot);
+    Check.Equal("notes", module.Definition.ViewKind);
+    Check.Equal(0, module.Definition.Actions.Count);
+    Check.Equal(0, module.Definition.Capabilities.Count);
+    Check.Equal("{\"notes\":[]}", module.CreateDefaultSettings().GetRawText());
+    Check.Throws<InvalidOperationException>(() => module.MigrateSettings(0, module.CreateDefaultSettings()));
+
+    var registry = LauncherTabRegistry.CreateAutomationRegistry(new AutomationCapabilityRegistry());
+    Check.Equal("{\"notes\":[]}", registry.GetSettings(NotesModule.IdValue, []).GetRawText());
+    using var saved = JsonDocument.Parse("{\"notes\":[{\"id\":\"todo\",\"title\":\"Todo\",\"body\":\"- [ ] first\\n- [x] second\"}]}");
+    var updated = registry.CreateUpdatedModuleSettings(NotesModule.IdValue, 1, 1, saved.RootElement, NotesModule.IdValue, []);
+    var stored = registry.GetSettings(NotesModule.IdValue, updated).GetProperty("notes")[0];
+    Check.Equal("Todo", stored.GetProperty("title").GetString());
+    Check.Equal("- [ ] first\n- [x] second", stored.GetProperty("body").GetString());
+
+    // Settings are written through the settings route, so no module action can ever be dispatched to Quick notes.
+    await using var context = new AutomationCapabilityRegistry().CreateContext(new AutomationModuleDescriptor(module.Id, []));
+    using var input = JsonDocument.Parse("{}");
+    await Check.ThrowsAsync<InvalidOperationException>(() => registry.DispatchAsync(module.Id, "edit", 1, 1,
         input.RootElement, module.Id, context, updated, CancellationToken.None));
 }
 
@@ -616,7 +654,7 @@ static Task ProductionModuleViewsMatchContract()
     Check.Equal("snippets", LauncherTabRegistry.Tabs.Single(tab => tab.Id == "snippets").Kind);
     // The unbound Codex view kind stays declared so its renderer view can be bound to a slot again.
     Check.True(supportedKinds.Contains(new CodexTaskModule().Definition.ViewKind));
-    Check.Equal(11, supportedKinds.Count);
+    Check.Equal(12, supportedKinds.Count);
     return Task.CompletedTask;
 }
 

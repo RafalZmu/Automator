@@ -116,7 +116,7 @@ public sealed class LauncherSession
 
     public bool SelectTab(int tab)
     {
-        if (tab is < 1 or > 9) return false;
+        if (tab is < 1 or > 10) return false;
         lock (_sync)
         {
             if (_selectedTab == tab && _mode == LauncherMode.Launcher) return true;

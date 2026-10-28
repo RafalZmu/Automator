@@ -102,6 +102,8 @@ public static class LauncherTabRegistry
             // Slot 9 is Snippets. CodexTaskModule and its service, renderer view, and tests are kept but no longer registered;
             // rebind the module to a slot (it declares slot 9) to bring the Codex task builder back.
             new SnippetsModule(),
+            // Slot 10 is Quick notes, selected with the 0 key.
+            new NotesModule(),
         };
 
         return providers.AsReadOnly();
