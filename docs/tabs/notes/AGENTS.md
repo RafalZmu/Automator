@@ -11,7 +11,7 @@ Read the root `AGENTS.md` first. Quick notes keeps short markdown notes in modul
 - Ticking a checkbox rewrites only that line's `[ ]`/`[x]` mark and keeps the rest of the body, including line endings, unchanged (`toggleCheckbox`).
 - Keep titles required, at most 128 characters; text optional, at most 3000 characters with only line breaks and tabs as control characters; at most 50 notes. The limits keep the `listNotes` result under the host's 512 KiB structured-data limit even for three-byte characters, so raise them only together with a paged or split list. `ui/contracts/notes.ts` and `NotesModule` validate the same rules; keep both strict and tested.
 - Notes are stored unencrypted in `library.db`. Do not present Quick notes as a place for secrets.
-- Keep the module in slot 10 (the **0** key) with the stable `notes` ID, view kind, and and record schema version. Changing the record shape needs a reader that still accepts the old records. Notes are not yet part of the library export and import (`AutomationLibraryTransferService`); add them there deliberately, with record validation, if that is wanted.
+- Keep the module in slot 10 (key 1 of the second tab row by default; there is no **0** key) with the stable `notes` ID, view kind, and and record schema version. Changing the record shape needs a reader that still accepts the old records. Notes are not yet part of the library export and import (`AutomationLibraryTransferService`); add them there deliberately, with record validation, if that is wanted.
 
 ## Code and checks
 
