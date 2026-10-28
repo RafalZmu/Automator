@@ -116,12 +116,22 @@ function SettingsDialog({
   const [variableEditorRevision, setVariableEditorRevision] = useState(0);
   const [taskToasts, setTaskToasts] = useState(true);
   const [timerOverlay, setTimerOverlay] = useState(true);
+  const [overlayColor, setOverlayColor] = useState('#ffffff');
+  const [overlayMoving, setOverlayMoving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     let current = true;
-    bridge.getNotificationPrefs().then((prefs) => { if (current) { setTaskToasts(prefs.taskToasts); setTimerOverlay(prefs.timerOverlay); } }).catch(() => undefined);
-    return () => { current = false; };
+    bridge.getNotificationPrefs().then((prefs) => { if (current) { setTaskToasts(prefs.taskToasts); setTimerOverlay(prefs.timerOverlay); setOverlayColor(prefs.overlayColor); } }).catch(() => undefined);
+    bridge.getOverlayMoving().then((moving) => { if (current) setOverlayMoving(moving); }).catch(() => undefined);
+    const stopListening = bridge.onOverlayMoveEnded(() => setOverlayMoving(false));
+    return () => {
+      current = false;
+      stopListening();
+      // Closing Settings (Done, Esc, clicking outside) must not leave the overlay capturing the mouse.
+      setOverlayMoving(false);
+      bridge.setOverlayMoving(false).catch(() => undefined);
+    };
   }, [open, bridge]);
 
   useEffect(() => {
@@ -239,13 +249,35 @@ function SettingsDialog({
                 }} />
               </label>
               <label className="setting-row switch-row" htmlFor="timer-overlay-switch">
-                <span className="setting-copy"><strong>Timer overlay</strong><span>Show the running Work Time timer as small, click-through text in the bottom-right corner of the screen. Hidden while no timer runs. Applies immediately.</span></span>
+                <span className="setting-copy"><strong>Timer overlay</strong><span>Show the running Work Time timer as click-through text in the bottom-right corner of the primary screen, or wherever you moved it. Hidden while no timer runs. Applies immediately.</span></span>
                 <input id="timer-overlay-switch" type="checkbox" checked={timerOverlay} onChange={(event) => {
                   const enabled = event.target.checked;
                   setTimerOverlay(enabled);
+                  if (!enabled) setOverlayMoving(false);
                   bridge.setTimerOverlay(enabled).then((prefs) => setTimerOverlay(prefs.timerOverlay)).catch((error) => { setTimerOverlay(!enabled); reportError(errorMessage(error)); });
                 }} />
               </label>
+              <div className="setting-row">
+                <span className="setting-copy"><strong>Timer overlay colour</strong><span>Colour of the overlay text. Applies immediately.</span></span>
+                <span className="overlay-style-controls">
+                  <input type="color" aria-label="Timer overlay colour" value={overlayColor} onChange={(event) => {
+                    const color = event.target.value;
+                    setOverlayColor(color);
+                    bridge.setOverlayColor(color).catch((error) => reportError(errorMessage(error)));
+                  }} />
+                </span>
+              </div>
+              <div className="setting-row">
+                <span className="setting-copy"><strong>Timer overlay position</strong><span>Press Move, drag the overlay (dashed outline) where you want it, then press Done. It stays there, on every screen, until you reset it.</span></span>
+                <span className="overlay-style-controls">
+                  <button className="relink-button" type="button" disabled={!timerOverlay} onClick={() => {
+                    const moving = !overlayMoving;
+                    setOverlayMoving(moving);
+                    bridge.setOverlayMoving(moving).then(setOverlayMoving).catch((error) => { setOverlayMoving(!moving); reportError(errorMessage(error)); });
+                  }}>{overlayMoving ? 'Done' : 'Move'}</button>
+                  <button className="relink-button" type="button" onClick={() => void bridge.resetOverlayPosition().catch((error) => reportError(errorMessage(error)))}>Reset</button>
+                </span>
+              </div>
             </section>
 
             <AgentAccessSettings bridge={bridge} reportError={reportError} />

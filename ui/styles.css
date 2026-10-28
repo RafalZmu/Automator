@@ -510,3 +510,6 @@ kbd { min-width: 17px; padding: 2px 4px; border: 1px solid var(--line); border-r
 .scheduler-history-entry header strong { min-width: 0; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .scheduler-history-status { text-transform: capitalize; }
 .scheduler-history-entry[data-status="error"] .scheduler-history-status { color: var(--danger, #b42318); }
+
+.overlay-style-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.overlay-style-controls input[type="color"] { width: 34px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; cursor: pointer; }

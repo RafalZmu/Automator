@@ -161,9 +161,17 @@ class BrowserPreviewBridge implements AutomatorBridge {
   async retryBackend() { return this.getInitialState(); }
   private taskToasts = true;
   private timerOverlay = true;
-  async getNotificationPrefs() { return { taskToasts: this.taskToasts, timerOverlay: this.timerOverlay }; }
-  async setTaskToasts(enabled: boolean) { this.taskToasts = enabled; return { taskToasts: enabled, timerOverlay: this.timerOverlay }; }
-  async setTimerOverlay(enabled: boolean) { this.timerOverlay = enabled; return { taskToasts: this.taskToasts, timerOverlay: enabled }; }
+  private overlayColor = '#ffffff';
+  private overlayPosition: { x: number; y: number } | null = null;
+  private prefs() { return { taskToasts: this.taskToasts, timerOverlay: this.timerOverlay, overlayColor: this.overlayColor, overlayPosition: this.overlayPosition }; }
+  async getNotificationPrefs() { return this.prefs(); }
+  async setTaskToasts(enabled: boolean) { this.taskToasts = enabled; return this.prefs(); }
+  async setTimerOverlay(enabled: boolean) { this.timerOverlay = enabled; return this.prefs(); }
+  async setOverlayColor(color: string) { this.overlayColor = color; return this.prefs(); }
+  async setOverlayMoving(moving: boolean) { return moving; }
+  async getOverlayMoving() { return false; }
+  onOverlayMoveEnded() { return () => undefined; }
+  async resetOverlayPosition() { this.overlayPosition = null; return this.prefs(); }
   private mcp: McpStatus = { enabled: true, state: 'listening', port: 47821, url: 'http://127.0.0.1:47821/mcp', error: null };
   async getMcpStatus() { return { ...this.mcp }; }
   async setMcpEnabled(enabled: boolean) {
