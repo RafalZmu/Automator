@@ -36,6 +36,7 @@ export type HostInfo = {
   themeSource: 'light' | 'dark' | 'system';
 };
 
+export type NotificationPrefs = { taskToasts: boolean; timerOverlay: boolean; overlayColor: string; overlayPosition: { x: number; y: number } | null };
 export type InitialState = { state: BackendUiState | null; host: HostInfo };
 
 export interface AutomatorBridge {
@@ -75,9 +76,12 @@ export interface AutomatorBridge {
   relinkBinding(bindingId: string): Promise<BackendUiState | null>;
   openLogFolder(): Promise<boolean>;
   retryBackend(): Promise<InitialState>;
-  getNotificationPrefs(): Promise<{ taskToasts: boolean; timerOverlay: boolean }>;
-  setTaskToasts(enabled: boolean): Promise<{ taskToasts: boolean; timerOverlay: boolean }>;
-  setTimerOverlay(enabled: boolean): Promise<{ taskToasts: boolean; timerOverlay: boolean }>;
+  getNotificationPrefs(): Promise<NotificationPrefs>;
+  setTaskToasts(enabled: boolean): Promise<NotificationPrefs>;
+  setTimerOverlay(enabled: boolean): Promise<NotificationPrefs>;
+  setOverlayColor(color: string): Promise<NotificationPrefs>;
+  setOverlayMoving(moving: boolean): Promise<boolean>;
+  resetOverlayPosition(): Promise<NotificationPrefs>;
   getMcpStatus(): Promise<McpStatus>;
   setMcpEnabled(enabled: boolean): Promise<McpStatus>;
   setMcpPort(port: number): Promise<McpStatus>;

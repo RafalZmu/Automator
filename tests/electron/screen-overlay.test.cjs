@@ -109,6 +109,8 @@ test('a running Work Time timer shows a visible, click-through overlay that disa
       && overlay.bounds.x + overlay.bounds.width <= area.x + area.width && overlay.bounds.y + overlay.bounds.height <= area.y + area.height),
     `the overlay lies inside a display work area: ${JSON.stringify({ bounds: overlay.bounds, areas: overlay.workAreas })}`);
 
+    assert.ok(overlay.bounds.width <= 560 && overlay.bounds.height <= 200, `the overlay window is small, sized to its text: ${JSON.stringify(overlay.bounds)}`);
+
     const screenshot = path.join(dataDirectory, 'overlay.png');
     await fs.writeFile(screenshot, Buffer.from(overlay.pixels, 'base64'));
     assert.ok((await fs.stat(screenshot)).size > 200, 'the overlay rendered a non-empty image');

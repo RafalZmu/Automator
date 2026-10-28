@@ -1,12 +1,22 @@
-/** Always-on-top, click-through text indicators in the bottom-right corner of the screen. Timers are the first indicator. */
-export const OVERLAY_WIDTH = 360;
-export const OVERLAY_LINE_HEIGHT = 20;
+/** Always-on-top text indicators on the screen: click-through, bottom-right of the primary display unless the user moved them. Timers are the first indicator. */
+export const OVERLAY_FONT_SIZE = 20;
+export const OVERLAY_LINE_HEIGHT = 28;
+export const OVERLAY_PADDING_X = 10;
+export const OVERLAY_PADDING_Y = 6;
+/** Widest the window may grow; it is sized to the measured text and never exceeds this. */
+export const OVERLAY_WIDTH = 560;
 export const OVERLAY_MARGIN = 12;
 export const OVERLAY_MAX_ITEMS = 6;
 export const OVERLAY_POLL_MS = 3_000;
-export const OVERLAY_OPACITY = 0.65;
-/** Temporary: paints the whole overlay window solid white so its position is easy to find. Set to false for the normal transparent look. */
-export const OVERLAY_TEST_BACKGROUND = true;
+export const OVERLAY_TEXT_OPACITY = 0.9;
+/** Shown while the user is moving the overlay and no timer is running, so there is something to grab. */
+export const OVERLAY_MOVE_SAMPLE = '0:00:00  Drag to move';
+
+export const DEFAULT_OVERLAY_COLOR = '#ffffff';
+/** The bottom-right corner of the overlay, in screen (DIP) coordinates. The window is anchored here as its text grows and shrinks. */
+export type OverlayPosition = { x: number; y: number };
+type Area = { x: number; y: number; width: number; height: number };
+
 const MAX_DESCRIPTION_LENGTH = 40;
 
 export type OverlayItem = { id: string; text: string };
@@ -41,29 +51,70 @@ export function timerOverlayItems(timers: readonly OverlayTimer[], now: number):
   });
 }
 
-/** Bottom-right of the work area. The window always has room for every line, so it never resizes; the page bottom-aligns the text. */
-export function computeOverlayBounds(workArea: { x: number; y: number; width: number; height: number }) {
-  const height = OVERLAY_MAX_ITEMS * OVERLAY_LINE_HEIGHT;
-  return {
-    x: workArea.x + workArea.width - OVERLAY_WIDTH - OVERLAY_MARGIN,
-    y: workArea.y + workArea.height - height - OVERLAY_MARGIN,
-    width: OVERLAY_WIDTH,
-    height,
-  };
+export function isOverlayColor(value: unknown): value is string {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 }
 
-/** Page for the overlay window. It has no script of its own; the host fills it with `overlayItemsScript`. */
-export function overlayHtml(dark: boolean): string {
-  const [text, shadow] = OVERLAY_TEST_BACKGROUND ? ['#000000', 'transparent'] : dark ? ['#ffffff', 'rgba(0,0,0,.8)'] : ['#101418', 'rgba(255,255,255,.8)'];
-  const [background, opacity] = OVERLAY_TEST_BACKGROUND ? ['#ffffff', 1] : ['transparent', OVERLAY_OPACITY];
+export function normalizeOverlayColor(value: unknown): string {
+  return isOverlayColor(value) ? value.toLowerCase() : DEFAULT_OVERLAY_COLOR;
+}
+
+export function isOverlayPosition(value: unknown): value is OverlayPosition {
+  const position = value as Partial<OverlayPosition> | null;
+  return !!position && typeof position.x === 'number' && typeof position.y === 'number' && Number.isFinite(position.x) && Number.isFinite(position.y);
+}
+
+/** A light halo behind dark text and a dark halo behind light text, so the clock stays readable over any desktop. */
+export function overlayShadow(color: string): string {
+  const [red, green, blue] = [1, 3, 5].map((offset) => parseInt(color.slice(offset, offset + 2), 16));
+  return (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255 > 0.6 ? 'rgba(0,0,0,.9)' : 'rgba(255,255,255,.9)';
+}
+
+/** The bottom-right corner of a display's work area, inset by the margin. */
+export function defaultOverlayAnchor(workArea: Area): OverlayPosition {
+  return { x: workArea.x + workArea.width - OVERLAY_MARGIN, y: workArea.y + workArea.height - OVERLAY_MARGIN };
+}
+
+/**
+ * Keeps a remembered position only while it still lies on a visible display (a monitor may have been unplugged); otherwise the default is used.
+ * `displays` are full display bounds, so a corner dragged over the taskbar or to the screen edge is kept, not snapped back.
+ */
+export function resolveOverlayAnchor(saved: OverlayPosition | null, displays: readonly Area[], primaryWorkArea: Area): OverlayPosition {
+  if (saved && displays.some((display) => saved.x >= display.x && saved.x <= display.x + display.width && saved.y >= display.y && saved.y <= display.y + display.height)) {
+    return { x: Math.round(saved.x), y: Math.round(saved.y) };
+  }
+  return defaultOverlayAnchor(primaryWorkArea);
+}
+
+/** The window rectangle for a bottom-right anchor, sized to the measured text (the largest window when no size is known yet). */
+export function computeOverlayBounds(anchor: OverlayPosition, size?: { width: number; height: number }) {
+  const width = Math.min(OVERLAY_WIDTH, Math.max(1, Math.ceil(size?.width ?? OVERLAY_WIDTH)));
+  const height = Math.min(maxOverlayHeight(), Math.max(1, Math.ceil(size?.height ?? maxOverlayHeight())));
+  return { x: anchor.x - width, y: anchor.y - height, width, height };
+}
+
+function maxOverlayHeight(): number {
+  return OVERLAY_MAX_ITEMS * OVERLAY_LINE_HEIGHT + 2 * OVERLAY_PADDING_Y;
+}
+
+/** Page for the overlay window: text only, no background. It has no script of its own; the host fills it with `overlayItemsScript`. */
+export function overlayHtml(color: string): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Automator timer overlay</title><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><style>
-html,body{margin:0;height:100%;overflow:hidden;background:${background};user-select:none;cursor:default}
-body{display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-end;font:600 13px/${OVERLAY_LINE_HEIGHT}px 'Segoe UI',system-ui,sans-serif;color:${text};opacity:${opacity};text-shadow:0 0 3px ${shadow},0 0 1px ${shadow}}
-div{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
-</style></head><body></body></html>`;
+:root{--overlay-text:${color};--overlay-shadow:${overlayShadow(color)}}
+html,body{margin:0;height:100%;overflow:hidden;background:transparent;user-select:none;cursor:default}
+body{display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-end}
+#panel{box-sizing:border-box;width:max-content;padding:${OVERLAY_PADDING_Y}px ${OVERLAY_PADDING_X}px;color:var(--overlay-text);opacity:${OVERLAY_TEXT_OPACITY};font:600 ${OVERLAY_FONT_SIZE}px/${OVERLAY_LINE_HEIGHT}px 'Segoe UI',system-ui,sans-serif;text-shadow:0 0 3px var(--overlay-shadow),0 0 1px var(--overlay-shadow),0 1px 2px var(--overlay-shadow)}
+#panel div{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
+body.moving #panel{opacity:1;outline:2px dashed var(--overlay-text);outline-offset:-2px;background:rgba(128,128,128,.35);-webkit-app-region:drag;cursor:move}
+</style></head><body><div id="panel"></div></body></html>`;
 }
 
-/** Script the host runs in the overlay page to replace its lines. Text goes in through textContent, so it cannot inject markup. */
+/** Script the host runs in the overlay page to replace its lines. Text goes in through textContent, so it cannot inject markup. Returns the natural size of the panel. */
 export function overlayItemsScript(lines: readonly string[]): string {
-  return `(function(lines){document.body.replaceChildren.apply(document.body,lines.map(function(text){var line=document.createElement('div');line.textContent=text;return line;}));return document.body.innerText;})(${JSON.stringify(lines)})`;
+  return `(function(lines){var panel=document.getElementById('panel');panel.replaceChildren.apply(panel,lines.map(function(text){var line=document.createElement('div');line.textContent=text;return line;}));var box=panel.getBoundingClientRect();return {text:document.body.innerText,width:Math.ceil(box.width),height:Math.ceil(box.height)};})(${JSON.stringify(lines)})`;
+}
+
+/** Script that recolours an already-open overlay page and switches its move mode (dashed outline, draggable) without recreating the window. */
+export function overlayStyleScript(color: string, moving: boolean): string {
+  return `(function(root){root.setProperty('--overlay-text',${JSON.stringify(color)});root.setProperty('--overlay-shadow',${JSON.stringify(overlayShadow(color))});document.body.classList.toggle('moving',${moving ? 'true' : 'false'});})(document.documentElement.style)`;
 }

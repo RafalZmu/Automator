@@ -35,7 +35,7 @@ import { getScriptRunnerPathPickerSpec } from './scriptRunnerPathPicker';
 import { getCodexScopePathPickerSpec } from './codexScopePathPicker';
 import { authorizeCodexExport, extensionForCodexFormat, writeCodexSourceCreateNew } from './codexExport';
 import { mcpSetEnabledSchema, mcpSetPortSchema } from '../contracts/mcp';
-import { computeOverlayBounds, overlayHtml, overlayItemsScript, readOverlayTimers, timerOverlayItems, OVERLAY_POLL_MS } from './screenOverlay';
+import { computeOverlayBounds, isOverlayColor, normalizeOverlayColor, overlayHtml, overlayItemsScript, overlayStyleScript, readOverlayTimers, resolveOverlayAnchor, timerOverlayItems, OVERLAY_MOVE_SAMPLE, OVERLAY_POLL_MS } from './screenOverlay';
 import { createMcpBackend } from './mcp/backendBridge';
 import { McpController } from './mcp/controller';
 import type { TokenProtector } from './mcp/config';
@@ -553,7 +553,7 @@ function requireMcp(): McpController {
 
 
 const notificationPrefsPath = path.join(localData, 'notifications.json');
-let notificationPrefs: NotificationPrefs = { taskToasts: true, timerOverlay: true };
+let notificationPrefs: NotificationPrefs = loadNotificationPrefs('');
 const toastTracker = createToastTracker();
 const toastWindows: BrowserWindow[] = [];
 
@@ -623,48 +623,102 @@ let overlayTimers: ReturnType<typeof readOverlayTimers> = [];
 let overlayPollTimer: NodeJS.Timeout | undefined;
 let overlayTickTimer: NodeJS.Timeout | undefined;
 let overlayLastText = '';
+let overlaySize: { width: number; height: number } | undefined;
+let overlayMoving = false;
+let overlayMoveTimer: NodeJS.Timeout | undefined;
 let overlayLastFailure = '';
 let overlayLoggedFailure = '';
 let overlayLoggedSummary = '';
 
-/** The overlay follows the mouse pointer to the display being used, so it is not stranded on another monitor. */
-function overlayWorkArea() {
-  return screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+/** The remembered position while it is still on a visible display; otherwise the bottom-right of the primary display. It never follows the pointer. */
+function overlayAnchor() {
+  return resolveOverlayAnchor(notificationPrefs.overlayPosition, screen.getAllDisplays().map((display) => display.bounds), screen.getPrimaryDisplay().workArea);
+}
+
+function placeOverlay(target: BrowserWindow): void {
+  if (!overlayMoving) return void target.setBounds(computeOverlayBounds(overlayAnchor(), overlaySize), false);
+  // While the user may be dragging, keep wherever the window is (anchored at its bottom-right) and only follow size changes.
+  const current = target.getBounds();
+  const next = computeOverlayBounds({ x: current.x + current.width, y: current.y + current.height }, overlaySize);
+  if (Math.abs(next.width - current.width) > 2 || Math.abs(next.height - current.height) > 2) target.setBounds(next, false);
+}
+
+/** Pushes the text colour and move mode into the open overlay page. */
+function applyOverlayStyle(target: BrowserWindow): void {
+  if (target.isDestroyed()) return;
+  void target.webContents.executeJavaScript(overlayStyleScript(normalizeOverlayColor(notificationPrefs.overlayColor), overlayMoving)).catch(() => undefined);
+}
+
+const OVERLAY_MOVE_TIMEOUT_MS = 60_000;
+
+/** Leaves move mode: the overlay is click-through again and its position is saved. */
+function endOverlayMove(): void {
+  if (overlayMoveTimer) clearTimeout(overlayMoveTimer);
+  overlayMoveTimer = undefined;
+  if (!overlayMoving) return;
+  overlayMoving = false;
+  saveNotificationPrefs(notificationPrefsPath, notificationPrefs);
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.setIgnoreMouseEvents(true);
+    if (overlayReady) applyOverlayStyle(overlayWindow);
+  }
+  renderScreenOverlay();
+}
+
+/** While the user is moving the overlay it follows the window; the position is saved when each drag ends, and move mode stays on (another 60 seconds) until Done. */
+function trackOverlayMove(target: BrowserWindow): void {
+  if (!overlayMoving || overlayWindow !== target || target.isDestroyed()) return;
+  const bounds = target.getBounds();
+  const position = { x: bounds.x + bounds.width, y: bounds.y + bounds.height };
+  notificationPrefs = { ...notificationPrefs, overlayPosition: position };
+  saveNotificationPrefs(notificationPrefsPath, notificationPrefs);
+  if (overlayMoveTimer) clearTimeout(overlayMoveTimer);
+  overlayMoveTimer = setTimeout(endOverlayMove, OVERLAY_MOVE_TIMEOUT_MS);
+  overlayMoveTimer.unref();
 }
 
 function hideScreenOverlay(): void {
   if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.destroy();
-  overlayWindow = undefined; overlayReady = false; overlayLastText = '';
+  overlayWindow = undefined; overlayReady = false; overlayLastText = ''; overlaySize = undefined;
 }
 
 function renderScreenOverlay(): void {
   if (quitRequested || !notificationPrefs.timerOverlay) return hideScreenOverlay();
   const lines = timerOverlayItems(overlayTimers, Date.now()).map((item) => item.text);
+  if (lines.length === 0 && overlayMoving) lines.push(OVERLAY_MOVE_SAMPLE);
   if (lines.length === 0) return hideScreenOverlay();
   if (!overlayWindow || overlayWindow.isDestroyed()) {
     const created = new BrowserWindow({
-      ...computeOverlayBounds(overlayWorkArea()), show: false, frame: false, transparent: true,
-      resizable: false, movable: false, focusable: false, skipTaskbar: true, alwaysOnTop: true, hasShadow: false, fullscreenable: false,
+      ...computeOverlayBounds(overlayAnchor(), overlaySize), show: false, frame: false, transparent: true,
+      resizable: false, movable: true, focusable: false, skipTaskbar: true, alwaysOnTop: true, hasShadow: false, fullscreenable: false,
       webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, webviewTag: false, spellcheck: false },
     });
     overlayWindow = created; overlayReady = false; overlayLastText = '';
-    created.setIgnoreMouseEvents(true);
+    created.setIgnoreMouseEvents(!overlayMoving);
+    created.on('moved', () => trackOverlayMove(created));
     created.setAlwaysOnTop(true, 'screen-saver');
     created.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     created.webContents.on('will-navigate', (event) => event.preventDefault());
     created.on('closed', () => { if (overlayWindow === created) { overlayWindow = undefined; overlayReady = false; } });
     created.webContents.on('render-process-gone', () => { if (overlayWindow === created) hideScreenOverlay(); });
-    void created.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(overlayHtml(nativeTheme.shouldUseDarkColors))}`)
-      .then(() => { if (overlayWindow !== created) return; overlayReady = true; renderScreenOverlay(); })
+    void created.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(overlayHtml(normalizeOverlayColor(notificationPrefs.overlayColor)))}`)
+      .then(() => { if (overlayWindow !== created) return; overlayReady = true; applyOverlayStyle(created); renderScreenOverlay(); })
       .catch(() => writeLog('Overlay.LoadFailed', 'The screen overlay could not be displayed.'));
     return;
   }
   if (!overlayReady) return;
   const text = JSON.stringify(lines);
-  overlayWindow.setBounds(computeOverlayBounds(overlayWorkArea()), false);
+  placeOverlay(overlayWindow);
   if (text !== overlayLastText) {
     const target = overlayWindow;
-    void target.webContents.executeJavaScript(overlayItemsScript(lines)).then(() => { if (overlayWindow === target) overlayLastText = text; })
+    void target.webContents.executeJavaScript(overlayItemsScript(lines)).then((measured: { width?: unknown; height?: unknown } | null) => {
+      if (overlayWindow !== target) return;
+      overlayLastText = text;
+      if (typeof measured?.width === 'number' && typeof measured.height === 'number') {
+        overlaySize = { width: measured.width, height: measured.height };
+        placeOverlay(target);
+      }
+    })
       .catch((error) => writeLog('Overlay.DrawFailed', 'The timer overlay could not draw its text.', { error: String(error) }));
   }
   if (!overlayWindow.isVisible()) {
@@ -1072,8 +1126,42 @@ function registerIpc(): void {
     assertMainFrame(event);
     if (typeof enabled !== 'boolean') throw new Error('The timer overlay must be on or off.');
     notificationPrefs = { ...notificationPrefs, timerOverlay: enabled };
+    if (!enabled) endOverlayMove();
     saveNotificationPrefs(notificationPrefsPath, notificationPrefs);
     void refreshScreenOverlay();
+    return { ...notificationPrefs };
+  });
+  ipcMain.handle('automator:set-overlay-color', (event, color: unknown) => {
+    assertMainFrame(event);
+    if (!isOverlayColor(color)) throw new Error('The overlay colour must be a #rrggbb value.');
+    notificationPrefs = { ...notificationPrefs, overlayColor: color.toLowerCase() };
+    saveNotificationPrefs(notificationPrefsPath, notificationPrefs);
+    if (overlayWindow && overlayReady) applyOverlayStyle(overlayWindow);
+    return { ...notificationPrefs };
+  });
+  ipcMain.handle('automator:set-overlay-moving', (event, moving: unknown) => {
+    assertMainFrame(event);
+    if (typeof moving !== 'boolean') throw new Error('Moving the timer overlay must be on or off.');
+    if (moving && !notificationPrefs.timerOverlay) throw new Error('Turn the timer overlay on first.');
+    if (!moving) endOverlayMove();
+    else {
+      overlayMoving = true;
+      if (overlayMoveTimer) clearTimeout(overlayMoveTimer);
+      overlayMoveTimer = setTimeout(endOverlayMove, OVERLAY_MOVE_TIMEOUT_MS);
+      overlayMoveTimer.unref();
+      if (overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.setIgnoreMouseEvents(false);
+        if (overlayReady) applyOverlayStyle(overlayWindow);
+      }
+      renderScreenOverlay();
+    }
+    return overlayMoving;
+  });
+  ipcMain.handle('automator:reset-overlay-position', (event) => {
+    assertMainFrame(event);
+    notificationPrefs = { ...notificationPrefs, overlayPosition: null };
+    saveNotificationPrefs(notificationPrefsPath, notificationPrefs);
+    if (overlayWindow && !overlayWindow.isDestroyed() && overlayReady) placeOverlay(overlayWindow);
     return { ...notificationPrefs };
   });
   ipcMain.handle('automator:mcp-get-status', (event) => { assertMainFrame(event); return requireMcp().status(); });
