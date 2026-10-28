@@ -31,6 +31,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("snippets module keeps its text in module settings and registers no actions", SnippetsModuleKeepsTextInModuleSettings),
     ("notes module saves, lists, and deletes validated notes in the module library", NotesModuleStoresNotesInTheLibrary),
     ("notes module lists a full library within the structured result limit", NotesModuleListFitsTheResultLimit),
+    ("notes module publishes unticked checkboxes as open tasks within the state value limit", NotesModulePublishesOpenTasks),
     ("snippets module publishes copyable shortcuts in state-sized chunks and skips invalid entries", SnippetsModulePublishesShortcutsInStateSizedChunks),
     ("bundled module registry validates and dispatches versioned actions", BundledModuleRegistryDispatches),
     ("bundled modules receive cancellation and module settings migrate", BundledModuleLifecycleAndSettings),
@@ -557,6 +558,30 @@ static async Task NotesModuleListFitsTheResultLimit()
     using var empty = System.Text.Json.JsonDocument.Parse("{}");
     var listed = await registry.DispatchAsync(module.Id, "listNotes", 1, 1, empty.RootElement, module.Id, context, [], CancellationToken.None);
     Check.Equal(NotesModule.MaximumNotes, listed.Data.GetProperty("notes").GetArrayLength());
+}
+
+static Task NotesModulePublishesOpenTasks()
+{
+    static AutomationLibraryRecord Note(string id, string title, string body, string created) => new("notes", "notes", id, 1,
+        JsonSerializer.SerializeToElement(new { id, title, body, created }), DateTimeOffset.UtcNow);
+    var records = new[]
+    {
+        Note("later", "Later", "- [ ] second note task", "2026-02-01"),
+        Note("first", "First", "- [ ] write   report\r\n- [x] done\n```\n- [ ] in code\n```\n1. [ ] numbered\n- [ ]\n- [X] ticked", "2026-01-01"),
+    };
+    using var parsed = JsonDocument.Parse(NotesModule.CreateOpenTaskStateValue(records));
+    var tasks = parsed.RootElement.GetProperty("tasks").EnumerateArray()
+        .Select(task => task.GetProperty("note").GetString() + ":" + task.GetProperty("text").GetString()).ToArray();
+    Check.Equal(3, parsed.RootElement.GetProperty("total").GetInt32());
+    Check.True(tasks.SequenceEqual(["First:write report", "First:numbered", "Later:second note task"]));
+
+    var many = Enumerable.Range(0, 50).Select(index => Note($"n{index}", "Note", string.Join('\n', Enumerable.Repeat("- [ ] " + new string('x', 90), 20)), $"2026-01-{index + 10:00}")).ToArray();
+    var value = NotesModule.CreateOpenTaskStateValue(many);
+    Check.True(value.Length <= NotesModule.MaximumOpenTaskStateLength);
+    using var capped = JsonDocument.Parse(value);
+    Check.Equal(1000, capped.RootElement.GetProperty("total").GetInt32());
+    Check.True(capped.RootElement.GetProperty("tasks").GetArrayLength() > 0);
+    return Task.CompletedTask;
 }
 
 static Task SnippetsModulePublishesShortcutsInStateSizedChunks()

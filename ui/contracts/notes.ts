@@ -40,3 +40,19 @@ export function readNotes(data: unknown): Note[] {
   }
   return notes;
 }
+
+export type OpenTask = { note: string; text: string };
+export type OpenTasks = { total: number; tasks: OpenTask[] };
+
+/** Reads the `openTasks` module state value the host publishes: every unticked note checkbox, cut to fit one state value. */
+export function readOpenTasks(value: unknown): OpenTasks {
+  const none: OpenTasks = { total: 0, tasks: [] };
+  if (typeof value !== 'string' || !value) return none;
+  let parsed: unknown;
+  try { parsed = JSON.parse(value); } catch { return none; }
+  if (!isRecord(parsed) || !Array.isArray(parsed.tasks)) return none;
+  const tasks = parsed.tasks.flatMap((item): OpenTask[] => isRecord(item) && typeof item.note === 'string' && typeof item.text === 'string' && item.text
+    ? [{ note: item.note, text: item.text }] : []);
+  const total = typeof parsed.total === 'number' && Number.isInteger(parsed.total) && parsed.total >= tasks.length ? parsed.total : tasks.length;
+  return { total, tasks };
+}

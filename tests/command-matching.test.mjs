@@ -60,3 +60,10 @@ test('exact shortcut matching ignores disabled actions, empty queries and shared
   assert.deepEqual(matchQuickActions([a, b], '  ').map((command) => command.id), ['a', 'b']);
   assert.deepEqual(resolveTabCommand(matchQuickActions([a, b], 'al')), { kind: 'ambiguous' });
 });
+
+test('typed queries list actions with a shortcut before those without', () => {
+  const plain = { id: 'plain', label: 'Open report', keywords: [], run() {} };
+  const keyed = { id: 'keyed', label: 'Open reports folder', keywords: [], shortcut: 'rf', run() {} };
+  assert.deepEqual(matchQuickActions([plain, keyed], 'report').map((command) => command.id), ['keyed', 'plain']);
+  assert.deepEqual(matchQuickActions([plain, keyed], '').map((command) => command.id), ['plain', 'keyed']);
+});

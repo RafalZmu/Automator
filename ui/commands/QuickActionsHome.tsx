@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { AppWindow, ArrowDown, ArrowUp, CornerDownLeft, Search, Settings2, Sparkles } from 'lucide-react';
+import { AppWindow, ListChecks, ArrowDown, ArrowUp, CornerDownLeft, Search, Settings2, Sparkles } from 'lucide-react';
+import type { OpenTasks } from '../contracts/notes';
 import { canAutoRunTabCommand, matchQuickActions, resolveTabCommand, type TabCommand } from './commandMatching';
 
 export type QuickAction = TabCommand & {
@@ -11,9 +12,10 @@ export type QuickAction = TabCommand & {
 };
 
 export function QuickActionsHome({
-  actions, onRun, onAddApp, onOpenSettings, onClose,
+  actions, openTasks, onRun, onAddApp, onOpenSettings, onClose,
 }: {
   actions: readonly QuickAction[];
+  openTasks: OpenTasks;
   onRun: (action: QuickAction) => Promise<void>;
   onAddApp: () => void;
   onOpenSettings: () => void;
@@ -83,7 +85,9 @@ export function QuickActionsHome({
   };
 
   const armed = armedId ? matches.find((action) => action.id === armedId) : undefined;
-  return <section className="quick-actions-home" aria-label="Quick Actions">
+  const notesTab = actions.find((action) => action.id === 'tab:notes');
+  const showTasks = openTasks.tasks.length > 0;
+  return <section className="quick-actions-home" data-tasks={showTasks} aria-label="Quick Actions">
     <div className="quick-actions-heading">
       <span className="quick-actions-mark"><Sparkles size={17} /></span>
       <div><h1>Quick Actions</h1><p>Search apps and actions across your workspace.</p></div>
@@ -120,6 +124,18 @@ export function QuickActionsHome({
       {error && <p className="quick-actions-error" role="alert">{error}</p>}
       {query.trim() && matches.length > 1 && <p className="quick-actions-instruction"><ArrowUp size={12} /><ArrowDown size={12} /> Choose an action, then press Enter.</p>}
     </div>
+    {showTasks && <div className="quick-actions-tasks" role="region" aria-label="Open tasks from Quick notes">
+      <div className="quick-actions-tasks-heading"><ListChecks size={13} aria-hidden="true" /><span>Open tasks</span><span className="quick-actions-tasks-count">{openTasks.total}</span></div>
+      <ul className="quick-actions-task-list">
+        {openTasks.tasks.map((task, index) => <li key={index}>
+          <button type="button" className="quick-actions-task" disabled={!notesTab || Boolean(busyId)} title={`Open ${task.note} in Quick notes`}
+            onClick={() => { if (notesTab) void execute(notesTab as QuickAction); }}>
+            <span className="quick-actions-task-box" aria-hidden="true" /><span className="quick-actions-task-text">{task.text}</span><span className="quick-actions-task-note">{task.note}</span>
+          </button>
+        </li>)}
+        {openTasks.total > openTasks.tasks.length && <li className="quick-actions-task-more">+{openTasks.total - openTasks.tasks.length} more in Quick notes</li>}
+      </ul>
+    </div>}
     <div className="quick-actions-footer"><span>Unique safe matches run automatically</span><span><kbd>/</kbd> add app <span aria-hidden="true">·</span> <kbd>Esc</kbd> close</span></div>
   </section>;
 }
