@@ -31,6 +31,7 @@ export function matchTabCommands<T extends TabCommand>(commands: readonly T[], q
 /**
  * A query that equals a command shortcut (an alias or a tab number) selects only the commands with that shortcut,
  * so partial text matches elsewhere, such as a timer name or a digit in a description, never compete with it.
+ * Other typed queries list the matches that have a shortcut before those without one.
  */
 export function matchQuickActions<T extends TabCommand & { shortcut?: string }>(commands: readonly T[], query: string): T[] {
   const typed = normalize(query);
@@ -38,7 +39,10 @@ export function matchQuickActions<T extends TabCommand & { shortcut?: string }>(
     const exact = commands.filter((command) => !command.disabled && command.shortcut && normalize(command.shortcut) === typed);
     if (exact.length > 0) return exact;
   }
-  return matchTabCommands(commands, query);
+  const matches = matchTabCommands(commands, query);
+  if (!typed) return matches;
+  // Typing lists actions that have a shortcut first; each group keeps its relevance order.
+  return [...matches.filter((command) => command.shortcut), ...matches.filter((command) => !command.shortcut)];
 }
 
 /** Only a single match can be launched by Enter; ambiguous and empty queries need more input. */
