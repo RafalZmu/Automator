@@ -66,7 +66,7 @@ public static partial class ScriptRunnerTemplateCatalog
             "Restore a Firebird database from a .fbk backup. An existing database is never overwritten unless replace is on.", ["database", "restore", "firebird"],
             ScriptRunnerInterpreter.Powershell, "firebird-3-restore", ScriptRunnerOutputMode.Text, 3600,
             [
-                new("database", "Target database", ScriptRunnerTemplateParameterType.File, true, 0, "The .fdb file to create. It may not exist yet unless replace is on.", Example: @"C:\Data\company.fdb"),
+                new("database", "Target database", ScriptRunnerTemplateParameterType.File, true, 0, "The .fdb file to create. It may not exist yet unless replace is on. A .fbk file here (such as one right-clicked in Explorer) is restored to the .fdb beside it.", Example: @"C:\Data\company.fdb"),
                 new("backup", "Backup file", ScriptRunnerTemplateParameterType.File, false, 1, "The .fbk backup to restore. Leave empty to use the .fbk beside the .fdb file with the same name.", Example: @"D:\Backups\company.fbk", DefaultFromKey: "database", DefaultFromExtension: ".fbk"),
                 new("gbak", "gbak executable", ScriptRunnerTemplateParameterType.File, true, 2, "Firebird's backup tool.", Example: @"C:\Program Files\Firebird\Firebird_3_0\gbak.exe"),
                 new("username", "Username", ScriptRunnerTemplateParameterType.Text, true, 3, Example: "SYSDBA"),
