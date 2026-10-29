@@ -14,6 +14,10 @@ try {
     foreach ($path in @($Database, $Backup, $Gbak)) {
         if ($path -notmatch '^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+(?:[\\/]|$))') { throw 'All paths must be fully qualified absolute paths.' }
     }
+    # A right-clicked .fbk arrives as the database, and the empty backup then defaults to that same file: restore it to the .fdb beside it.
+    if ([System.IO.Path]::GetExtension($Database) -ieq '.fbk' -and [string]::Equals([System.IO.Path]::GetFullPath($Database), [System.IO.Path]::GetFullPath($Backup), [System.StringComparison]::OrdinalIgnoreCase)) {
+        $Database = [System.IO.Path]::ChangeExtension($Database, '.fdb')
+    }
     if (-not (Test-Path -LiteralPath $Backup -PathType Leaf)) { throw 'Backup file does not exist.' }
     if (-not (Test-Path -LiteralPath $Gbak -PathType Leaf)) { throw 'Firebird gbak executable does not exist.' }
     if ([System.IO.Path]::GetExtension($Database) -ine '.fdb') { throw 'Database file must use the .fdb extension.' }

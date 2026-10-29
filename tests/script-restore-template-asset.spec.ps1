@@ -20,6 +20,15 @@ try {
     if ((Invoke-Restore $toolPath 'true') -eq 0 -or [System.IO.File]::ReadAllText($databasePath) -ne $before) { throw 'Failed replace damaged the existing database' }
     Set-Content -LiteralPath $toolPath -Value @('@echo off', 'echo replaced-data>"%~7"', 'exit /b 0')
     if ((Invoke-Restore $toolPath 'true') -ne 0 -or [System.IO.File]::ReadAllText($databasePath) -eq $before) { throw 'Replace failed' }
+    # A right-clicked .fbk is passed as both database and (defaulted) backup: it restores to the .fdb beside it.
+    $upperBackup = Join-Path $fixtureRoot 'right click.FBK'
+    $derivedDatabase = Join-Path $fixtureRoot 'right click.fdb'
+    Set-Content -LiteralPath $upperBackup -Value 'backup fixture'
+    & powershell.exe -NoProfile -NonInteractive -File $assetPath $upperBackup $upperBackup $toolPath 'fixture-user' 'fixture-secret' 'false'
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $derivedDatabase)) { throw 'Right-clicked .fbk was not restored' }
+    & powershell.exe -NoProfile -NonInteractive -File $assetPath $upperBackup $upperBackup $toolPath 'fixture-user' 'fixture-secret' 'false'
+    if ($LASTEXITCODE -eq 0) { throw 'Right-clicked .fbk overwrote an existing .fdb without replace' }
+    Remove-Item -LiteralPath $upperBackup, $derivedDatabase
     Remove-Item -LiteralPath $backupPath
     if ((Invoke-Restore $toolPath 'false') -eq 0) { throw 'Missing backup accepted' }
     if (@(Get-ChildItem -LiteralPath $fixtureRoot -Filter '*.restoring-*.tmp').Count -ne 0) { throw 'Temporary restore file left behind' }
