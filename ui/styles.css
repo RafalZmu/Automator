@@ -293,7 +293,7 @@ input { user-select: text; }
 .script-section-tab[aria-selected="true"] { color: var(--accent-strong); background: var(--accent-soft); }
 .script-section-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .script-section-count { min-width: 16px; padding: 0 5px; border-radius: 8px; color: var(--muted); background: rgba(26,131,151,.1); font-size: 8px; text-align: center; }
-.script-section-panel { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.script-section-panel { display: contents; }
 .script-section-panel[hidden] { display: none; }
 .script-section-intro { flex: none; display: flex; flex-direction: column; gap: 2px; }
 .script-section-intro strong { color: var(--ink); font-size: 10px; }
