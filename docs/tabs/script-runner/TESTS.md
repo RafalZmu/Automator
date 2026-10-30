@@ -242,11 +242,11 @@ Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\restart-autom
 
 **Steps**
 
-1. Open Script Runner's Library in an isolated Electron host and locate the Firebird template card.
+1. Open Script Runner's Library tab in an isolated Electron host and locate the Firebird template card.
 2. Check that Target database is visible, inside the viewport and its clipping ancestors, and unobscured; enter an absolute path under isolated test data.
 3. Check Details and Add to Script Runner against their visible bounds; assert the Add action uses the primary button style, then add the profile.
-4. Check Run template and confirm the database path remains; close the Library and find the saved profile in Script Runner.
-5. Reopen the Library, check the card's Profile added state, open Details, and confirm Run template and the database path remain available.
+4. Check Run template and confirm the database path remains; switch to the My scripts tab and find the saved profile in Script Runner.
+5. Reopen the Library tab, check the card's Profile added state, open Details, and confirm Run template and the database path remain available.
 
 **Expected result:** The card presents a visually distinct Add to Script Runner action beside Details. The target path stays available through installation and reopening Details for the saved profile. The saved profile appears in Script Runner, and the template is not run.
 
