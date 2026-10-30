@@ -30,6 +30,10 @@ A script that an agent just wrote does not need declared inputs for you to see w
 
 See [TESTS.md](TESTS.md) for template, profile, path-field, and Electron integration cases with their steps and expected results.
 
+### Sections
+
+The tab has three sections, chosen with the tabs under the title: **My scripts** (your saved scripts, with Run, Edit, and Remove), **Library** (ready-made templates), and **Explorer actions** (File Explorer menu mappings). Only the selected section is shown. **New script**, opening a script to edit or run it, and adding a Library copy switch to My scripts; an Explorer right-click launch switches to Explorer actions. Left and Right arrows move between the tabs. Run status, output, and history stay visible in every section.
+
 ### Script Library templates
 
 The Script Runner Library provides registered bundled templates that can be installed as ordinary profiles. Each template card has a primary `Add to Script Runner` action beside `Details`; after installation, the card shows `Profile added`. Open `Details` on a template that is not installed to review its inputs and add it with the values you entered. For an installed template, `Details` opens the same Run form as its profile row. Firebird 3 templates keep their `Target database` path field visible on the Library card before Details or installation, so you can choose the database while adding the template. The field value stays transient for the template run and is not saved in the profile. Other template inputs appear in the Details form; both Firebird templates default to `SYSDBA` / `masterkey`, and each password is transient and is not saved with the profile. Template runs require the Script Runner form. Workflow or Scheduler attempts to run a template profile do not have transient credentials and fail with a message to run it interactively. Editing a library profile changes only its name and shows its inputs read-only. Make an editable copy turns it into your own script with the same inputs; templates with a password cannot be copied, because passwords are never saved.
@@ -79,7 +83,7 @@ The Remove button on a profile row uses a two-step inline confirmation: the firs
 
 ### File Explorer actions
 
-Open **Explorer actions** in Script Runner and press **Add action**. Choose a saved profile, enter the menu label and extensions (for example `.fdb, .txt`), then save. Extensions are normalized and duplicate entries are removed. Tick **Also show for folders** to add the action to the menu when you right-click a folder (registered under `HKCU\Software\Classes\Directory\shell`); the folder path is passed like a file path, and a folders-only action may leave the extensions empty. Right-clicking empty space inside a folder is not supported. For a regular script, put `{{file.path}}` in its saved arguments first. For an installed Library template, choose which file or directory parameter receives the selection.
+Open the **Explorer actions** tab in Script Runner and press **Add action**. Choose a saved profile, enter the menu label and extensions (for example `.fdb, .txt`), then save. Extensions are normalized and duplicate entries are removed. Tick **Also show for folders** to add the action to the menu when you right-click a folder (registered under `HKCU\Software\Classes\Directory\shell`); the folder path is passed like a file path, and a folders-only action may leave the extensions empty. Right-clicking empty space inside a folder is not supported. For a regular script, put `{{file.path}}` in its saved arguments first. For an installed Library template, choose which file or directory parameter receives the selection.
 
 In the stable Windows package, right-click a matching file in File Explorer and choose **Automator → your action**. Windows 11 may place the submenu under **Show more options**. The app opens Script Runner with a review form and the selected file prefilled, including paths with spaces and Unicode. Press **Run** to execute or **Cancel** to dismiss it. Regular arguments can be edited for that one run. Template forms list every input of the script in order, with example text and hints; the input the mapping points at shows the selected file read-only, and remembered values from the saved profile prefill the rest. Credentials stay transient. Neither is saved to the profile. The backend checks the selected existing absolute file and extension again when Run is pressed.
 
@@ -413,11 +417,11 @@ Run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\restart-autom
 
 **Steps**
 
-1. Open Script Runner's Library in an isolated Electron host and locate the Firebird template card.
+1. Open Script Runner's Library tab in an isolated Electron host and locate the Firebird template card.
 2. Check that Target database is visible, inside the viewport and its clipping ancestors, and unobscured; enter an absolute path under isolated test data.
 3. Check Details and Add to Script Runner against their visible bounds; assert the Add action uses the primary button style, then add the profile.
-4. Check Run template and confirm the database path remains; close the Library and find the saved profile in Script Runner.
-5. Reopen the Library, check the card's Profile added state, open Details, and confirm Run template and the database path remain available.
+4. Check Run template and confirm the database path remains; switch to the My scripts tab and find the saved profile in Script Runner.
+5. Reopen the Library tab, check the card's Profile added state, open Details, and confirm Run template and the database path remain available.
 
 **Expected result:** The card presents a visually distinct Add to Script Runner action beside Details. The target path stays available through installation and reopening Details for the saved profile. The saved profile appears in Script Runner, and the template is not run.
 

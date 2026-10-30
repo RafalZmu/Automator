@@ -248,8 +248,11 @@ test('Script Runner Library exposes a primary Add to Script Runner action on the
   const { app, page, dataDirectory } = await launchHost('script-runner-library');
   try {
     await selectTab(page, 'Script Runner', 2);
-    await clickButton(page, page, 'Library');
+    const sections = page.getByRole('tablist', { name: 'Script Runner sections', exact: true });
+    assert.equal(await sections.getByRole('tab', { name: 'My scripts', exact: true }).getAttribute('aria-selected'), 'true');
+    await sections.getByRole('tab', { name: 'Library', exact: true }).click();
     const library = page.getByRole('region', { name: 'Script template library', exact: true });
+    assert.equal(await page.getByRole('region', { name: 'File Explorer actions', exact: true }).count(), 0, 'only the selected section is shown');
     const firebirdCard = library.locator('.script-template-row').filter({ hasText: 'Firebird 3 database backup and ZIP' });
     await firebirdCard.waitFor({ state: 'visible' });
 
@@ -271,12 +274,11 @@ test('Script Runner Library exposes a primary Add to Script Runner action on the
     await visibleButton(page, firebirdCard, 'Profile added', { enabled: false });
     assert.equal(await targetDatabase.inputValue(), isolatedDatabasePath, 'Installing the profile must preserve the target database path in the Library form');
 
-    const closeLibrary = await visibleButton(page, library, 'Close library');
-    await closeLibrary.click();
+    await sections.getByRole('tab', { name: 'My scripts', exact: true }).click();
     await library.waitFor({ state: 'detached' });
     await visibleButton(page, page, 'Edit Firebird 3 database backup and ZIP');
 
-    await clickButton(page, page, 'Library');
+    await sections.getByRole('tab', { name: 'Library', exact: true }).click();
     const reopenedLibrary = page.getByRole('region', { name: 'Script template library', exact: true });
     const reopenedCard = reopenedLibrary.locator('.script-template-row').filter({ hasText: 'Firebird 3 database backup and ZIP' });
     await reopenedCard.waitFor({ state: 'visible' });

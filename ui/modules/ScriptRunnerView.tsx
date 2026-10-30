@@ -2,7 +2,7 @@ import { GlobalVariableHints } from '../variables/GlobalVariables';
 import {
   Braces, Check, Clock3, FileCode2, Info, Loader2, Pencil, Play, Plus, Save, Square, Terminal, Trash2, X,
 } from 'lucide-react';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { AutomationServices } from '../automationServices';
 import type { AutomationModuleActionRequest, BackendUiState, ModuleSettingsUpdateRequest } from '../../contracts/rpc';
 import { FILE_EXPLORER_REGISTER_SCRIPT_ACTION_ID } from '../../contracts/fileExplorer';
@@ -31,6 +31,8 @@ type ViewProps = {
   services: AutomationServices;
   surface?: 'launcher' | 'workspace';
 };
+
+type ScriptSection = 'scripts' | 'library' | 'explorer';
 
 type InterpreterDefaults = Record<ScriptRunnerInterpreter, string>;
 
@@ -119,8 +121,10 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
   const [shownRunId, setShownRunId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [templates, setTemplates] = useState<ScriptTemplateDescriptor[]>([]);
-  const [explorerOpen, setExplorerOpen] = useState(false);
-  const [libraryOpen, setLibraryOpen] = useState(false);
+  // Only one section of the tab is shown at a time.
+  const [section, setSection] = useState<ScriptSection>('scripts');
+  const explorerOpen = section === 'explorer';
+  const libraryOpen = section === 'library';
   const [templateQuery, setTemplateQuery] = useState('');
   const [libraryDetail, setLibraryDetail] = useState<ScriptTemplateDescriptor | null>(null);
   const [libraryValues, setLibraryValues] = useState<Record<string, ScriptTemplateValue>>({});
@@ -134,7 +138,6 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
   profilesRef.current = profiles;
 
   const closeLibrary = useCallback(() => {
-    setLibraryOpen(false);
     setLibraryDetail(null);
     setLibraryValues({});
   }, []);
@@ -143,13 +146,14 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
     setRunValues({});
   }, []);
   const beginEditing = useCallback((profile: ScriptProfile) => {
+    setSection('scripts');
     setEditing(profile);
     setEditingOriginalId(profile.id);
     setEditValues(initialParameterValues(profileParameters(profile, templates), profile.values, profile.templateOrigin?.id));
     setDefinitionsOpen(!profile.templateOrigin && (profile.parameters ?? []).length === 0);
   }, [templates]);
   const openExplorer = useCallback(() => {
-    setExplorerOpen(true);
+    setSection('explorer');
     setEditing(null);
     closeLibrary();
     closeRunForm();
@@ -221,7 +225,6 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
     try {
       beginEditing(createPowerShellProfileDraft(request.filePath, interpreterDefaults.powershell, profiles.map(profile => profile.id)));
       setShownRunId('none');
-      setExplorerOpen(false);
       closeLibrary();
       closeRunForm();
       setNotice('');
@@ -294,6 +297,7 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
   };
 
   const openRunForm = (profile: ScriptProfile) => {
+    setSection('scripts');
     setEditing(null);
     setRunTarget(profile);
     setRunValues(initialParameterValues(profileParameters(profile, templates), profile.values, profile.templateOrigin?.id));
@@ -508,6 +512,24 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
     : [];
   const editingTemplateHasPassword = editingTemplate?.parameters.some((parameter) => parameter.sensitive) ?? false;
 
+  const sectionTabs: { id: ScriptSection; label: string; count?: number }[] = [
+    { id: 'scripts', label: 'My scripts', count: profiles.length },
+    { id: 'library', label: 'Library', count: templates.length },
+    { id: 'explorer', label: 'Explorer actions' },
+  ];
+  const selectSection = (next: ScriptSection) => {
+    if (next !== 'library') closeLibrary();
+    setSection(next);
+  };
+  const onSectionKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    if (!step) return;
+    event.preventDefault();
+    const next = sectionTabs[(sectionTabs.findIndex((item) => item.id === section) + step + sectionTabs.length) % sectionTabs.length];
+    selectSection(next.id);
+    document.getElementById(`script-section-tab-${next.id}`)?.focus();
+  };
+
   const renderEditor = () => (
     <>
       {editing && editing.templateOrigin && (
@@ -603,12 +625,17 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
           <div><h1>Script Runner</h1><p>Saved Python, Bash, and PowerShell scripts with typed inputs</p></div>
         </div>
         <div className="script-editor-actions">
-          <button className="secondary-button" type="button" disabled={runningId !== null} onClick={() => setExplorerOpen((current) => !current)}>Explorer actions</button>
-          <button className="secondary-button" type="button" onClick={() => libraryOpen ? closeLibrary() : setLibraryOpen(true)}>Library</button>
           <button className="primary-button" type="button" disabled={!settingsReady || runningId !== null} onClick={openNewEditor}>
             <Plus size={14} /> New script
           </button>
         </div>
+      </div>
+
+      <div className="script-sections" role="tablist" aria-label="Script Runner sections" onKeyDown={onSectionKeyDown}>
+        {sectionTabs.map((item) => <button key={item.id} id={`script-section-tab-${item.id}`} className="script-section-tab" type="button" role="tab"
+          aria-selected={section === item.id} aria-controls={`script-section-${item.id}`} tabIndex={section === item.id ? 0 : -1} onClick={() => selectSection(item.id)}>
+          {item.label}{item.count !== undefined && <span className="script-section-count" aria-hidden="true">{item.count}</span>}
+        </button>)}
       </div>
 
       {notice && <p className="script-notice" role="status">{notice}</p>}
@@ -619,10 +646,14 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
         <button className="secondary-button" type="button" disabled={activeRun.state === 'canceled'} onClick={cancelActiveRun}><Square size={13} /> Cancel run</button>
       </section>}
 
+      <div id="script-section-explorer" role="tabpanel" aria-labelledby="script-section-tab-explorer" hidden={!explorerOpen} className="script-section-panel">
       <ExplorerActionsPanel services={services} profiles={profiles} templates={templates} open={explorerOpen} onOpen={openExplorer} busy={runningId !== null} onStartRun={startExplorerRun} />
+      </div>
 
-      {libraryOpen && <section className="script-editor" aria-label="Script template library">
-        <div className="script-editor-heading"><FileCode2 size={16} /><strong>Script Library</strong><button className="icon-button" type="button" aria-label="Close library" onClick={closeLibrary}><X size={15} /></button></div>
+      {libraryOpen && <div id="script-section-library" role="tabpanel" aria-labelledby="script-section-tab-library" className="script-section-panel">
+      <section className="script-editor" aria-label="Script template library">
+        <div className="script-editor-heading"><FileCode2 size={16} /><strong>Script Library</strong></div>
+        <p className="script-section-help">Ready-made scripts. Add one to My scripts to run it, or add another copy to run it with different inputs.</p>
         <label className="script-field-wide"><span>Search templates</span><input type="search" value={templateQuery} placeholder="Name, description, or tag" onChange={(event) => setTemplateQuery(event.target.value)} /></label>
         <div className="script-profile-list">{filterScriptTemplates(templates, templateQuery).map((template) => {
           const targetDatabaseParameter = (template.id === 'firebird-3-backup-zip' || template.id === 'firebird-3-backup' || template.id === 'firebird-3-restore')
@@ -655,7 +686,11 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
             <button className="primary-button" type="button" disabled={!settingsReady || runningId !== null} onClick={() => void installTemplate(libraryDetail, libraryValues)}><Plus size={13} /> Add with these values</button>
           </div>
         </div>}
-      </section>}
+      </section>
+      </div>}
+
+      {section === 'scripts' && <div id="script-section-scripts" role="tabpanel" aria-labelledby="script-section-tab-scripts" className="script-section-panel">
+      <div className="script-section-intro"><strong>My scripts</strong><span>Scripts you saved. Run, edit, or remove them here.</span></div>
 
       {editing && editingRowId === null && renderEditor()}
 
@@ -704,6 +739,7 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
           );
         }) : !editing ? <div className="script-empty"><span className="empty-icon"><Terminal size={20} /></span><strong>No scripts yet</strong><p>Add a Python, Bash, or PowerShell script and declare its inputs, or add a ready-made script from the Library.</p><button className="secondary-button" type="button" disabled={!settingsReady} onClick={openNewEditor}><Plus size={13} /> Create a script</button></div> : null}
       </div>
+      </div>}
 
       {!sidePanel.panelMode && scriptOutput}
 

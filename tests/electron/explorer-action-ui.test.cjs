@@ -36,7 +36,7 @@ async function fixture() {
 test('Explorer mapping UI saves edits removes and clears mappings while registration stays disabled in test mode', async () => {
   const { app, page, dispatch } = await fixture();
   try {
-    await page.getByRole('button', { name: 'Explorer actions', exact: true }).click();
+    await page.getByRole('tab', { name: 'Explorer actions', exact: true }).click();
     const section = page.getByRole('region', { name: 'File Explorer actions', exact: true });
     await section.getByRole('button', { name: 'Add action', exact: true }).click();
     await section.getByLabel('Saved profile', { exact: true }).selectOption('echo');
@@ -144,7 +144,7 @@ test('Explorer template mapping prefills the typed file input and keeps credenti
     await page.getByRole('region', { name: 'Launcher applications', exact: true }).waitFor();
     await page.evaluate(() => window.automator.selectTab(2));
     await page.getByRole('region', { name: 'Script Runner', exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Explorer actions', exact: true }).click();
+    await page.getByRole('tab', { name: 'Explorer actions', exact: true }).click();
     const mappings = page.getByRole('region', { name: 'File Explorer actions', exact: true });
     await mappings.getByRole('button', { name: 'Add action', exact: true }).click();
     await mappings.getByLabel('Saved profile', { exact: true }).selectOption(profile.id);
@@ -190,7 +190,7 @@ test('Explorer registration errors remain visible beside persisted mappings', as
         return result;
       });
     }, listed);
-    await page.getByRole('button', { name: 'Explorer actions', exact: true }).click();
+    await page.getByRole('tab', { name: 'Explorer actions', exact: true }).click();
     const section = page.getByRole('region', { name: 'File Explorer actions', exact: true });
     await section.getByRole('status').filter({ hasText: 'could not be updated' }).waitFor();
     await section.getByRole('button', { name: 'Edit Retained mapping', exact: true }).waitFor();
@@ -217,7 +217,7 @@ test('cold Explorer launch retains a mapped Unicode file until the Script Runner
 test('Firebird Library card path labels address the input on each card', async () => {
   const { app, page } = await fixture();
   try {
-    await page.getByRole('button', { name: 'Library', exact: true }).click();
+    await page.getByRole('tab', { name: 'Library', exact: true }).click();
     const library = page.getByRole('region', { name: 'Script template library', exact: true });
     const plain = library.locator('.script-template-row').filter({ has: page.getByText('Firebird 3 database backup', { exact: true }) });
     const zipped = library.locator('.script-template-row').filter({ has: page.getByText('Firebird 3 database backup and ZIP', { exact: true }) });

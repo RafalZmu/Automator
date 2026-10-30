@@ -287,6 +287,17 @@ input { user-select: text; }
 .script-module-icon, .script-profile-icon { flex: none; width: 31px; height: 31px; display: grid; place-items: center; border: 1px solid rgba(26,131,151,.15); border-radius: 9px; color: var(--accent-strong); background: var(--accent-soft); }
 .script-heading h1 { margin: 0; color: var(--ink); font-size: 12px; font-weight: 670; }
 .script-heading p { margin: 3px 0 0; color: var(--muted); font-size: 9px; }
+.script-sections { flex: none; display: flex; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.34); }
+.window-shell[data-theme="dark"] .script-sections { background: rgba(255,255,255,.045); }
+.script-section-tab { flex: 1; min-height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 8px; color: var(--muted-strong); background: transparent; font: inherit; font-size: 10px; font-weight: 620; cursor: pointer; }
+.script-section-tab[aria-selected="true"] { color: var(--accent-strong); background: var(--accent-soft); }
+.script-section-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.script-section-count { min-width: 16px; padding: 0 5px; border-radius: 8px; color: var(--muted); background: rgba(26,131,151,.1); font-size: 8px; text-align: center; }
+.script-section-panel { display: contents; }
+.script-section-panel[hidden] { display: none; }
+.script-section-intro { flex: none; display: flex; flex-direction: column; gap: 2px; }
+.script-section-intro strong { color: var(--ink); font-size: 10px; }
+.script-section-intro span { color: var(--muted); font-size: 9px; }
 .script-notice { flex: none; margin: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted-strong); background: rgba(255,255,255,.34); font-size: 9px; line-height: 1.4; }
 .window-shell[data-theme="dark"] .script-notice { background: rgba(255,255,255,.045); }
 .script-editor { flex: none; max-height: 66%; display: flex; flex-direction: column; gap: 9px; padding: 11px; overflow: auto; border: 1px solid var(--line); border-radius: 13px; background: rgba(255,255,255,.43); box-shadow: 0 5px 16px rgba(30,75,88,.035); scrollbar-color: rgba(90,126,135,.25) transparent; scrollbar-width: thin; }
