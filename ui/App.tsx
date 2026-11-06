@@ -418,7 +418,11 @@ export function App() {
       setLocalQuery(parsed.data.query);
     }
     setSettingsOpen(parsed.data.mode === 'settings' || parsed.data.mode === 'recordingHotkey');
-    if (parsed.data.aliasEditCandidate) { setLocalAlias(parsed.data.aliasEditCandidate.alias); setLocalArguments(parsed.data.aliasEditCandidate.arguments); }
+    const candidate = parsed.data.aliasEditCandidate;
+    if (candidate && (contextChanged || previous?.aliasEditCandidate?.id !== candidate.id)) {
+      setLocalAlias(candidate.alias);
+      setLocalArguments(candidate.arguments);
+    }
   }, [isWorkspaceSurface, setQuickActionsHome]);
 
   useEffect(() => {
