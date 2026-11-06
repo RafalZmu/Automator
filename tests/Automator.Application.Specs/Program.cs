@@ -313,6 +313,14 @@ static Task AliasEditUpdatesBinding()
     Check.Equal("--safe", saved.Arguments);
     Check.Equal(candidate.TargetPath, saved.TargetPath);
     Check.Equal(LauncherMode.Launcher, session.Snapshot.Mode);
+
+    // Saving with explicit arguments replaces them; omitting them keeps the stored value.
+    Check.True(session.BeginAliasEdit(saved));
+    Check.Equal(null, session.SaveAlias("ed", " \"https://chat.example/team/messages/@user\" "));
+    Check.Equal("\"https://chat.example/team/messages/@user\"", session.Snapshot.Bindings.Single(item => item.Id == "two").Arguments);
+    Check.True(session.BeginAliasEdit(session.Snapshot.Bindings.Single(item => item.Id == "two")));
+    Check.Equal(null, session.SaveAlias("ed"));
+    Check.Equal("\"https://chat.example/team/messages/@user\"", session.Snapshot.Bindings.Single(item => item.Id == "two").Arguments);
     return Task.CompletedTask;
 }
 

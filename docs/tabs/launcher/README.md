@@ -1,6 +1,6 @@
 # Launcher — slot 1
 
-The Launcher binds short letter aliases to installed apps, EXEs, and shortcuts. It can minimize the foreground app, restore/maximize an app already running, or launch and maximize a new app. The app catalog is opened with /; aliases are edited on app rows.
+The Launcher binds short letter aliases to installed apps, EXEs, and shortcuts. It can minimize the foreground app, restore/maximize an app already running, or launch and maximize a new app. The app catalog is opened with /; aliases are edited on app rows. The alias editor also has an optional Arguments field (for example a `"https://server/team/messages/@user"` URL for Mattermost) that is saved on the binding and passed to the app each time the launcher starts it; leaving it empty keeps launching the app without arguments.
 
 When the compact panel opens, its home surface is Global Action Search. That surface searches actions from all tabs and does not consume a numbered slot. Typing a unique command runs it; selecting a tab-specific result routes to that tab. The normal app-alias flow remains available on slot 1.
 

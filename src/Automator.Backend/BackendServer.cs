@@ -1264,12 +1264,13 @@ public sealed class BackendServer : IAsyncDisposable
 
         var updated = Clone(candidate);
         updated.Alias = parameters.Alias.Trim();
+        if (parameters.Arguments is not null) updated.Arguments = parameters.Arguments.Trim();
         var bindings = state.Bindings.Where(binding => !string.Equals(binding.Id, updated.Id, StringComparison.Ordinal))
             .Select(Clone).Append(updated).ToList();
         var settings = _settings! with { Bindings = bindings };
         _settingsStore!.Save(settings);
         _settings = settings;
-        if (_session.SaveAlias(parameters.Alias) is not null)
+        if (_session.SaveAlias(parameters.Alias, parameters.Arguments) is not null)
             throw new InvalidOperationException("Alias validation changed while saving.");
         await ActivateCurrentServicesAsync().ConfigureAwait(false);
         ClearError();

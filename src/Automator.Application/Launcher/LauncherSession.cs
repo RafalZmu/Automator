@@ -271,7 +271,7 @@ public sealed class LauncherSession
         }
     }
 
-    public AliasValidationError? SaveAlias(string alias)
+    public AliasValidationError? SaveAlias(string alias, string? arguments = null)
     {
         ArgumentNullException.ThrowIfNull(alias);
         lock (_sync)
@@ -287,6 +287,7 @@ public sealed class LauncherSession
             if (validationError is not null) return validationError;
 
             candidate.Alias = alias.Trim();
+            if (arguments is not null) candidate.Arguments = arguments.Trim();
             var existingIndex = _bindings.FindIndex(binding => string.Equals(binding.Id, candidate.Id, StringComparison.Ordinal));
             if (existingIndex >= 0) _bindings[existingIndex] = candidate;
             else _bindings.Add(candidate);

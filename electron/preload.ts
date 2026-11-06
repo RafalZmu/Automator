@@ -65,7 +65,7 @@ const api: AutomatorBridge = Object.freeze({
     if (typeof result !== 'boolean') throw new Error('Automator returned an invalid Work Time CSV export result.');
     return result;
   },
-  saveAlias: (bindingId: string, alias: string) => ipcRenderer.invoke('automator:save-alias', { bindingId, alias }),
+  saveAlias: (bindingId: string, alias: string, args?: string) => ipcRenderer.invoke('automator:save-alias', { bindingId, alias, ...(args === undefined ? {} : { arguments: args }) }),
   removeBinding: (bindingId: string) => ipcRenderer.invoke('automator:remove-binding', { bindingId }),
   activateBinding: (bindingId: string) => ipcRenderer.invoke('automator:activate-binding', { bindingId }),
   setMode: (mode: BackendUiState['mode']) => ipcRenderer.invoke('automator:set-mode', { mode }),
