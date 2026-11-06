@@ -68,7 +68,7 @@ export interface AutomatorBridge {
   selectCatalogBinding(bindingId: string): Promise<BackendUiState>;
   selectBinding(bindingId: string): Promise<BackendUiState>;
   addCustomApp(): Promise<BackendUiState | null>;
-  saveAlias(bindingId: string, alias: string): Promise<BackendUiState>;
+  saveAlias(bindingId: string, alias: string, args?: string): Promise<BackendUiState>;
   removeBinding(bindingId: string): Promise<BackendUiState>;
   activateBinding(bindingId: string): Promise<BackendUiState>;
   setMode(mode: BackendUiState['mode']): Promise<BackendUiState>;

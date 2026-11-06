@@ -370,6 +370,7 @@ export function App() {
   const [selectedActivityRunId, setSelectedActivityRunId] = useState<string | null>(null);
   const [localQuery, setLocalQuery] = useState('');
   const [localAlias, setLocalAlias] = useState('');
+  const [localArguments, setLocalArguments] = useState('');
   const [commandError, setCommandError] = useState('');
   const [retrying, setRetrying] = useState(false);
   const [automationServicesEntry, setAutomationServicesEntry] = useState<{ key: string; services: AutomationServices } | null>(null);
@@ -417,7 +418,7 @@ export function App() {
       setLocalQuery(parsed.data.query);
     }
     setSettingsOpen(parsed.data.mode === 'settings' || parsed.data.mode === 'recordingHotkey');
-    if (parsed.data.aliasEditCandidate) setLocalAlias(parsed.data.aliasEditCandidate.alias);
+    if (parsed.data.aliasEditCandidate) { setLocalAlias(parsed.data.aliasEditCandidate.alias); setLocalArguments(parsed.data.aliasEditCandidate.arguments); }
   }, [isWorkspaceSurface, setQuickActionsHome]);
 
   useEffect(() => {
@@ -645,6 +646,7 @@ export function App() {
   const editAlias = (binding: Binding, catalog: boolean) => {
     if (!bridge) return;
     setLocalAlias(binding.alias);
+    setLocalArguments(binding.arguments);
     void runCommand(() => catalog ? bridge.selectCatalogBinding(binding.id) : bridge.selectBinding(binding.id));
   };
 
@@ -1086,12 +1088,16 @@ export function App() {
                 </div>
                 <label className="alias-entry" htmlFor="alias-input">
                   <span>Unique letters only</span>
-                  <input ref={aliasRef} id="alias-input" value={localAlias} maxLength={32} autoComplete="off" spellCheck={false} onChange={(event) => setLocalAlias(event.target.value.replace(/[^a-z]/gi, ''))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void runCommand(() => bridge.saveAlias(aliasCandidate!.id, localAlias)); } }} />
+                  <input ref={aliasRef} id="alias-input" value={localAlias} maxLength={32} autoComplete="off" spellCheck={false} onChange={(event) => setLocalAlias(event.target.value.replace(/[^a-z]/gi, ''))} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void runCommand(() => bridge.saveAlias(aliasCandidate!.id, localAlias, localArguments)); } }} />
+                </label>
+                <label className="alias-entry alias-arguments" htmlFor="alias-arguments-input">
+                  <span>Arguments (optional)</span>
+                  <input id="alias-arguments-input" value={localArguments} maxLength={2048} autoComplete="off" spellCheck={false} placeholder={'"https://server/team/messages/@user"'} onChange={(event) => setLocalArguments(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && /^[a-z]{1,32}$/i.test(localAlias)) { event.preventDefault(); void runCommand(() => bridge.saveAlias(aliasCandidate!.id, localAlias, localArguments)); } }} />
                 </label>
                 <p className="alias-hint">Type the alias into the launcher to start this application after a short pause.</p>
                 <div className="alias-actions">
                   <button className="secondary-button" type="button" onClick={() => void runCommand(() => bridge.setMode(isCatalog ? 'catalog' : 'launcher'))}>Cancel</button>
-                  <button className="primary-button" type="button" disabled={!/^[a-z]{1,32}$/i.test(localAlias)} onClick={() => void runCommand(() => bridge.saveAlias(aliasCandidate!.id, localAlias))}><Check size={15} /> Save alias</button>
+                  <button className="primary-button" type="button" disabled={!/^[a-z]{1,32}$/i.test(localAlias)} onClick={() => void runCommand(() => bridge.saveAlias(aliasCandidate!.id, localAlias, localArguments))}><Check size={15} /> Save alias</button>
                 </div>
               </section>
             )}

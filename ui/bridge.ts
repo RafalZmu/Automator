@@ -147,10 +147,10 @@ class BrowserPreviewBridge implements AutomatorBridge {
     return this.update({ aliasEditCandidate: candidate ?? null, mode: candidate ? 'aliasEditing' : 'launcher' });
   }
   async addCustomApp() { return null; }
-  async saveAlias(bindingId: string, alias: string) {
+  async saveAlias(bindingId: string, alias: string, args?: string) {
     const candidate = this.state.aliasEditCandidate;
     if (!candidate || candidate.id !== bindingId) return this.update({ error: 'This app is no longer selected.' });
-    const saved = { ...candidate, alias: alias.trim() };
+    const saved = { ...candidate, alias: alias.trim(), ...(args === undefined ? {} : { arguments: args.trim() }) };
     const bindings = [...this.state.bindings.filter((binding) => binding.id !== saved.id), saved];
     return this.update({ bindings, mode: 'launcher', aliasEditCandidate: null, selectedTab: 1, error: null });
   }

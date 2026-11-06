@@ -247,7 +247,7 @@ const methodParams = {
   'launcher/openCatalog': emptyParams,
   'catalog/select': z.strictObject({ bindingId: z.string().min(1).max(128) }),
   'catalog/addCustom': z.strictObject({ path: absoluteWindowsPath.regex(/\.(?:exe|lnk)$/i) }),
-  'binding/saveAlias': z.strictObject({ bindingId: z.string().min(1).max(128), alias }),
+  'binding/saveAlias': z.strictObject({ bindingId: z.string().min(1).max(128), alias, arguments: z.string().max(2048).optional() }),
   'binding/select': z.strictObject({ bindingId: z.string().min(1).max(128) }),
   'binding/remove': z.strictObject({ bindingId: z.string().min(1).max(128) }),
   'settings/update': z.strictObject({

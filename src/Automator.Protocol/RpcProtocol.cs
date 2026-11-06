@@ -164,7 +164,7 @@ public sealed record SetTabOrderParams(IReadOnlyList<int> Order);
 public sealed record SetQueryParams(string Query);
 public sealed record SelectBindingParams(string BindingId);
 public sealed record CustomAppParams(string Path);
-public sealed record SaveAliasParams(string BindingId, string Alias);
+public sealed record SaveAliasParams(string BindingId, string Alias, string? Arguments = null);
 public sealed record RemoveBindingParams(string BindingId);
 public sealed record SettingsUpdateParams(string Hotkey, string Theme, bool StartWithWindows, IReadOnlyList<BindingParams> Bindings);
 public sealed record BindingParams(string Id, string Name, string TargetPath, string Alias, string Arguments);
@@ -250,6 +250,7 @@ public static class RpcParameterValidator
                 var value = RpcProtocol.ParseParameters<SaveAliasParams>(request);
                 Require(value.BindingId is { Length: > 0 and <= 128 }, "Binding id is required.", request);
                 Require(AliasValidator.Validate(value.Alias, []) is null, "Alias must contain letters only and cannot be empty.", request);
+                Require(value.Arguments is null || value.Arguments.Length <= 2048, "Arguments must be at most 2048 characters.", request);
                 break;
             }
             case RpcMethods.ActivateBinding:

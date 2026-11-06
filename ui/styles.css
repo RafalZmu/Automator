@@ -427,6 +427,7 @@ input { user-select: text; }
 .alias-entry:focus-within { border-color: rgba(24,130,152,.5); box-shadow: 0 0 0 3px rgba(25,139,162,.09); }
 .alias-entry span { color: var(--muted); font-size: 10px; }
 .alias-entry input { width: 120px; border: 0; outline: 0; color: var(--accent-strong); background: transparent; font-size: 17px; font-weight: 680; letter-spacing: .08em; text-align: right; }
+.alias-arguments input { width: 100%; max-width: 340px; font-size: 12px; font-weight: 500; letter-spacing: 0; color: var(--text, inherit); }
 .alias-hint { margin: 9px 2px 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .alias-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 23px; }
 
