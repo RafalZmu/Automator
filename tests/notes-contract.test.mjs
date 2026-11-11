@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_NOTES, MAX_NOTE_BODY_LENGTH, MAX_NOTE_TITLE_LENGTH, readNotes, readOpenTasks, validateNote } from '../ui/contracts/notes.ts';
+import { MAX_NOTES, MAX_NOTE_BODY_LENGTH, MAX_NOTE_TITLE_LENGTH, readNotes, groupOpenTasks, readOpenTasks, validateNote } from '../ui/contracts/notes.ts';
 import { countCheckboxes, hasUntickedCheckbox, parseInline, parseMarkdown, toggleCheckbox } from '../ui/modules/notesMarkdown.ts';
 
 const todo = { id: 'todo', title: 'Todo', body: '- [ ] first\n- [x] second' };
@@ -98,4 +98,10 @@ test('reads the published open tasks and ignores malformed state', () => {
   assert.deepEqual(readOpenTasks(value), { total: 3, tasks: [{ note: 'Todo', text: 'first' }] });
   for (const bad of [undefined, '', 'not json', '[]', '{"tasks":5}']) assert.deepEqual(readOpenTasks(bad), { total: 0, tasks: [] });
   assert.equal(readOpenTasks('{"total":0,"tasks":[{"note":"a","text":"b"}]}').total, 1);
+});
+
+test('groups consecutive open tasks of the same note under one heading', () => {
+  const tasks = [{ note: 'A', text: '1' }, { note: 'A', text: '2' }, { note: 'B', text: '3' }];
+  assert.deepEqual(groupOpenTasks(tasks), [{ note: 'A', tasks: ['1', '2'] }, { note: 'B', tasks: ['3'] }]);
+  assert.deepEqual(groupOpenTasks([]), []);
 });

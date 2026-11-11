@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { AppWindow, ListChecks, ArrowDown, ArrowUp, CornerDownLeft, Search, Settings2, Sparkles } from 'lucide-react';
-import type { OpenTasks } from '../contracts/notes';
+import { groupOpenTasks, type OpenTasks } from '../contracts/notes';
 import { canAutoRunTabCommand, matchQuickActions, resolveTabCommand, type TabCommand } from './commandMatching';
 
 export type QuickAction = TabCommand & {
@@ -127,11 +127,16 @@ export function QuickActionsHome({
     {showTasks && <div className="quick-actions-tasks" role="region" aria-label="Open tasks from Quick notes">
       <div className="quick-actions-tasks-heading"><ListChecks size={13} aria-hidden="true" /><span>Open tasks</span><span className="quick-actions-tasks-count">{openTasks.total}</span></div>
       <ul className="quick-actions-task-list">
-        {openTasks.tasks.map((task, index) => <li key={index}>
-          <button type="button" className="quick-actions-task" disabled={!notesTab || Boolean(busyId)} title={`Open ${task.note} in Quick notes`}
-            onClick={() => { if (notesTab) void execute(notesTab as QuickAction); }}>
-            <span className="quick-actions-task-box" aria-hidden="true" /><span className="quick-actions-task-text">{task.text}</span><span className="quick-actions-task-note">{task.note}</span>
-          </button>
+        {groupOpenTasks(openTasks.tasks).map((group, groupIndex) => <li key={groupIndex} className="quick-actions-task-group">
+          <div className="quick-actions-task-group-title">{group.note}</div>
+          <ul className="quick-actions-task-items" aria-label={`Open tasks in ${group.note}`}>
+            {group.tasks.map((text, index) => <li key={index}>
+              <button type="button" className="quick-actions-task" disabled={!notesTab || Boolean(busyId)} title={`Open ${group.note} in Quick notes`}
+                onClick={() => { if (notesTab) void execute(notesTab as QuickAction); }}>
+                <span className="quick-actions-task-box" aria-hidden="true" /><span className="quick-actions-task-text">{text}</span>
+              </button>
+            </li>)}
+          </ul>
         </li>)}
         {openTasks.total > openTasks.tasks.length && <li className="quick-actions-task-more">+{openTasks.total - openTasks.tasks.length} more in Quick notes</li>}
       </ul>

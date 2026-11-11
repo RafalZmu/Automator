@@ -267,7 +267,8 @@ input { user-select: text; }
 .quick-actions-task:hover:not(:disabled) { background: var(--accent-soft); }
 .quick-actions-task-box { flex: none; width: 11px; height: 11px; border: 1.5px solid var(--muted); border-radius: 3px; }
 .quick-actions-task-text { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.quick-actions-task-note { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 9px; }
+.quick-actions-task-group-title { padding: 4px 8px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-strong); font-size: 9px; font-weight: 650; }
+.quick-actions-task-items { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 1px; }
 .quick-actions-task-more { padding: 4px 8px; color: var(--muted); font-size: 9px; }
 .quick-actions-empty { min-height: 78px; display: grid; place-items: center; padding: 12px; color: var(--muted); font-size: 10px; text-align: center; }
 .quick-actions-confirm-note, .quick-actions-error, .quick-actions-instruction { flex: none; display: flex; align-items: center; gap: 5px; margin: 1px 4px; color: var(--accent-strong); font-size: 9px; }

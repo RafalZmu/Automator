@@ -56,3 +56,14 @@ export function readOpenTasks(value: unknown): OpenTasks {
   const total = typeof parsed.total === 'number' && Number.isInteger(parsed.total) && parsed.total >= tasks.length ? parsed.total : tasks.length;
   return { total, tasks };
 }
+
+/** Groups consecutive tasks of the same note, which the host already lists note by note, under one heading. */
+export function groupOpenTasks(tasks: readonly OpenTask[]): { note: string; tasks: string[] }[] {
+  const groups: { note: string; tasks: string[] }[] = [];
+  for (const task of tasks) {
+    const last = groups[groups.length - 1];
+    if (last && last.note === task.note) last.tasks.push(task.text);
+    else groups.push({ note: task.note, tasks: [task.text] });
+  }
+  return groups;
+}
