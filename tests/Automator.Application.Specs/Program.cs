@@ -21,6 +21,7 @@ var checks = new (string Name, Func<Task> Run)[]
     ("late activation results cannot affect a reopened panel", ReopenedPanelInvalidatesActivationResult),
     ("catalog pins the pointer-captured app and removes duplicate identities", CatalogPinsAndDeduplicates),
     ("alias edits update a binding without losing target arguments", AliasEditUpdatesBinding),
+    ("picking an already saved app again adds a separate entry with its own arguments", SeveralEntriesCanShareOneApp),
     ("alias matching is only active in launcher slot one", AliasMatchingIsContextual),
     ("state revisions increase monotonically", RevisionsIncrease),
     ("query changes cancel only the pending alias delay", PendingAliasDelayCanBeCancelled),
@@ -321,6 +322,29 @@ static Task AliasEditUpdatesBinding()
     Check.True(session.BeginAliasEdit(session.Snapshot.Bindings.Single(item => item.Id == "two")));
     Check.Equal(null, session.SaveAlias("ed"));
     Check.Equal("\"https://chat.example/team/messages/@user\"", session.Snapshot.Bindings.Single(item => item.Id == "two").Arguments);
+    return Task.CompletedTask;
+}
+
+static Task SeveralEntriesCanShareOneApp()
+{
+    var first = Binding("mm", "Mattermost", @"C:\Apps\Mattermost.exe", "mm1", "\"mattermost://chat/team/messages/a\"");
+    var session = new LauncherSession(CreateSettings(first));
+    session.ShowPanel("0x11");
+
+    // Picking the same catalog app again starts a new entry instead of overwriting the saved one.
+    Check.True(session.BeginAliasEdit(Binding("mm", "Mattermost", @"C:\Apps\Mattermost.exe", ""), asNewEntry: true));
+    Check.True(session.Snapshot.AliasEditCandidate!.Id != "mm");
+    Check.Equal(null, session.SaveAlias("mm2", "\"mattermost://chat/team/messages/b\""));
+
+    var bindings = session.Snapshot.Bindings;
+    Check.Equal(2, bindings.Count);
+    Check.Equal("mm1", bindings.Single(item => item.Id == "mm").Alias);
+    Check.Equal("mm2", bindings.Single(item => item.Id != "mm").Alias);
+    Check.Equal("\"mattermost://chat/team/messages/a\"", bindings.Single(item => item.Id == "mm").Arguments);
+
+    // Editing an existing entry still updates it in place.
+    Check.True(session.BeginAliasEdit(bindings.Single(item => item.Id == "mm")));
+    Check.Equal("mm", session.Snapshot.AliasEditCandidate!.Id);
     return Task.CompletedTask;
 }
 

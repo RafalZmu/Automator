@@ -257,13 +257,19 @@ public sealed class LauncherSession
         }
     }
 
-    public bool BeginAliasEdit(AppBinding binding)
+    /// <summary>
+    /// Opens the alias editor. With <paramref name="asNewEntry"/> (a catalog or browsed app) the candidate gets its own id when a
+    /// saved entry already uses it, so several entries can point to the same app with different arguments.
+    /// </summary>
+    public bool BeginAliasEdit(AppBinding binding, bool asNewEntry = false)
     {
         ArgumentNullException.ThrowIfNull(binding);
         lock (_sync)
         {
             if (!_visible) return false;
-            _aliasEditCandidate = Clone(binding);
+            var candidate = Clone(binding);
+            if (asNewEntry) candidate.Id = CreateUniqueId(candidate.Id);
+            _aliasEditCandidate = candidate;
             _mode = LauncherMode.AliasEditing;
             _catalogApps = [];
             BumpRevision();
@@ -352,6 +358,15 @@ public sealed class LauncherSession
         _aliasEditCandidate is null ? null : Clone(_aliasEditCandidate),
         _tabOrder.ToArray(),
         _tabRow);
+
+    private string CreateUniqueId(string id)
+    {
+        if (!_bindings.Any(binding => string.Equals(binding.Id, id, StringComparison.OrdinalIgnoreCase))) return id;
+        string candidate;
+        do candidate = Guid.NewGuid().ToString("N")[..16];
+        while (_bindings.Any(binding => string.Equals(binding.Id, candidate, StringComparison.OrdinalIgnoreCase)));
+        return candidate;
+    }
 
     private void BumpRevision() => _revision = checked(_revision + 1);
 
