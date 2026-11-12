@@ -255,7 +255,7 @@ public sealed class BackendServer : IAsyncDisposable
                     ?? throw new RpcProtocolException(-32004, "The selected application is no longer available.", new { bindingId = id }, requestId: request.Id);
                 _launchScheduler!.CancelPending();
                 InvalidateCatalogLoad();
-                if (!_session!.BeginAliasEdit(binding)) throw new RpcProtocolException(-32005, "The launcher is not open.", requestId: request.Id);
+                if (!_session!.BeginAliasEdit(binding, asNewEntry: request.Method == RpcMethods.SelectCatalogApp)) throw new RpcProtocolException(-32005, "The launcher is not open.", requestId: request.Id);
                 await ActivateCurrentServicesAsync().ConfigureAwait(false);
                 await PublishStateAsync().ConfigureAwait(false);
                 return GetState();
@@ -266,7 +266,7 @@ public sealed class BackendServer : IAsyncDisposable
                 var binding = _catalog!.FromCustomPath(path);
                 InvalidateCatalogLoad();
                 if (_session!.Snapshot.Mode == LauncherMode.Catalog) _session.AddCatalogApp(binding);
-                if (!_session.BeginAliasEdit(binding)) throw new RpcProtocolException(-32005, "Open the catalog before adding an app.", requestId: request.Id);
+                if (!_session.BeginAliasEdit(binding, asNewEntry: true)) throw new RpcProtocolException(-32005, "Open the catalog before adding an app.", requestId: request.Id);
                 await ActivateCurrentServicesAsync().ConfigureAwait(false);
                 await PublishStateAsync().ConfigureAwait(false);
                 return GetState();
