@@ -38,6 +38,19 @@ public sealed class WindowsApplicationActivator : IApplicationActivator
                 ["previousForegroundWindow"] = FormatHwnd(previous)
             });
 
+        var launchArguments = NormalizeArguments(binding.TargetPath, binding.Arguments);
+        var hasArguments = !string.IsNullOrWhiteSpace(launchArguments);
+        if (hasArguments && candidates.Count > 0)
+        {
+            // Apps like Mattermost are single-instance: starting them again hands the arguments (deep link) to the
+            // running instance and exits. Do that first, then bring the existing window forward.
+            StartProcess(binding, launchArguments)?.Dispose();
+            await Task.Delay(400, cancellationToken).ConfigureAwait(false);
+            var existing = FindWindows(binding.TargetPath);
+            if (existing.Count > 0) await RestoreAndMaximizeAsync(existing[0], binding.Name, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var targetForeground = previous != IntPtr.Zero && candidates.Contains(previous) ? previous : IntPtr.Zero;
         if (targetForeground != IntPtr.Zero)
         {
@@ -54,22 +67,7 @@ public sealed class WindowsApplicationActivator : IApplicationActivator
             return;
         }
 
-        Process? started;
-        try
-        {
-            started = Process.Start(new ProcessStartInfo(binding.TargetPath)
-            {
-                Arguments = binding.Arguments,
-                UseShellExecute = true,
-                WorkingDirectory = Path.GetDirectoryName(binding.TargetPath) ?? Environment.CurrentDirectory
-            });
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or FileNotFoundException or UnauthorizedAccessException)
-        {
-            _log.Write(ApplicationLogLevel.Error, "Launcher.ProcessStartFailed", "Windows could not start the selected application.", exception,
-                new Dictionary<string, object?> { ["targetPath"] = binding.TargetPath, ["appName"] = binding.Name });
-            throw new InvalidOperationException($"Could not start {binding.Name}: {exception.Message}", exception);
-        }
+        var started = StartProcess(binding, launchArguments);
 
         if (started is null) throw new InvalidOperationException($"Windows did not return a process for {binding.Name}.");
         using (started)
@@ -99,6 +97,42 @@ public sealed class WindowsApplicationActivator : IApplicationActivator
                 properties: new Dictionary<string, object?> { ["targetPath"] = binding.TargetPath, ["processId"] = started.Id });
             throw new TimeoutException($"{binding.Name} started, but its window did not appear within eight seconds. It may still be loading.");
         }
+    }
+
+    private Process? StartProcess(AppBinding binding, string arguments)
+    {
+        try
+        {
+            return Process.Start(new ProcessStartInfo(binding.TargetPath)
+            {
+                Arguments = arguments,
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetDirectoryName(binding.TargetPath) ?? Environment.CurrentDirectory
+            });
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or FileNotFoundException or UnauthorizedAccessException)
+        {
+            _log.Write(ApplicationLogLevel.Error, "Launcher.ProcessStartFailed", "Windows could not start the selected application.", exception,
+                new Dictionary<string, object?> { ["targetPath"] = binding.TargetPath, ["appName"] = binding.Name });
+            throw new InvalidOperationException($"Could not start {binding.Name}: {exception.Message}", exception);
+        }
+    }
+
+    /// <summary>
+    /// Mattermost Desktop only navigates for <c>mattermost://</c> deep links; a plain http(s) link is ignored and the app
+    /// just reopens on the last chat. Rewrites a quoted or bare http(s) argument to the mattermost scheme for Mattermost.
+    /// </summary>
+    public static string NormalizeArguments(string targetPath, string? arguments)
+    {
+        var text = arguments?.Trim() ?? string.Empty;
+        if (text.Length == 0) return string.Empty;
+        if (!Path.GetFileNameWithoutExtension(targetPath).Contains("mattermost", StringComparison.OrdinalIgnoreCase)) return text;
+        var quoted = text.Length >= 2 && text[0] == '"' && text[^1] == '"';
+        var url = quoted ? text[1..^1] : text;
+        if (url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) url = "mattermost://" + url[8..];
+        else if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)) url = "mattermost://" + url[7..];
+        else return text;
+        return quoted ? $"\"{url}\"" : url;
     }
 
     private async Task RestoreAndMaximizeAsync(IntPtr window, string name, CancellationToken cancellationToken)
