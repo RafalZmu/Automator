@@ -12,7 +12,7 @@ Source of truth: `docs/tabs/launcher/` in the repository. This concept is genera
 
 ## Behavior and code map
 
-The Launcher binds short letter aliases to installed apps, EXEs, and shortcuts. It can minimize the foreground app, restore/maximize an app already running, or launch and maximize a new app. The app catalog is opened with /; aliases are edited on app rows. The alias editor also has an optional Arguments field (for example a `"https://server/team/messages/@user"` URL for Mattermost) that is saved on the binding and passed to the app each time the launcher starts it; leaving it empty keeps launching the app without arguments.
+The Launcher binds short letter aliases to installed apps, EXEs, and shortcuts. It can minimize the foreground app, restore/maximize an app already running, or launch and maximize a new app. The app catalog is opened with /; aliases are edited on app rows. The alias editor also has an optional Arguments field (for example a `"https://server/team/messages/@user"` URL for Mattermost) that is saved on the binding and passed to the app each time the launcher starts it; leaving it empty keeps launching the app without arguments. Mattermost links given as http(s) are converted to `mattermost://` deep links, and when the app is already running the arguments are re-sent to the running instance (so it switches chat) before its window is brought forward.
 
 When the compact panel opens, its home surface is Global Action Search. That surface searches actions from all tabs and does not consume a numbered slot. Typing a unique command runs it; selecting a tab-specific result routes to that tab. The normal app-alias flow remains available on slot 1.
 

@@ -22,8 +22,19 @@ var checks = new (string Name, Action Run)[]
     ("website launcher redirects direct browser output", WebsiteLauncherRedirectsDirectBrowserOutput),
     ("website launcher capability is module scoped and opens only HTTP URLs in group order", WebsiteLauncherOpensValidatedGroups),
     ("settings backups keep only the newest ten copies", SettingsBackupsAreCappedToNewest),
+    ("mattermost http links become mattermost deep links", MattermostArgumentsUseDeepLink),
     ("settings export writes atomically, replaces targets, and leaves no temp files on failure", ExportIsAtomic),
 };
+
+static void MattermostArgumentsUseDeepLink()
+{
+    const string mm = @"C:\Users\a\AppData\Local\Programs\mattermost-desktop\Mattermost.exe";
+    Check.Equal("\"mattermost://srv/team/messages/@bob\"", WindowsApplicationActivator.NormalizeArguments(mm, "\"https://srv/team/messages/@bob\""));
+    Check.Equal("mattermost://srv/team/channels/town", WindowsApplicationActivator.NormalizeArguments(mm, " http://srv/team/channels/town "));
+    Check.Equal("--flag", WindowsApplicationActivator.NormalizeArguments(mm, "--flag"));
+    Check.Equal("https://x", WindowsApplicationActivator.NormalizeArguments(@"C:\x\app.exe", "https://x"));
+    Check.Equal("", WindowsApplicationActivator.NormalizeArguments(mm, null));
+}
 
 static void NormalizerMapsStableKeysAndModifiers()
 {
