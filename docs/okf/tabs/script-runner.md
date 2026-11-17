@@ -97,6 +97,12 @@ Explorer action UI lives in `ui/modules/ExplorerActionsPanel.tsx`; `explorerActi
 
 ### Agent access
 
+### Run as administrator
+
+PowerShell profiles have a **Run as administrator** checkbox (`runAsAdministrator`, off by default). Each run shows the Windows UAC prompt; declining it ends the run with a clear message and the script never starts. Output, the exit code, standard input, the timeout and Cancel still work: Windows cannot redirect an elevated process directly, so a Windows PowerShell wrapper (passed on the command line, never saved as a file) starts the script and relays its output through a private temporary folder that is deleted afterwards. The elevated script itself runs hidden, as with any other run.
+
+Elevated profiles are manual only. Scheduled and workflow runs fail with an explanation before anything starts, because nobody is there to approve the prompt. The option is rejected for non-PowerShell interpreters, profiles shared with AI agents (**AI can use**), Library templates and Codex tasks. Turning it on changes the profile's approval revision.
+
 Saved scripts can be listed, inspected (typed inputs with hints and examples), run, polled and canceled by an MCP client through `list_scripts`, `get_script`, `run_script`, `get_run` and `cancel_run`. Only scripts with the **AI can use** checkbox ticked in the editor (`aiAccess`, off by default) are visible to MCP clients. Runs use the same `runProfile` action and validation as this tab. See [Agent access](../../sections/agent-access/README.md).
 
 ### History side panel
@@ -134,6 +140,8 @@ Read the root AGENTS.md first. Script Runner executes saved, trusted user script
 - Use the shared `ui/components/PathField.tsx` for Script Runner script paths, working directories, and template file/directory inputs. It supports typed/pasted paths, an app-owned Browse callback, and one dropped filesystem item resolved in preload through Electron `webUtils.getPathForFile`; it must never read dropped file contents.
 - Keep path picker IPC limited to the active Script Runner tab and the allowlisted `file`/`directory` picker kinds. Native dialog options remain host controlled. Browser preview has no local filesystem and should show a recoverable path-resolution message for dropped items.
 - The path field is a reusable UI component only. Do not migrate unrelated tabs or add a generic cross-tab file capability without updating their own contributor guides and authorization boundaries.
+- `runAsAdministrator` is manual-only. `ScriptRunnerExecution.RunAsync` rejects any origin other than `Manual` before starting a process, and `Validate` rejects it for non-PowerShell interpreters, `aiAccess`, template origins and Codex approvals. Keep both checks; the MCP server runs profiles through `runProfile` as a manual run, so the AI-access exclusion is what stops an agent from raising UAC prompts. Only elevated profiles change `HashProfileRevision`, so existing approvals stay valid.
+- Elevation lives in `src/Automator.Infrastructure/Automation/ElevatedProcessRunner.cs`: `AutomationProcessRequest.RunAsAdministrator` starts Windows PowerShell with the `runas` verb and an `-EncodedCommand` wrapper that starts the real process and copies stdout, stderr and the exit code into a temporary folder. Never write the wrapper or the arguments into a file (that folder is user-writable and the wrapper runs elevated). An elevated process cannot be killed from Automator, so cancel and timeout create a marker file and the wrapper kills its child; the wrapper also enforces the deadline itself. Arguments plus wrapper must fit the 32,767-character command line. Test the wrapper unelevated by extracting it and running it with a payload; a real elevated run needs a person to approve UAC.
 
 ### Run lifecycle
 

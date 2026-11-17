@@ -40,7 +40,10 @@ public sealed record ScriptRunnerProfile(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonElement? Values = null,
     // Opt-in: AI agents connected through the MCP server only see and run profiles where this is true.
     // Profiles saved before this field existed deserialize as false.
-    bool AiAccess = false);
+    bool AiAccess = false,
+    // PowerShell only. Each run asks for Windows administrator approval (UAC), so it is manual-only:
+    // scheduled and workflow runs, AI access, templates, and Codex tasks are rejected.
+    bool RunAsAdministrator = false);
 
 public sealed record ScriptRunnerTemplateOrigin(string Id, int Version);
 
@@ -364,6 +367,15 @@ public sealed partial class ScriptRunnerModule : ILauncherTabModuleProvider
             throw new InvalidDataException("The profile argument list is invalid or too large.");
         if (profile.TimeoutSeconds is < 1 or > 3600)
             throw new InvalidDataException("Profile timeout must be between 1 and 3600 seconds.");
+        if (profile.RunAsAdministrator)
+        {
+            if (profile.Interpreter != ScriptRunnerInterpreter.Powershell)
+                throw new InvalidDataException("Run as administrator is only available for PowerShell scripts.");
+            if (profile.AiAccess)
+                throw new InvalidDataException("A script that runs as administrator cannot be made available to AI agents.");
+            if (profile.TemplateOrigin is not null || profile.CodexApproval is not null)
+                throw new InvalidDataException("Library templates and generated tasks cannot run as administrator.");
+        }
         if (profile.TemplateOrigin is { } origin &&
             (string.IsNullOrWhiteSpace(origin.Id) || !ProfileIdPattern.IsMatch(origin.Id) || origin.Version < 1))
             throw new InvalidDataException("Template origin is invalid.");

@@ -120,6 +120,31 @@ internal static class ScriptRunnerParameterSpecs
             "an empty input list keeps the existing approved revision");
         Ensure(ScriptRunnerExecution.BuildArguments(profile with { Parameters = null }, null).SequenceEqual(new[] { "--fixed" }),
             "profiles without inputs keep their fixed arguments");
+
+        // Run as administrator: manual only, PowerShell only, never combined with AI access.
+        var elevated = plain with { Id = "elevated", RunAsAdministrator = true };
+        var elevatedSaved = await module.ExecuteAsync("saveProfile", JsonSerializer.SerializeToElement(elevated, Options()), settings, context, default);
+        Ensure(elevatedSaved.Status == AutomationStatus.Success, elevatedSaved.Message);
+        var elevatedRun = await module.ExecuteAsync("runProfile", Json("""{"id":"elevated"}"""), settings, context, default);
+        Ensure(elevatedRun.Status == AutomationStatus.Success && process.Last!.RunAsAdministrator, "a manual run asks the process service to elevate");
+        Ensure(!(await module.ExecuteAsync("runProfile", Json("""{"id":"plain"}"""), settings, context, default)).Status.Equals(AutomationStatus.Error)
+            && !process.Last!.RunAsAdministrator, "ordinary profiles are not elevated");
+        var beforeBlocked = process.Calls;
+        foreach (var origin in new[] { AutomationExecutionOrigin.Scheduled, AutomationExecutionOrigin.Workflow })
+        {
+            try
+            {
+                await handler.ExecuteAsync("elevated", null, new(origin, "test"), default);
+                throw new Exception($"a {origin} run started an administrator script");
+            }
+            catch (InvalidDataException) { }
+        }
+        Ensure(process.Calls == beforeBlocked, "blocked runs never reach the process service");
+        Throws(() => ScriptRunnerModule.Validate(elevated with { AiAccess = true }), "administrator scripts cannot be shared with AI agents");
+        Throws(() => ScriptRunnerModule.Validate(elevated with { Interpreter = ScriptRunnerInterpreter.Python, ScriptPath = Path.ChangeExtension(script, ".py") }),
+            "only PowerShell can run as administrator");
+        Ensure(ScriptRunnerExecution.HashProfileRevision(plain, "body") != ScriptRunnerExecution.HashProfileRevision(elevated, "body"),
+            "elevation is part of the approved revision");
     }
 
     private static IReadOnlyList<ScriptRunnerTemplateParameter> Parameters() =>

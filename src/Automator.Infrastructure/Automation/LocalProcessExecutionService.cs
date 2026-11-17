@@ -13,6 +13,8 @@ public sealed class LocalProcessExecutionService : IAutomationProcessService
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
         Validate(request);
+        if (request.RunAsAdministrator)
+            return await ElevatedProcessRunner.ExecuteAsync(request, cancellationToken).ConfigureAwait(false);
 
         var startInfo = new ProcessStartInfo
         {

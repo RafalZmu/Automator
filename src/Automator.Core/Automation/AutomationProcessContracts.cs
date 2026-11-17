@@ -7,7 +7,9 @@ public sealed record AutomationProcessRequest(
     string WorkingDirectory,
     TimeSpan Timeout,
     string? StandardInput = null,
-    IReadOnlyDictionary<string, string>? EnvironmentVariables = null);
+    IReadOnlyDictionary<string, string>? EnvironmentVariables = null,
+    // Starts the executable elevated (Windows UAC prompt). Output is relayed through temporary files.
+    bool RunAsAdministrator = false);
 
 public sealed record AutomationProcessResult(
     int? ExitCode,
