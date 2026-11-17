@@ -12,6 +12,8 @@ export type ScriptProfile = {
   timeoutSeconds: number;
   /** Whether AI agents connected through the MCP server may see and run this script. Off unless the user opts in. */
   aiAccess?: boolean;
+  /** PowerShell only. Asks for Windows administrator approval on every run, so it is manual-only. */
+  runAsAdministrator?: boolean;
   templateOrigin?: { id: string; version: number } | null;
   /** Typed parameters declared by a user script. Template profiles take theirs from the library. */
   parameters?: ScriptTemplateParameter[] | null;

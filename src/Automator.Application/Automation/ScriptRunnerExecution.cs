@@ -41,6 +41,8 @@ public static class ScriptRunnerExecution
         // Profiles without parameters keep their existing hash.
         if (profile.Parameters is { Count: > 0 } parameters)
             definition = HashSource(definition + JsonSerializer.Serialize(parameters));
+        // Only elevated profiles add to the hash, so every existing approved revision stays valid.
+        if (profile.RunAsAdministrator) definition = HashSource(definition + "|run-as-administrator");
         return HashSource(definition);
     }
 
@@ -62,6 +64,8 @@ public static class ScriptRunnerExecution
         AutomationExecutionOrigin origin, string correlationId, CancellationToken cancellationToken, JsonElement? values = null)
     {
         ScriptRunnerModule.Validate(profile);
+        if (profile.RunAsAdministrator && origin != AutomationExecutionOrigin.Manual)
+            throw new InvalidDataException("This script runs as administrator, which needs approval on screen each time. Run it manually from Script Runner; scheduled and workflow runs are not allowed.");
         if (profile.CodexApproval is { } approval)
         {
             var revision = await HashProfileRevisionAsync(profile, cancellationToken).ConfigureAwait(false);
@@ -75,7 +79,7 @@ public static class ScriptRunnerExecution
             : new[] { profile.ScriptPath }.Concat(scriptArguments).ToArray();
         var processResult = await processes.ExecuteAsync(new AutomationProcessRequest(
             profile.InterpreterPath, arguments, profile.WorkingDirectory, TimeSpan.FromSeconds(profile.TimeoutSeconds),
-            input?.GetRawText()), cancellationToken).ConfigureAwait(false);
+            input?.GetRawText(), RunAsAdministrator: profile.RunAsAdministrator), cancellationToken).ConfigureAwait(false);
         JsonElement output;
         var invalidJson = false;
         if (profile.OutputMode == ScriptRunnerOutputMode.Json)

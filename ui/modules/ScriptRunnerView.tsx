@@ -243,6 +243,7 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
       id: editing.id.trim().toLowerCase(),
       name: editing.name.trim(),
       arguments: editing.arguments.filter((argument) => argument.length > 0),
+      runAsAdministrator: editing.interpreter === 'powershell' && editing.runAsAdministrator === true,
       timeoutSeconds: Math.max(1, Math.min(3600, Math.floor(editing.timeoutSeconds))),
       // Library profiles take their inputs from the library template, so only user scripts send declarations.
       parameters: editing.templateOrigin ? undefined : normalizeParametersForSave(editing.parameters ?? []),
@@ -570,6 +571,7 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
                 ...current,
                 interpreter,
                 interpreterPath: interpreterDefaults[interpreter],
+                runAsAdministrator: interpreter === 'powershell' ? current.runAsAdministrator === true : false,
               } : current);
             }}><option value="python">Python</option><option value="bash">Bash</option><option value="powershell">PowerShell</option></select></label>
             <label className="script-field-wide"><span>Interpreter executable</span><input required value={editing.interpreterPath} placeholder={editing.interpreter === 'python' ? 'C:\\Python\\python.exe' : editing.interpreter === 'bash' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'} onChange={(event) => setEditing({ ...editing, interpreterPath: event.target.value })} /></label>
@@ -577,7 +579,8 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
             <div className="script-field-wide"><PathField label="Working directory" kind="directory" required value={editing.workingDirectory} placeholder="C:\\Scripts" onChange={(value) => setEditing({ ...editing, workingDirectory: value })} onBrowse={browseForWorkingDirectory} /></div>
             <label><span>Output</span><select value={editing.outputMode} onChange={(event) => setEditing({ ...editing, outputMode: event.target.value as ScriptProfile['outputMode'] })}><option value="text">Plain text</option><option value="json">JSON</option></select></label>
             <label><span>Timeout <small>seconds</small></span><input required type="number" min={1} max={3600} value={editing.timeoutSeconds} onChange={(event) => setEditing({ ...editing, timeoutSeconds: Number(event.target.value) })} /></label>
-            <label className="script-field-wide"><span>AI agents</span><span><input type="checkbox" checked={editing.aiAccess === true} onChange={(event) => setEditing({ ...editing, aiAccess: event.target.checked })} /> AI can use this script <small>Lets agents connected through Agent access list and run it.</small></span></label>
+            <label className="script-field-wide"><span>AI agents</span><span><input type="checkbox" checked={editing.aiAccess === true} disabled={editing.runAsAdministrator === true} onChange={(event) => setEditing({ ...editing, aiAccess: event.target.checked })} /> AI can use this script <small>{editing.runAsAdministrator ? 'Not available for scripts that run as administrator.' : 'Lets agents connected through Agent access list and run it.'}</small></span></label>
+            {editing.interpreter === 'powershell' && <label className="script-field-wide"><span>Administrator</span><span><input type="checkbox" checked={editing.runAsAdministrator === true} disabled={editing.aiAccess === true} onChange={(event) => setEditing({ ...editing, runAsAdministrator: event.target.checked })} /> Run as administrator <small>{editing.aiAccess ? 'Turn off AI access first.' : 'Windows asks for approval each time you run it. Scheduled and workflow runs are blocked.'}</small></span></label>}
           </div>
           {editParameters.length > 0 && <section className="script-parameter-section">
             <h2>Inputs</h2>
@@ -701,7 +704,7 @@ export function ScriptRunnerView({ tab, services, surface }: ViewProps) {
             <div className="script-profile-item" key={profile.id} data-expanded={runTarget?.id === profile.id || editingRowId === profile.id}>
             <article className="script-profile-row">
               <span className="script-profile-icon">{profile.interpreter === 'python' ? <Braces size={16} /> : <Terminal size={16} />}</span>
-              <div className="script-profile-copy"><strong>{profile.name}</strong><span>{interpreterName(profile.interpreter)} · {profile.scriptPath || 'Script path missing'}{inputCount ? ` · ${inputCount} input${inputCount === 1 ? '' : 's'}` : ''}{profile.aiAccess ? ' · AI can use' : ''}</span></div>
+              <div className="script-profile-copy"><strong>{profile.name}</strong><span>{interpreterName(profile.interpreter)} · {profile.scriptPath || 'Script path missing'}{inputCount ? ` · ${inputCount} input${inputCount === 1 ? '' : 's'}` : ''}{profile.aiAccess ? ' · AI can use' : ''}{profile.runAsAdministrator ? ' · Runs as administrator' : ''}</span></div>
               <span className="script-profile-time"><Clock3 size={12} /> {profile.timeoutSeconds}s</span>
               <button className="icon-button script-row-action" type="button" aria-label={runningId === profile.id ? `Cancel ${profile.name}` : `Run ${profile.name}`} title={runningId === profile.id ? 'Cancel run' : inputCount ? 'Enter inputs and run' : 'Run script'} disabled={runningId !== null && runningId !== profile.id} aria-expanded={inputCount ? runTarget?.id === profile.id : undefined} onClick={() => void runProfile(profile)}>
                 {runningId === profile.id ? <Square size={14} /> : <Play size={15} />}

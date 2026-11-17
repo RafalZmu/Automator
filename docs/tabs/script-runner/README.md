@@ -85,6 +85,12 @@ Explorer action UI lives in `ui/modules/ExplorerActionsPanel.tsx`; `explorerActi
 
 ## Agent access
 
+## Run as administrator
+
+PowerShell profiles have a **Run as administrator** checkbox (`runAsAdministrator`, off by default). Each run shows the Windows UAC prompt; declining it ends the run with a clear message and the script never starts. Output, the exit code, standard input, the timeout and Cancel still work: Windows cannot redirect an elevated process directly, so a Windows PowerShell wrapper (passed on the command line, never saved as a file) starts the script and relays its output through a private temporary folder that is deleted afterwards. The elevated script itself runs hidden, as with any other run.
+
+Elevated profiles are manual only. Scheduled and workflow runs fail with an explanation before anything starts, because nobody is there to approve the prompt. The option is rejected for non-PowerShell interpreters, profiles shared with AI agents (**AI can use**), Library templates and Codex tasks. Turning it on changes the profile's approval revision.
+
 Saved scripts can be listed, inspected (typed inputs with hints and examples), run, polled and canceled by an MCP client through `list_scripts`, `get_script`, `run_script`, `get_run` and `cancel_run`. Only scripts with the **AI can use** checkbox ticked in the editor (`aiAccess`, off by default) are visible to MCP clients. Runs use the same `runProfile` action and validation as this tab. See [Agent access](../../sections/agent-access/README.md).
 
 ## History side panel
